@@ -1,48 +1,346 @@
+class InputField:
+    def __init__(self, value, description, excel_ref, editable):
+        self.value = value
+        self.description = description
+        self.excel_ref = excel_ref
+        self.editable = editable
+
+
 class InputModel:
     def __init__(self):
-        # General business identifiers and scope settings.
-        self.general = {
-            "company_name": "",
-            "business_unit": "",
-            "industry": "",
-            "currency": "",
-            "start_year": 0,
-            "projection_years": 0,
+        # Scenario selection: choose which scenario drives the model.
+        self.scenario_selection = {
+            "selected_scenario": InputField(
+                value="Base",
+                description="Scenario selector for Base/Best/Worst cases",
+                excel_ref="00_Inputs_Assumptions!B3",
+                editable=True,
+            )
         }
 
-        # Transaction structure and deal-level terms.
-        self.transaction = {
-            "purchase_price": 0.0,
-            "purchase_multiple": 0.0,
-            "deal_fees": 0.0,
-            "closing_date": "",
-            "seller": "",
+        # Scenario parameters: key revenue drivers by scenario.
+        self.scenario_parameters = {
+            "utilization_rate": {
+                "base": InputField(
+                    value=0.70,
+                    description="Utilization rate for Base scenario",
+                    excel_ref="00_Inputs_Assumptions!B7",
+                    editable=True,
+                ),
+                "best": InputField(
+                    value=0.80,
+                    description="Utilization rate for Best scenario",
+                    excel_ref="00_Inputs_Assumptions!C7",
+                    editable=True,
+                ),
+                "worst": InputField(
+                    value=0.55,
+                    description="Utilization rate for Worst scenario",
+                    excel_ref="00_Inputs_Assumptions!D7",
+                    editable=True,
+                ),
+            },
+            "day_rate_eur": {
+                "base": InputField(
+                    value=2750,
+                    description="Day rate (EUR) for Base scenario",
+                    excel_ref="00_Inputs_Assumptions!B8",
+                    editable=True,
+                ),
+                "best": InputField(
+                    value=3500,
+                    description="Day rate (EUR) for Best scenario",
+                    excel_ref="00_Inputs_Assumptions!C8",
+                    editable=True,
+                ),
+                "worst": InputField(
+                    value=1800,
+                    description="Day rate (EUR) for Worst scenario",
+                    excel_ref="00_Inputs_Assumptions!D8",
+                    editable=True,
+                ),
+            },
         }
 
-        # Operating performance drivers and cost structure.
-        self.operations = {
-            "revenue": 0.0,
-            "ebit": 0.0,
-            "ebit_margin": 0.0,
-            "operating_expenses": 0.0,
-            "capex": 0.0,
-            "working_capital_change": 0.0,
+        # Operating assumptions: staffing and delivery capacity.
+        self.operating_assumptions = {
+            "consulting_fte_start": InputField(
+                value=60,
+                description="Starting consulting FTEs",
+                excel_ref="00_Inputs_Assumptions!B11",
+                editable=True,
+            ),
+            "consulting_fte_growth_pct": InputField(
+                value=0.00,
+                description="Annual growth rate for consulting FTEs",
+                excel_ref="00_Inputs_Assumptions!B12",
+                editable=True,
+            ),
+            "work_days_per_year": InputField(
+                value=220,
+                description="Working days per year",
+                excel_ref="00_Inputs_Assumptions!B13",
+                editable=True,
+            ),
+            "training_internal_days": InputField(
+                value=15,
+                description="Training and internal days per year",
+                excel_ref="00_Inputs_Assumptions!B14",
+                editable=True,
+            ),
+            "sick_days": InputField(
+                value=10,
+                description="Sick days per year",
+                excel_ref="00_Inputs_Assumptions!B15",
+                editable=True,
+            ),
+            "unpaid_vacation_days": InputField(
+                value=10,
+                description="Unpaid vacation days per year",
+                excel_ref="00_Inputs_Assumptions!B16",
+                editable=True,
+            ),
+            "billable_days_per_year": InputField(
+                value=185,
+                description=(
+                    "Calculated in Excel: Work days minus Training/Internal minus Sick"
+                    " minus Unpaid vacation"
+                ),
+                excel_ref="00_Inputs_Assumptions!B17",
+                editable=False,
+            ),
+            "day_rate_growth_pct": InputField(
+                value=0.00,
+                description="Annual growth rate for day rate",
+                excel_ref="00_Inputs_Assumptions!B18",
+                editable=True,
+            ),
+            "new_hire_ramp_up_factor_fy1": InputField(
+                value=0.08,
+                description="Ramp-up factor for new hires in FY1",
+                excel_ref="00_Inputs_Assumptions!B19",
+                editable=True,
+            ),
+            "backoffice_fte_start": InputField(
+                value=10,
+                description="Starting backoffice FTEs",
+                excel_ref="00_Inputs_Assumptions!B20",
+                editable=True,
+            ),
+            "backoffice_fte_growth_pct": InputField(
+                value=0.00,
+                description="Annual growth rate for backoffice FTEs",
+                excel_ref="00_Inputs_Assumptions!B21",
+                editable=True,
+            ),
+            "avg_backoffice_salary_eur_per_year": InputField(
+                value=None,
+                description=(
+                    "Excel cell empty; must be set for full cost model TODO"
+                ),
+                excel_ref="00_Inputs_Assumptions!B22",
+                editable=True,
+            ),
         }
 
-        # Financing sources, terms, and capital structure.
-        self.financing = {
-            "debt_amount": 0.0,
-            "interest_rate": 0.0,
-            "equity_amount": 0.0,
-            "debt_term_years": 0,
-            "amortization_rate": 0.0,
+        # Personnel cost assumptions: compensation and payroll factors.
+        self.personnel_cost_assumptions = {
+            "avg_consultant_base_cost_eur_per_year": InputField(
+                value=214285.7142857143,
+                description=(
+                    "Calculated in Excel (formula present); treat as fixed default in v1"
+                ),
+                excel_ref="00_Inputs_Assumptions!B25",
+                editable=False,
+            ),
+            "bonus_pct_of_base": InputField(
+                value=0.00,
+                description="Bonus as percent of base compensation",
+                excel_ref="00_Inputs_Assumptions!B26",
+                editable=True,
+            ),
+            "payroll_burden_pct_of_comp": InputField(
+                value=0.00,
+                description="Payroll burden as percent of compensation",
+                excel_ref="00_Inputs_Assumptions!B27",
+                editable=True,
+            ),
+            "wage_inflation_pct": InputField(
+                value=0.02,
+                description="Annual wage inflation rate",
+                excel_ref="00_Inputs_Assumptions!B28",
+                editable=True,
+            ),
         }
 
-        # Cross-cutting modeling assumptions and policy inputs.
-        self.assumptions = {
-            "tax_rate": 0.0,
-            "inflation_rate": 0.0,
-            "growth_rate": 0.0,
-            "exit_multiple": 0.0,
-            "discount_rate": 0.0,
+        # Overhead and variable costs: fixed overhead plus revenue-linked costs.
+        self.overhead_and_variable_costs = {
+            "rent_eur_per_year": InputField(
+                value=400000,
+                description="Annual rent costs (EUR)",
+                excel_ref="00_Inputs_Assumptions!B31",
+                editable=True,
+            ),
+            "it_and_software_eur_per_year": InputField(
+                value=300000,
+                description="Annual IT and software costs (EUR)",
+                excel_ref="00_Inputs_Assumptions!B32",
+                editable=True,
+            ),
+            "overhead_inflation_pct": InputField(
+                value=0.02,
+                description="Annual overhead inflation rate",
+                excel_ref="00_Inputs_Assumptions!B33",
+                editable=True,
+            ),
+            "insurance_eur_per_year": InputField(
+                value=50000,
+                description="Annual insurance costs (EUR)",
+                excel_ref="00_Inputs_Assumptions!B34",
+                editable=True,
+            ),
+            "legal_audit_eur_per_year": InputField(
+                value=150000,
+                description="Annual legal and audit costs (EUR)",
+                excel_ref="00_Inputs_Assumptions!B35",
+                editable=True,
+            ),
+            "other_overhead_eur_per_year": InputField(
+                value=50000,
+                description="Other annual overhead costs (EUR)",
+                excel_ref="00_Inputs_Assumptions!B36",
+                editable=True,
+            ),
+            "travel_pct_of_revenue": InputField(
+                value=0.05,
+                description="Travel costs as percent of revenue",
+                excel_ref="00_Inputs_Assumptions!B37",
+                editable=True,
+            ),
+            "recruiting_pct_of_revenue": InputField(
+                value=0.03,
+                description="Recruiting costs as percent of revenue",
+                excel_ref="00_Inputs_Assumptions!B38",
+                editable=True,
+            ),
+            "training_pct_of_revenue": InputField(
+                value=0.01,
+                description="Training costs as percent of revenue",
+                excel_ref="00_Inputs_Assumptions!B39",
+                editable=True,
+            ),
+            "marketing_pct_of_revenue": InputField(
+                value=0.01,
+                description="Marketing costs as percent of revenue",
+                excel_ref="00_Inputs_Assumptions!B40",
+                editable=True,
+            ),
+        }
+
+        # Capex and working capital: capital spend, depreciation, and liquidity needs.
+        self.capex_and_working_capital = {
+            "depreciation_eur_per_year": InputField(
+                value=150000,
+                description="Annual depreciation (EUR)",
+                excel_ref="00_Inputs_Assumptions!B43",
+                editable=True,
+            ),
+            "capex_eur_per_year": InputField(
+                value=200000,
+                description="Annual capital expenditures (EUR)",
+                excel_ref="00_Inputs_Assumptions!B44",
+                editable=True,
+            ),
+            "dso_days": InputField(
+                value=60,
+                description="Days sales outstanding",
+                excel_ref="00_Inputs_Assumptions!B45",
+                editable=True,
+            ),
+            "minimum_cash_balance_eur": InputField(
+                value=250000,
+                description="Minimum cash balance (EUR)",
+                excel_ref="00_Inputs_Assumptions!B46",
+                editable=True,
+            ),
+        }
+
+        # Transaction and financing: deal structure and debt terms.
+        self.transaction_and_financing = {
+            "purchase_price_eur": InputField(
+                value=16000000,
+                description="Purchase price (EUR)",
+                excel_ref="00_Inputs_Assumptions!B49",
+                editable=True,
+            ),
+            "equity_contribution_eur": InputField(
+                value=2000000,
+                description="Equity contribution (EUR)",
+                excel_ref="00_Inputs_Assumptions!B50",
+                editable=True,
+            ),
+            "senior_term_loan_start_eur": InputField(
+                value=11000000,
+                description="Senior term loan opening balance (EUR)",
+                excel_ref="00_Inputs_Assumptions!B51",
+                editable=True,
+            ),
+            "senior_interest_rate_pct": InputField(
+                value=0.06,
+                description="Senior term loan interest rate",
+                excel_ref="00_Inputs_Assumptions!B52",
+                editable=True,
+            ),
+            "senior_repayment_per_year_eur": InputField(
+                value=1000000,
+                description="Annual senior debt repayment (EUR)",
+                excel_ref="00_Inputs_Assumptions!B53",
+                editable=True,
+            ),
+            "revolver_limit_eur": InputField(
+                value=1500000,
+                description="Revolver credit limit (EUR)",
+                excel_ref="00_Inputs_Assumptions!B54",
+                editable=True,
+            ),
+            "revolver_interest_rate_pct": InputField(
+                value=0.07,
+                description="Revolver interest rate",
+                excel_ref="00_Inputs_Assumptions!B55",
+                editable=True,
+            ),
+            "special_repayment_amount_eur": InputField(
+                value=0,
+                description="Optional; set to 0 in v1",
+                excel_ref="00_Inputs_Assumptions!B56",
+                editable=True,
+            ),
+            "special_repayment_year": InputField(
+                value=None,
+                description="Optional; None in v1",
+                excel_ref="00_Inputs_Assumptions!B57",
+                editable=True,
+            ),
+        }
+
+        # Tax and distributions: tax rate and shareholder payouts.
+        self.tax_and_distributions = {
+            "tax_rate_pct": InputField(
+                value=0.30,
+                description="Corporate tax rate",
+                excel_ref="00_Inputs_Assumptions!B58",
+                editable=True,
+            ),
+            "dividend_payout_ratio_pct": InputField(
+                value=0.00,
+                description="Dividend payout ratio",
+                excel_ref="00_Inputs_Assumptions!B59",
+                editable=True,
+            ),
+            "dividends_allowed_starting_fy": InputField(
+                value=4,
+                description="First fiscal year when dividends are allowed",
+                excel_ref="00_Inputs_Assumptions!B60",
+                editable=True,
+            ),
         }
