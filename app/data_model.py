@@ -344,3 +344,86 @@ class InputModel:
                 editable=True,
             ),
         }
+
+        # Valuation assumptions: buyer vs seller inputs for multiple and DCF views.
+        self.valuation_assumptions = {
+            "general_valuation_context": {
+                "valuation_reference_metric": InputField(
+                    value="EBIT",
+                    description=(
+                        "Metric used as valuation basis (e.g. EBIT or EBITDA)"
+                    ),
+                    excel_ref="N/A",
+                    editable=True,
+                )
+            },
+            # Multiple-based valuation: buyer is conservative; seller is optimistic.
+            "multiple_valuation": {
+                "buyer_multiple": InputField(
+                    value=None,
+                    description=(
+                        "Multiple assumed from buyer perspective"
+                        " (downside / conservative)"
+                    ),
+                    excel_ref="N/A",
+                    editable=True,
+                ),
+                "seller_multiple": InputField(
+                    value=None,
+                    description=(
+                        "Multiple assumed from seller perspective"
+                        " (upside / true value view)"
+                    ),
+                    excel_ref="N/A",
+                    editable=True,
+                ),
+            },
+            # DCF-based valuation: buyer uses downward adjustments; seller uses upward.
+            "dcf_valuation": {
+                "discount_rate_wacc": InputField(
+                    value=None,
+                    description="Weighted Average Cost of Capital used for DCF",
+                    excel_ref="N/A",
+                    editable=True,
+                ),
+                "explicit_forecast_years": InputField(
+                    value=None,
+                    description="Number of explicit forecast years for DCF",
+                    excel_ref="N/A",
+                    editable=True,
+                ),
+                "terminal_growth_rate": InputField(
+                    value=None,
+                    description=(
+                        "Long-term growth rate after explicit forecast period"
+                    ),
+                    excel_ref="N/A",
+                    editable=True,
+                ),
+                "buyer_adjustment_factor": InputField(
+                    value=None,
+                    description=(
+                        "Optional downward adjustment from buyer perspective"
+                    ),
+                    excel_ref="N/A",
+                    editable=True,
+                ),
+                "seller_adjustment_factor": InputField(
+                    value=None,
+                    description=(
+                        "Optional upward adjustment from seller perspective"
+                    ),
+                    excel_ref="N/A",
+                    editable=True,
+                ),
+            },
+            "valuation_display_mode": InputField(
+                value=None,
+                description=(
+                    "Defines how valuation should be presented"
+                    " (e.g. range, midpoint, comparison)"
+                ),
+                excel_ref="N/A",
+                editable=True,
+            ),
+        }
