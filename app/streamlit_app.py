@@ -1960,6 +1960,12 @@ def run_app():
     with st.sidebar:
         nav_css = """
         <style>
+          div[data-testid="stSidebar"] {
+            background: #f7f8fa;
+          }
+          div[data-testid="stSidebar"] > div {
+            padding: 1rem 0.85rem;
+          }
           .nav-section {
             font-size: 0.7rem;
             letter-spacing: 0.12em;
@@ -1968,26 +1974,48 @@ def run_app():
             margin-top: 0.9rem;
             margin-bottom: 0.35rem;
           }
+          .nav-section.settings {
+            color: #4b5563;
+          }
           .nav-item {
-            padding: 0.45rem 0.6rem;
-            border-radius: 6px;
-            margin-bottom: 0.25rem;
-            font-weight: 500;
-            color: #111827;
+            padding: 0.35rem 0.6rem 0.35rem 0.8rem;
+            border-radius: 4px;
+            margin-bottom: 0.2rem;
+            color: #374151;
           }
           .nav-item.active {
-            background: #eef2ff;
-            border: 1px solid #c7d2fe;
+            background: #e9eef7;
+            border-left: 3px solid #3b82f6;
+            color: #111827;
+          }
+          .nav-divider {
+            height: 1px;
+            background: #d1d5db;
+            margin: 0.8rem 0 0.6rem;
+          }
+          .nav-settings-block {
+            background: #eef1f5;
+            padding: 0.6rem 0.5rem;
+            border-radius: 6px;
+            margin-top: 0.4rem;
+          }
+          .nav-settings-block button,
+          .nav-settings-block .nav-item {
+            font-size: 0.9rem;
           }
           div[data-testid="stSidebar"] button {
             width: 100%;
             justify-content: flex-start;
-            border-radius: 6px;
-            padding: 0.45rem 0.6rem;
+            border-radius: 4px;
+            padding: 0.35rem 0.6rem 0.35rem 0.8rem;
+            background: transparent;
+            color: #374151;
+            border: 1px solid transparent;
+            font-weight: 400;
           }
           div[data-testid="stSidebar"] button:hover {
-            background: #f3f4f6;
-            border-color: #e5e7eb;
+            background: #edf2f7;
+            border-color: transparent;
           }
         </style>
         """
@@ -2036,9 +2064,12 @@ def run_app():
         st.markdown("<div class=\"nav-section\">VALUATION</div>", unsafe_allow_html=True)
         _nav_item("Valuation & Purchase Price")
 
-        st.markdown("<div class=\"nav-section\">SETTINGS</div>", unsafe_allow_html=True)
+        st.markdown("<div class=\"nav-divider\"></div>", unsafe_allow_html=True)
+        st.markdown("<div class=\"nav-section settings\">⚙ SETTINGS</div>", unsafe_allow_html=True)
+        st.markdown("<div class=\"nav-settings-block\">", unsafe_allow_html=True)
         _nav_item("Assumptions (Advanced)")
-        _nav_item("Settings")
+        _nav_item("Model Settings")
+        st.markdown("</div>", unsafe_allow_html=True)
 
         page = st.session_state["current_page"]
         assumptions_state = st.session_state["assumptions"]
@@ -2928,8 +2959,8 @@ def run_app():
             "deleveraging."
         )
 
-    if page == "Settings":
-        st.header("Settings")
+    if page == "Model Settings":
+        st.header("Model Settings")
         st.write("Model transparency, export, and technical controls")
 
         st.markdown("### Model Snapshot")
