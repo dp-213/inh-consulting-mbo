@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from app.data_model import InputModel, create_demo_input_model
-import app.run_model as run_model
+from data_model import InputModel, create_demo_input_model
+import run_model as run_model
 
 
 def _pnl_dict_to_list(pnl_dict):
