@@ -3397,13 +3397,13 @@ def run_app():
                 payload
             )
 
-        if st.session_state.get("model_snapshot_payload"):
-            st.download_button(
-                "Download Snapshot ZIP",
-                data=st.session_state["model_snapshot_zip"],
-                file_name="model_snapshot.zip",
-                mime="application/zip",
-            )
+            if st.session_state.get("model_snapshot_payload"):
+                st.download_button(
+                    "Download Snapshot ZIP",
+                    data=st.session_state["model_snapshot_zip"],
+                    file_name="model_snapshot.zip",
+                    mime="application/zip",
+                )
             if st.button(
                 "Copy GPT Prompt",
                 key="copy_gpt_prompt",
@@ -3413,10 +3413,19 @@ def run_app():
                     "Use this as ground truth."
                 )
             if st.session_state.get("model_snapshot_prompt"):
+                prompt_text = st.session_state["model_snapshot_prompt"]
                 st.text_area(
                     "GPT Prompt",
-                    value=st.session_state["model_snapshot_prompt"],
+                    value=prompt_text,
                     height=80,
+                )
+                st.components.v1.html(
+                    f"""
+                    <script>
+                      navigator.clipboard.writeText({prompt_text!r});
+                    </script>
+                    """,
+                    height=0,
                 )
             st.text_area(
                 "Snapshot (JSON)",
