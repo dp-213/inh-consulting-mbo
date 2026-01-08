@@ -605,6 +605,10 @@ def run_app():
                     base_model.__dict__,
                     ["overhead_and_variable_costs", "overhead_inflation_pct"],
                 )
+                utilization_defaults = st.session_state.get(
+                    "utilization_by_year",
+                    [utilization_field.value] * 5,
+                )
                 pnl_controls = [
                     {
                         "type": "select",
@@ -633,11 +637,47 @@ def run_app():
                     },
                     {
                         "type": "pct",
-                        "label": "Utilization (%)",
-                        "field_key": f"scenario_parameters.utilization_rate.{scenario_key}",
+                        "label": "Utilization Year 0 (%)",
+                        "field_key": "utilization_by_year.0",
                         "value": _get_current_value(
-                            f"scenario_parameters.utilization_rate.{scenario_key}",
-                            utilization_field.value,
+                            "utilization_by_year.0",
+                            utilization_defaults[0],
+                        ),
+                    },
+                    {
+                        "type": "pct",
+                        "label": "Utilization Year 1 (%)",
+                        "field_key": "utilization_by_year.1",
+                        "value": _get_current_value(
+                            "utilization_by_year.1",
+                            utilization_defaults[1],
+                        ),
+                    },
+                    {
+                        "type": "pct",
+                        "label": "Utilization Year 2 (%)",
+                        "field_key": "utilization_by_year.2",
+                        "value": _get_current_value(
+                            "utilization_by_year.2",
+                            utilization_defaults[2],
+                        ),
+                    },
+                    {
+                        "type": "pct",
+                        "label": "Utilization Year 3 (%)",
+                        "field_key": "utilization_by_year.3",
+                        "value": _get_current_value(
+                            "utilization_by_year.3",
+                            utilization_defaults[3],
+                        ),
+                    },
+                    {
+                        "type": "pct",
+                        "label": "Utilization Year 4 (%)",
+                        "field_key": "utilization_by_year.4",
+                        "value": _get_current_value(
+                            "utilization_by_year.4",
+                            utilization_defaults[4],
                         ),
                     },
                     {
@@ -791,6 +831,13 @@ def run_app():
                     },
                 ]
                 _render_inline_controls("P&L Drivers", pnl_controls, columns=1)
+                st.session_state["utilization_by_year"] = [
+                    st.session_state.get(
+                        f"utilization_by_year.{year_index}",
+                        utilization_defaults[year_index],
+                    )
+                    for year_index in range(5)
+                ]
 
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
@@ -992,6 +1039,15 @@ def run_app():
             getattr(input_model, section_key), section_values
         )
 
+    utilization_by_year = st.session_state.get("utilization_by_year")
+    if not isinstance(utilization_by_year, list) or len(utilization_by_year) != 5:
+        scenario_utilization = input_model.scenario_parameters[
+            "utilization_rate"
+        ][scenario_key].value
+        utilization_by_year = [scenario_utilization] * 5
+        st.session_state["utilization_by_year"] = utilization_by_year
+    input_model.utilization_by_year = utilization_by_year
+
     # Run model calculations in the standard order.
     pnl_result = run_model.calculate_pnl(input_model)
     pnl_list = _pnl_dict_to_list(pnl_result)
@@ -1026,6 +1082,9 @@ def run_app():
         utilization_field = _get_field_by_path(
             input_model.__dict__,
             ["scenario_parameters", "utilization_rate", scenario_key],
+        )
+        utilization_by_year = getattr(
+            input_model, "utilization_by_year", [utilization_field.value] * 5
         )
         day_rate_field = _get_field_by_path(
             input_model.__dict__,
@@ -1512,7 +1571,7 @@ def run_app():
                 (1 + fte_growth_field.value) ** year_index
             )
             billable_days = work_days_field.value
-            utilization = utilization_field.value
+            utilization = utilization_by_year[year_index]
             day_rate = day_rate_field.value * (
                 (1 + day_rate_growth_field.value) ** year_index
             )

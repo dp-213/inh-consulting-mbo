@@ -9,6 +9,7 @@ def calculate_pnl(input_model):
     utilization_rate = input_model.scenario_parameters["utilization_rate"][
         selected_scenario.lower()
     ].value
+    utilization_by_year = getattr(input_model, "utilization_by_year", None)
     daily_rate = input_model.scenario_parameters["day_rate_eur"][
         selected_scenario.lower()
     ].value
@@ -114,10 +115,17 @@ def calculate_pnl(input_model):
             (1 + day_rate_growth_pct) ** year_index
         )
 
+        current_utilization = (
+            utilization_by_year[year_index]
+            if isinstance(utilization_by_year, list)
+            and len(utilization_by_year) == planning_horizon_years
+            else utilization_rate
+        )
+
         # Revenue calculation based on scenario utilization and billable days.
         gross_revenue = (
             consultants_fte
-            * utilization_rate
+            * current_utilization
             * work_days_per_year
             * current_daily_rate
         )
@@ -140,7 +148,7 @@ def calculate_pnl(input_model):
             consultants_fte
             * work_days_per_year
             * current_daily_rate
-            * max(utilization_rate - guarantee_pct, 0)
+            * max(current_utilization - guarantee_pct, 0)
         )
         revenue = guaranteed_revenue + non_guaranteed_revenue
 
