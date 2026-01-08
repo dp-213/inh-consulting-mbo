@@ -1481,7 +1481,8 @@ def run_app():
                     {"selector": "th", "props": [("text-align", "right"), ("font-weight", "600"), ("border", "0px"), ("padding", "8px 12px")]},
                     {"selector": "th:first-child", "props": [("text-align", "left")]},
                     {"selector": "td", "props": [("border", "0px"), ("padding", "6px 12px")]},
-                    {"selector": "table", "props": [("border-collapse", "collapse")]},
+                    {"selector": "td:first-child", "props": [("min-width", "260px")]},
+                    {"selector": "table", "props": [("border-collapse", "collapse"), ("width", "100%")]},
                 ]
             )
         )
@@ -1528,7 +1529,7 @@ def run_app():
         kpi_strip[3].metric("Personnel Cost Ratio", format_pct(personnel_cost_ratio))
         kpi_strip[4].metric("Revenue Guarantee %", format_pct(revenue_guarantee_pct))
 
-        st.dataframe(pnl_styled, use_container_width=True)
+        st.table(pnl_styled)
 
         explain_pnl = st.toggle("Explain P&L logic")
         if explain_pnl:
