@@ -1478,11 +1478,13 @@ def run_app():
             .format(format_map)
             .set_table_styles(
                 [
-                    {"selector": "th", "props": [("text-align", "right"), ("font-weight", "600"), ("border", "0px"), ("padding", "8px 12px")]},
-                    {"selector": "th:first-child", "props": [("text-align", "left")]},
-                    {"selector": "td", "props": [("border", "0px"), ("padding", "6px 12px")]},
-                    {"selector": "td:first-child", "props": [("min-width", "260px")]},
-                    {"selector": "table", "props": [("border-collapse", "collapse"), ("width", "100%")]},
+                    {"selector": "th", "props": [("text-align", "right"), ("font-weight", "600"), ("border", "0px"), ("padding", "4px 10px"), ("white-space", "nowrap"), ("line-height", "1.1")]},
+                    {"selector": "th:first-child", "props": [("text-align", "left"), ("width", "32%")]},
+                    {"selector": "th:not(:first-child)", "props": [("width", "13.6%")]},
+                    {"selector": "td", "props": [("border", "0px"), ("padding", "3px 10px"), ("white-space", "nowrap"), ("line-height", "1.1")]},
+                    {"selector": "td:first-child", "props": [("width", "32%")]},
+                    {"selector": "td:not(:first-child)", "props": [("width", "13.6%")]},
+                    {"selector": "table", "props": [("border-collapse", "collapse"), ("width", "100%"), ("table-layout", "fixed")]},
                 ]
             )
         )
