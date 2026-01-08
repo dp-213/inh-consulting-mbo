@@ -21,6 +21,34 @@ def _format_section_title(section_key):
     return section_key.replace("_", " ").title()
 
 
+def format_currency(value):
+    if value is None or pd.isna(value):
+        return ""
+    return f"{value:,.0f} EUR"
+
+
+def format_pct(value):
+    if value is None or pd.isna(value):
+        return ""
+    return f"{value:.2%}"
+
+
+def format_int(value):
+    if value is None or pd.isna(value):
+        return ""
+    return f"{int(round(value)):,}"
+
+
+def _style_totals(df, columns_to_bold):
+    def style_row(_):
+        return [
+            "font-weight: 600;" if col in columns_to_bold else ""
+            for col in df.columns
+        ]
+
+    return df.style.apply(style_row, axis=1)
+
+
 def _render_input_field(
     input_field, widget_key, scenario_tag=None, scenario_help=None
 ):
@@ -241,11 +269,11 @@ def run_app():
         irr = investment_result["irr"]
 
         kpi_col_1, kpi_col_2, kpi_col_3, kpi_col_4, kpi_col_5 = st.columns(5)
-        kpi_col_1.metric("Avg Revenue", f"{total_revenue_avg:,.0f} EUR")
-        kpi_col_2.metric("EBITDA Margin", f"{ebitda_margin:.1%}")
-        kpi_col_3.metric("Avg EBIT", f"{ebit_avg:,.0f} EUR")
-        kpi_col_4.metric("Minimum Cash", f"{min_cash_balance:,.0f} EUR")
-        kpi_col_5.metric("IRR", f"{irr:.1%}")
+        kpi_col_1.metric("Avg Revenue", format_currency(total_revenue_avg))
+        kpi_col_2.metric("EBITDA Margin", format_pct(ebitda_margin))
+        kpi_col_3.metric("Avg EBIT", format_currency(ebit_avg))
+        kpi_col_4.metric("Minimum Cash", format_currency(min_cash_balance))
+        kpi_col_5.metric("IRR", format_pct(irr))
 
         scenario_label = input_model.scenario_selection[
             "selected_scenario"
@@ -298,23 +326,26 @@ def run_app():
             inplace=True,
         )
 
-        pnl_money_columns = [
+        pnl_format_map = {
+            "Umsatz (EUR)": format_currency,
+            "Personalkosten (EUR)": format_currency,
+            "Overhead & Variable Kosten (EUR)": format_currency,
+            "EBITDA (EUR)": format_currency,
+            "Abschreibungen (EUR)": format_currency,
+            "EBIT (EUR)": format_currency,
+            "Steuern (EUR)": format_currency,
+            "Jahresueberschuss (EUR)": format_currency,
+        }
+        pnl_totals = [
             "Umsatz (EUR)",
-            "Personalkosten (EUR)",
-            "Overhead & Variable Kosten (EUR)",
             "EBITDA (EUR)",
-            "Abschreibungen (EUR)",
             "EBIT (EUR)",
-            "Steuern (EUR)",
             "Jahresueberschuss (EUR)",
         ]
-        for col in pnl_money_columns:
-            if col in pnl_display.columns:
-                pnl_display[col] = pnl_display[col].map(
-                    lambda x: f"{x:,.0f}" if pd.notna(x) else ""
-                )
-
-        st.table(pnl_display)
+        pnl_styled = _style_totals(pnl_display, pnl_totals).format(
+            pnl_format_map
+        )
+        st.dataframe(pnl_styled, use_container_width=True)
 
     if page == "Financing & Bankability":
         st.header("Financing & Bankability")
@@ -337,19 +368,18 @@ def run_app():
             },
             inplace=True,
         )
-        cashflow_money_columns = [
-            "Operating CF (EUR)",
-            "Investing CF (EUR)",
-            "Financing CF (EUR)",
-            "Net Cashflow (EUR)",
-            "Cash Bestand (EUR)",
-        ]
-        for col in cashflow_money_columns:
-            if col in cashflow_display.columns:
-                cashflow_display[col] = cashflow_display[col].map(
-                    lambda x: f"{x:,.0f}" if pd.notna(x) else ""
-                )
-        st.table(cashflow_display)
+        cashflow_format_map = {
+            "Operating CF (EUR)": format_currency,
+            "Investing CF (EUR)": format_currency,
+            "Financing CF (EUR)": format_currency,
+            "Net Cashflow (EUR)": format_currency,
+            "Cash Bestand (EUR)": format_currency,
+        }
+        cashflow_totals = ["Net Cashflow (EUR)", "Cash Bestand (EUR)"]
+        cashflow_styled = _style_totals(
+            cashflow_display, cashflow_totals
+        ).format(cashflow_format_map)
+        st.dataframe(cashflow_styled, use_container_width=True)
 
         debt_table = pd.DataFrame(debt_schedule)
         debt_display = debt_table.copy()
@@ -367,22 +397,18 @@ def run_app():
             },
             inplace=True,
         )
-        debt_money_columns = [
-            "Zinsaufwand (EUR)",
-            "Tilgung (EUR)",
-            "Schuldendienst (EUR)",
-            "Restschuld (EUR)",
-        ]
-        for col in debt_money_columns:
-            if col in debt_display.columns:
-                debt_display[col] = debt_display[col].map(
-                    lambda x: f"{x:,.0f}" if pd.notna(x) else ""
-                )
-        if "DSCR (x)" in debt_display.columns:
-            debt_display["DSCR (x)"] = debt_display["DSCR (x)"].map(
-                lambda x: f"{x:.2f}" if pd.notna(x) else ""
-            )
-        st.table(debt_display)
+        debt_format_map = {
+            "Zinsaufwand (EUR)": format_currency,
+            "Tilgung (EUR)": format_currency,
+            "Schuldendienst (EUR)": format_currency,
+            "Restschuld (EUR)": format_currency,
+            "DSCR (x)": lambda x: f"{x:.2f}" if pd.notna(x) else "",
+        }
+        debt_totals = ["Restschuld (EUR)", "Schuldendienst (EUR)"]
+        debt_styled = _style_totals(debt_display, debt_totals).format(
+            debt_format_map
+        )
+        st.dataframe(debt_styled, use_container_width=True)
 
     if page == "Equity & Value":
         st.header("Equity & Value")
@@ -406,19 +432,15 @@ def run_app():
             },
             inplace=True,
         )
-        summary_money_columns = [
-            "Eigenkapital (Start, EUR)",
-            "Exit Value (EUR)",
-        ]
-        for col in summary_money_columns:
-            if col in summary_display.columns:
-                summary_display[col] = summary_display[col].map(
-                    lambda x: f"{x:,.0f}" if pd.notna(x) else ""
-                )
-        if "IRR (%)" in summary_display.columns:
-            summary_display["IRR (%)"] = summary_display["IRR (%)"].map(
-                lambda x: f"{x:.1%}" if pd.notna(x) else ""
-            )
+        summary_format_map = {
+            "Eigenkapital (Start, EUR)": format_currency,
+            "Exit Value (EUR)": format_currency,
+            "IRR (%)": format_pct,
+        }
+        summary_totals = ["Eigenkapital (Start, EUR)", "Exit Value (EUR)"]
+        summary_styled = _style_totals(
+            summary_display, summary_totals
+        ).format(summary_format_map)
 
         cashflows_table = pd.DataFrame(
             {"equity_cashflows": investment_result["equity_cashflows"]}
@@ -434,12 +456,15 @@ def run_app():
             },
             inplace=True,
         )
-        cashflows_display["Equity Cashflows (EUR)"] = cashflows_display[
-            "Equity Cashflows (EUR)"
-        ].map(lambda x: f"{x:,.0f}" if pd.notna(x) else "")
+        cashflows_format_map = {
+            "Equity Cashflows (EUR)": format_currency
+        }
+        cashflows_styled = _style_totals(
+            cashflows_display, ["Equity Cashflows (EUR)"]
+        ).format(cashflows_format_map)
 
-        st.table(summary_display)
-        st.table(cashflows_display)
+        st.dataframe(summary_styled, use_container_width=True)
+        st.dataframe(cashflows_styled, use_container_width=True)
 
 
 if __name__ == "__main__":
