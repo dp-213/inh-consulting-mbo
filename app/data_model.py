@@ -457,7 +457,19 @@ def create_demo_input_model():
     input_model.operating_assumptions[
         "avg_backoffice_salary_eur_per_year"
     ].value = 80000
-    input_model.scenario_parameters["day_rate_eur"]["base"].value = 1894
+    input_model.operating_assumptions["consulting_fte_start"].value = 63
+    input_model.operating_assumptions["consulting_fte_growth_pct"].value = 0.0
+    input_model.operating_assumptions["work_days_per_year"].value = 220
+    input_model.operating_assumptions["day_rate_growth_pct"].value = 0.0
+    input_model.operating_assumptions["backoffice_fte_start"].value = 18
+    input_model.operating_assumptions["backoffice_fte_growth_pct"].value = 0.0
+
+    input_model.scenario_parameters["utilization_rate"]["base"].value = 0.65
+    input_model.scenario_parameters["utilization_rate"]["best"].value = 0.65
+    input_model.scenario_parameters["utilization_rate"]["worst"].value = 0.65
+    input_model.scenario_parameters["day_rate_eur"]["base"].value = 1800
+    input_model.scenario_parameters["day_rate_eur"]["best"].value = 1800
+    input_model.scenario_parameters["day_rate_eur"]["worst"].value = 1800
     input_model.operating_assumptions[
         "revenue_guarantee_pct_year_1"
     ].value = 0.80
@@ -467,6 +479,43 @@ def create_demo_input_model():
     input_model.operating_assumptions[
         "revenue_guarantee_pct_year_3"
     ].value = 0.60
+
+    input_model.personnel_cost_assumptions[
+        "avg_consultant_base_cost_eur_per_year"
+    ].value = 210000
+    input_model.personnel_cost_assumptions["bonus_pct_of_base"].value = 0.0
+    input_model.personnel_cost_assumptions[
+        "payroll_burden_pct_of_comp"
+    ].value = 0.0
+    input_model.personnel_cost_assumptions["wage_inflation_pct"].value = 0.02
+
+    input_model.overhead_and_variable_costs[
+        "legal_audit_eur_per_year"
+    ].value = 320000
+    input_model.overhead_and_variable_costs[
+        "it_and_software_eur_per_year"
+    ].value = 440000
+    input_model.overhead_and_variable_costs[
+        "rent_eur_per_year"
+    ].value = 1730000
+    input_model.overhead_and_variable_costs[
+        "insurance_eur_per_year"
+    ].value = 400000
+    input_model.overhead_and_variable_costs[
+        "other_overhead_eur_per_year"
+    ].value = 700000
+    input_model.overhead_and_variable_costs[
+        "travel_pct_of_revenue"
+    ].value = 0.0
+    input_model.overhead_and_variable_costs[
+        "recruiting_pct_of_revenue"
+    ].value = 0.0
+    input_model.overhead_and_variable_costs[
+        "training_pct_of_revenue"
+    ].value = 0.0
+    input_model.overhead_and_variable_costs[
+        "marketing_pct_of_revenue"
+    ].value = 0.0
 
     input_model.transaction_and_financing[
         "special_repayment_amount_eur"

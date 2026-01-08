@@ -168,9 +168,10 @@ def _seed_session_defaults(input_model):
     base_utilization = input_model.scenario_parameters["utilization_rate"][
         scenario_key
     ].value
-    st.session_state.setdefault(
-        "utilization_by_year", [base_utilization] * 5
-    )
+    utilization_curve = []
+    for year_index in range(5):
+        utilization_curve.append(min(base_utilization + 0.005 * year_index, 0.68))
+    st.session_state.setdefault("utilization_by_year", utilization_curve)
     for year_index in range(5):
         st.session_state.setdefault(
             f"utilization_by_year.{year_index}",
@@ -1866,7 +1867,7 @@ def run_app():
                 {"Role": "Consultant Base Salary", "Cost Type": "Fixed", "Base Value (EUR)": base_model.personnel_cost_assumptions["avg_consultant_base_cost_eur_per_year"].value, "Growth (%)": base_model.personnel_cost_assumptions["wage_inflation_pct"].value, "Notes": "Base salary per consultant."},
                 {"Role": "Consultant Variable (% Revenue)", "Cost Type": "Percent of Base", "Base Value (EUR)": base_model.personnel_cost_assumptions["bonus_pct_of_base"].value, "Growth (%)": "", "Notes": "Bonus as % of base salary."},
                 {"Role": "Backoffice Cost per FTE", "Cost Type": "Fixed", "Base Value (EUR)": base_model.operating_assumptions["avg_backoffice_salary_eur_per_year"].value, "Growth (%)": base_model.personnel_cost_assumptions["wage_inflation_pct"].value, "Notes": "Average backoffice salary."},
-                {"Role": "Management / MD Cost", "Cost Type": "Fixed", "Base Value (EUR)": 0.0, "Growth (%)": "", "Notes": "Not modeled in v1."},
+                {"Role": "Management / MD Cost", "Cost Type": "Fixed", "Base Value (EUR)": 1200000, "Growth (%)": 0.02, "Notes": "Fixed management cost (base case)."},
             ],
             "opex": [
                 {"Category": "External Consulting", "Cost Type": "Fixed", "Value": base_model.overhead_and_variable_costs["legal_audit_eur_per_year"].value, "Unit": "EUR", "Notes": "External advisors."},
