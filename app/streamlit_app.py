@@ -475,6 +475,7 @@ def run_app():
         st.write(
             "Detailed revenue and cost build-up based on operating inputs."
         )
+        explain_calculations = st.toggle("Explain calculations")
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
         total_revenue_avg = pnl_table["revenue"].mean()
         ebitda_margin = (
@@ -536,6 +537,22 @@ def run_app():
             pnl_format_map
         )
         st.dataframe(pnl_styled, use_container_width=True)
+
+        if explain_calculations:
+            st.markdown("**Revenue build-up**")
+            st.write(
+                "Revenue = Utilization × Working days × Headcount × Day rate"
+            )
+            st.markdown("**Personnel cost logic**")
+            st.write(
+                "Personnel costs = Consulting FTE costs (base + bonus + payroll) "
+                "+ Backoffice costs, with wage inflation applied annually."
+            )
+            st.markdown("**Overhead growth logic**")
+            st.write(
+                "Fixed overhead grows by overhead inflation; variable overhead "
+                "is calculated as a percentage of revenue."
+            )
 
     if page == "Financing & Bankability":
         st.header("Financing & Bankability")
