@@ -30,36 +30,44 @@ def format_pct(value):
 
 def build_revenue_model_outputs(assumptions_state, scenario):
     revenue_state = assumptions_state["revenue_model"]
-    reference_value = _non_negative(revenue_state["reference"][0].get(scenario, 0.0))
     revenue_final_by_year = []
     components_by_year = []
+    reference_value = _non_negative(
+        revenue_state["reference_revenue_eur"].get(scenario, 0.0)
+    )
+
     for year_index in range(5):
-        guarantee_pct = _clamp_pct(
-            revenue_state["guarantees"][year_index].get(scenario, 0.0)
-        )
-        in_group = _non_negative(
-            revenue_state["in_group"][year_index].get(scenario, 0.0)
-        )
-        external = _non_negative(
-            revenue_state["external"][year_index].get(scenario, 0.0)
-        )
+        fte = revenue_state["consulting_fte"][scenario][year_index]
+        workdays = revenue_state["workdays_per_year"][scenario][year_index]
+        utilization = revenue_state["utilization_rate"][scenario][year_index]
+        base_rate = revenue_state["day_rate_eur"][scenario][year_index]
+        rate_growth = revenue_state["day_rate_growth_pct"][scenario][year_index]
+        revenue_growth = revenue_state["revenue_growth_pct"][scenario][year_index]
+
+        day_rate = base_rate * ((1 + rate_growth) ** year_index)
+        capacity_revenue = fte * workdays * utilization * day_rate
+        growth_adjusted = capacity_revenue * (1 + revenue_growth)
+
+        guarantee_pct = revenue_state["guarantee_pct_by_year"][scenario][year_index]
         guaranteed_floor = reference_value * guarantee_pct
-        modeled_total = in_group + external
-        final_total = max(guaranteed_floor, modeled_total)
+
+        final_total = max(guaranteed_floor, growth_adjusted)
         share_guaranteed = (
             guaranteed_floor / final_total if final_total else 0.0
         )
+
         revenue_final_by_year.append(final_total)
         components_by_year.append(
             {
+                "consulting_fte": fte,
+                "capacity_revenue": capacity_revenue,
+                "growth_adjusted_revenue": growth_adjusted,
                 "guaranteed_floor": guaranteed_floor,
-                "modeled_in_group": in_group,
-                "modeled_external": external,
-                "modeled_total": modeled_total,
                 "final_total": final_total,
                 "share_guaranteed": share_guaranteed,
             }
         )
+
     return revenue_final_by_year, components_by_year
 
 
@@ -72,92 +80,130 @@ def render_revenue_model_assumptions(input_model):
     scenario = st.session_state.get("assumptions.scenario", "Base")
     year_columns = [f"Year {i}" for i in range(5)]
 
-    st.markdown("### Inputs")
-    reference_value = _non_negative(revenue_state["reference"][0].get(scenario, 0.0))
-    reference_row = pd.DataFrame(
-        [{"Parameter": "Reference Revenue (EUR)", **{c: reference_value for c in year_columns}}]
-    )
-    reference_edit = st.data_editor(
-        reference_row,
+    st.markdown("### Revenue Drivers")
+    driver_rows = [
+        "Consulting FTE",
+        "Workdays per Year",
+        "Utilization %",
+        "Day Rate (EUR)",
+        "Day Rate Growth (% p.a.)",
+        "Revenue Growth (% p.a.)",
+    ]
+    driver_values = {
+        "Consulting FTE": revenue_state["consulting_fte"][scenario],
+        "Workdays per Year": revenue_state["workdays_per_year"][scenario],
+        "Utilization %": revenue_state["utilization_rate"][scenario],
+        "Day Rate (EUR)": revenue_state["day_rate_eur"][scenario],
+        "Day Rate Growth (% p.a.)": revenue_state["day_rate_growth_pct"][scenario],
+        "Revenue Growth (% p.a.)": revenue_state["revenue_growth_pct"][scenario],
+    }
+    driver_table = {"Parameter": driver_rows}
+    for idx, col in enumerate(year_columns):
+        driver_table[col] = [driver_values[param][idx] for param in driver_rows]
+    driver_df = pd.DataFrame(driver_table)
+    driver_edit = st.data_editor(
+        driver_df,
         hide_index=True,
-        key="revenue_model.reference",
-        column_config={
-            "Parameter": st.column_config.TextColumn(disabled=True),
-            "Year 1": st.column_config.NumberColumn(disabled=True),
-            "Year 2": st.column_config.NumberColumn(disabled=True),
-            "Year 3": st.column_config.NumberColumn(disabled=True),
-            "Year 4": st.column_config.NumberColumn(disabled=True),
-        },
+        key="revenue_model.drivers",
+        column_config={"Parameter": st.column_config.TextColumn(disabled=True)},
         use_container_width=True,
     )
-    revenue_state["reference"][0][scenario] = _non_negative(
+    for year_index in range(5):
+        revenue_state["consulting_fte"][scenario][year_index] = _non_negative(
+            driver_edit.loc[0, year_columns[year_index]]
+        )
+        revenue_state["workdays_per_year"][scenario][year_index] = _non_negative(
+            driver_edit.loc[1, year_columns[year_index]]
+        )
+        revenue_state["utilization_rate"][scenario][year_index] = _clamp_pct(
+            driver_edit.loc[2, year_columns[year_index]]
+        )
+        revenue_state["day_rate_eur"][scenario][year_index] = _non_negative(
+            driver_edit.loc[3, year_columns[year_index]]
+        )
+        revenue_state["day_rate_growth_pct"][scenario][year_index] = _clamp_pct(
+            driver_edit.loc[4, year_columns[year_index]]
+        )
+        revenue_state["revenue_growth_pct"][scenario][year_index] = _clamp_pct(
+            driver_edit.loc[5, year_columns[year_index]]
+        )
+
+    st.markdown("### Group Revenue Guarantee (Floor)")
+    reference_df = pd.DataFrame(
+        {
+            "Parameter": ["Reference Revenue (EUR)"],
+            **{
+                col: [revenue_state["reference_revenue_eur"][scenario]]
+                for col in year_columns
+            },
+        }
+    )
+    reference_edit = st.data_editor(
+        reference_df,
+        hide_index=True,
+        key="revenue_model.reference",
+        column_config={"Parameter": st.column_config.TextColumn(disabled=True)},
+        use_container_width=True,
+    )
+    revenue_state["reference_revenue_eur"][scenario] = _non_negative(
         reference_edit.loc[0, "Year 0"]
     )
 
-    def _year_table(label, rows_key):
-        data = {col: [] for col in year_columns}
-        data["Parameter"] = [label]
-        for year_index, col in enumerate(year_columns):
-            data[col].append(
-                revenue_state[rows_key][year_index].get(scenario, 0.0)
-            )
-        df = pd.DataFrame(data)
-        edit = st.data_editor(
-            df,
-            hide_index=True,
-            key=f"revenue_model.{rows_key}",
-            column_config={
-                "Parameter": st.column_config.TextColumn(disabled=True),
+    guarantee_df = pd.DataFrame(
+        {
+            "Parameter": ["Guarantee %"],
+            **{
+                col: [revenue_state["guarantee_pct_by_year"][scenario][idx]]
+                for idx, col in enumerate(year_columns)
             },
-            use_container_width=True,
+        }
+    )
+    guarantee_edit = st.data_editor(
+        guarantee_df,
+        hide_index=True,
+        key="revenue_model.guarantees",
+        column_config={"Parameter": st.column_config.TextColumn(disabled=True)},
+        use_container_width=True,
+    )
+    for year_index in range(5):
+        revenue_state["guarantee_pct_by_year"][scenario][year_index] = _clamp_pct(
+            guarantee_edit.loc[0, year_columns[year_index]]
         )
-        for year_index in range(5):
-            revenue_state[rows_key][year_index][scenario] = _non_negative(
-                edit.loc[0, year_columns[year_index]]
-            )
 
-    _year_table("Guarantee %", "guarantees")
-    _year_table("In-Group Revenue (EUR)", "in_group")
-    _year_table("External Revenue (EUR)", "external")
-
-    st.markdown("### Summary (Revenue Bridge)")
-    reference_value = _non_negative(revenue_state["reference"][0].get(scenario, 0.0))
+    st.markdown("### Revenue Bridge")
     bridge_rows = []
     for year_index in range(5):
-        guarantee_pct = _clamp_pct(
-            revenue_state["guarantees"][year_index].get(scenario, 0.0)
-        )
-        in_group = _non_negative(
-            revenue_state["in_group"][year_index].get(scenario, 0.0)
-        )
-        external = _non_negative(
-            revenue_state["external"][year_index].get(scenario, 0.0)
-        )
+        reference_value = revenue_state["reference_revenue_eur"][scenario]
+        fte = revenue_state["consulting_fte"][scenario][year_index]
+        workdays = revenue_state["workdays_per_year"][scenario][year_index]
+        utilization = revenue_state["utilization_rate"][scenario][year_index]
+        base_rate = revenue_state["day_rate_eur"][scenario][year_index]
+        rate_growth = revenue_state["day_rate_growth_pct"][scenario][year_index]
+        revenue_growth = revenue_state["revenue_growth_pct"][scenario][year_index]
+        day_rate = base_rate * ((1 + rate_growth) ** year_index)
+        capacity_revenue = fte * workdays * utilization * day_rate
+        growth_adjusted = capacity_revenue * (1 + revenue_growth)
+        guarantee_pct = revenue_state["guarantee_pct_by_year"][scenario][year_index]
         guaranteed_floor = reference_value * guarantee_pct
-        modeled_total = in_group + external
-        final_total = max(guaranteed_floor, modeled_total)
-        share_guaranteed = (
-            guaranteed_floor / final_total if final_total else 0.0
-        )
+        final_revenue = max(guaranteed_floor, growth_adjusted)
+        guaranteed_share = guaranteed_floor / final_revenue if final_revenue else 0.0
         bridge_rows.append(
             {
-                "Parameter": f"Year {year_index}",
+                "Year": f"Year {year_index}",
+                "Capacity Revenue": capacity_revenue,
+                "Growth Adj.": growth_adjusted,
                 "Guaranteed Floor": guaranteed_floor,
-                "In-Group": in_group,
-                "External": external,
-                "Modeled Total": modeled_total,
-                "Final Revenue": final_total,
-                "Guaranteed Share %": share_guaranteed,
+                "Final Revenue": final_revenue,
+                "Guaranteed %": guaranteed_share,
             }
         )
     bridge_df = pd.DataFrame(bridge_rows)
     for col in [
+        "Capacity Revenue",
+        "Growth Adj.",
         "Guaranteed Floor",
-        "In-Group",
-        "External",
-        "Modeled Total",
         "Final Revenue",
     ]:
         bridge_df[col] = bridge_df[col].apply(format_currency)
-    bridge_df["Guaranteed Share %"] = bridge_df["Guaranteed Share %"].apply(format_pct)
+    bridge_df["Guaranteed %"] = bridge_df["Guaranteed %"].apply(format_pct)
     st.dataframe(bridge_df, use_container_width=True)

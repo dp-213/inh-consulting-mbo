@@ -18,23 +18,28 @@ def format_currency(value):
 
 def build_cost_model_outputs(assumptions_state, revenue_final_by_year):
     cost_state = assumptions_state["cost_model"]
+    apply_inflation = bool(cost_state["inflation"].get("apply", False))
+    inflation_rate = cost_state["inflation"].get("rate_pct", 0.0)
     cost_totals_by_year = []
     for year_index in range(5):
         personnel_row = cost_state["personnel"][year_index]
         fixed_row = cost_state["fixed_overhead"][year_index]
         variable_row = cost_state["variable_costs"][year_index]
+        inflation_factor = (1 + inflation_rate) ** year_index if apply_inflation else 1.0
 
         consultant_total = (
             _non_negative(personnel_row["Consultant FTE"])
             * _non_negative(personnel_row["Consultant Loaded Cost (EUR)"])
+            * inflation_factor
         )
         backoffice_total = (
             _non_negative(personnel_row["Backoffice FTE"])
             * _non_negative(personnel_row["Backoffice Loaded Cost (EUR)"])
+            * inflation_factor
         )
         management_total = _non_negative(
             personnel_row["Management Cost (EUR)"]
-        )
+        ) * inflation_factor
         personnel_total = consultant_total + backoffice_total + management_total
 
         fixed_total = sum(
@@ -47,7 +52,7 @@ def build_cost_model_outputs(assumptions_state, revenue_final_by_year):
                 "Services",
                 "Other Services",
             ]
-        )
+        ) * inflation_factor
 
         revenue = revenue_final_by_year[year_index]
         variable_total = 0.0
@@ -57,7 +62,7 @@ def build_cost_model_outputs(assumptions_state, revenue_final_by_year):
             if cost_type == "%":
                 variable_total += revenue * value
             else:
-                variable_total += value
+                variable_total += value * inflation_factor
 
         overhead_total = fixed_total + variable_total
         cost_totals_by_year.append(
@@ -80,6 +85,21 @@ def render_cost_model_assumptions(input_model):
     assumptions_state = st.session_state["assumptions"]
     cost_state = assumptions_state["cost_model"]
     year_columns = [f"Year {i}" for i in range(5)]
+
+    st.markdown("### Inflation")
+    inflation_cols = st.columns([1, 1])
+    cost_state["inflation"]["apply"] = inflation_cols[0].toggle(
+        "Apply inflation to costs",
+        value=bool(cost_state["inflation"].get("apply", False)),
+    )
+    cost_state["inflation"]["rate_pct"] = inflation_cols[1].number_input(
+        "Inflation Rate (% p.a.)",
+        min_value=0.0,
+        max_value=0.2,
+        step=0.005,
+        value=float(cost_state["inflation"].get("rate_pct", 0.0)),
+        format="%.3f",
+    )
 
     st.markdown("### Consultant Costs")
     consultant_table = {

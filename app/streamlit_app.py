@@ -1992,54 +1992,71 @@ def run_app():
         return max(0.0, float(value))
 
     def _seed_assumptions_state():
-        default_reference = base_model.revenue_model["reference_revenue_eur"].value
-        revenue_reference_rows = [
-            {
-                "Parameter": "Reference Revenue (EUR)",
-                "Base": default_reference,
-                "Best": default_reference,
-                "Worst": default_reference,
-                "Description": "Reference revenue used for the guarantee floor.",
-            }
-        ]
-        revenue_guarantees = []
-        revenue_in_group = []
-        revenue_external = []
-        for year_index in range(5):
-            year_label = f"Year {year_index}"
-            guarantee_value = base_model.revenue_model[
-                f"guarantee_pct_year_{year_index}"
-            ].value
-            in_group_value = base_model.revenue_model[
-                f"in_group_revenue_year_{year_index}"
-            ].value
-            external_value = base_model.revenue_model[
-                f"external_revenue_year_{year_index}"
-            ].value
-            revenue_guarantees.append(
-                {
-                    "Year": year_label,
-                    "Base": guarantee_value,
-                    "Best": guarantee_value,
-                    "Worst": guarantee_value,
-                }
-            )
-            revenue_in_group.append(
-                {
-                    "Year": year_label,
-                    "Base": in_group_value,
-                    "Best": in_group_value,
-                    "Worst": in_group_value,
-                }
-            )
-            revenue_external.append(
-                {
-                    "Year": year_label,
-                    "Base": external_value,
-                    "Best": external_value,
-                    "Worst": external_value,
-                }
-            )
+        scenario_labels = ["Base", "Best", "Worst"]
+        revenue_model = {
+            "reference_revenue_eur": {
+                scenario: base_model.revenue_model["reference_revenue_eur"].value
+                for scenario in scenario_labels
+            },
+            "guarantee_pct_by_year": {
+                scenario: [
+                    base_model.revenue_model[
+                        f"guarantee_pct_year_{year_index}"
+                    ].value
+                    for year_index in range(5)
+                ]
+                for scenario in scenario_labels
+            },
+            "consulting_fte": {
+                scenario: [
+                    base_model.operating_assumptions[
+                        "consulting_fte_start"
+                    ].value
+                    for _ in range(5)
+                ]
+                for scenario in scenario_labels
+            },
+            "workdays_per_year": {
+                scenario: [
+                    base_model.operating_assumptions[
+                        "work_days_per_year"
+                    ].value
+                    for _ in range(5)
+                ]
+                for scenario in scenario_labels
+            },
+            "utilization_rate": {
+                scenario: [
+                    base_model.scenario_parameters["utilization_rate"][
+                        scenario.lower()
+                    ].value
+                    for _ in range(5)
+                ]
+                for scenario in scenario_labels
+            },
+            "day_rate_eur": {
+                scenario: [
+                    base_model.scenario_parameters["day_rate_eur"][
+                        scenario.lower()
+                    ].value
+                    for _ in range(5)
+                ]
+                for scenario in scenario_labels
+            },
+            "day_rate_growth_pct": {
+                scenario: [
+                    base_model.operating_assumptions[
+                        "day_rate_growth_pct"
+                    ].value
+                    for _ in range(5)
+                ]
+                for scenario in scenario_labels
+            },
+            "revenue_growth_pct": {
+                scenario: [0.0 for _ in range(5)]
+                for scenario in scenario_labels
+            },
+        }
 
         cost_personnel_rows = []
         cost_fixed_rows = []
@@ -2098,16 +2115,17 @@ def run_app():
             )
 
         return {
-            "revenue_model": {
-                "reference": revenue_reference_rows,
-                "guarantees": revenue_guarantees,
-                "in_group": revenue_in_group,
-                "external": revenue_external,
-            },
+            "revenue_model": revenue_model,
             "cost_model": {
                 "personnel": cost_personnel_rows,
                 "fixed_overhead": cost_fixed_rows,
                 "variable_costs": cost_variable_rows,
+                "inflation": {
+                    "apply": False,
+                    "rate_pct": base_model.personnel_cost_assumptions[
+                        "wage_inflation_pct"
+                    ].value,
+                },
             },
             "personnel_costs": [
                 {"Role": "Consultant Base Salary", "Cost Type": "Fixed", "Base Value (EUR)": base_model.personnel_cost_assumptions["avg_consultant_base_cost_eur_per_year"].value, "Growth (%)": base_model.personnel_cost_assumptions["wage_inflation_pct"].value, "Notes": "Base salary per consultant."},
@@ -2166,27 +2184,56 @@ def run_app():
 
         revenue_state = state.get("revenue_model", {})
         if revenue_state:
-            reference_row = revenue_state["reference"][0]
             st.session_state["revenue_model.reference_revenue_eur"] = _non_negative(
-                reference_row.get(scenario_col, 0.0)
+                revenue_state["reference_revenue_eur"].get(scenario_col, 0.0)
             )
-            for row in revenue_state["guarantees"]:
-                year_index = int(row["Year"].split()[-1])
+            for year_index in range(5):
                 st.session_state[
                     f"revenue_model.guarantee_pct_year_{year_index}"
-                ] = _clamp_pct(row.get(scenario_col, 0.0))
-            for row in revenue_state["in_group"]:
-                year_index = int(row["Year"].split()[-1])
+                ] = _clamp_pct(
+                    revenue_state["guarantee_pct_by_year"][scenario_col][
+                        year_index
+                    ]
+                )
                 st.session_state[
-                    f"revenue_model.in_group_revenue_year_{year_index}"
-                ] = _non_negative(row.get(scenario_col, 0.0))
-            for row in revenue_state["external"]:
-                year_index = int(row["Year"].split()[-1])
+                    f"revenue_model.consulting_fte_year_{year_index}"
+                ] = _non_negative(
+                    revenue_state["consulting_fte"][scenario_col][year_index]
+                )
                 st.session_state[
-                    f"revenue_model.external_revenue_year_{year_index}"
-                ] = _non_negative(row.get(scenario_col, 0.0))
+                    f"revenue_model.workdays_year_{year_index}"
+                ] = _non_negative(
+                    revenue_state["workdays_per_year"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"revenue_model.utilization_rate_year_{year_index}"
+                ] = _clamp_pct(
+                    revenue_state["utilization_rate"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"revenue_model.day_rate_eur_year_{year_index}"
+                ] = _non_negative(
+                    revenue_state["day_rate_eur"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"revenue_model.day_rate_growth_pct_year_{year_index}"
+                ] = _clamp_pct(
+                    revenue_state["day_rate_growth_pct"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"revenue_model.revenue_growth_pct_year_{year_index}"
+                ] = _clamp_pct(
+                    revenue_state["revenue_growth_pct"][scenario_col][year_index]
+                )
 
         cost_state = state.get("cost_model", {})
+        if "inflation" in cost_state:
+            st.session_state["cost_model.apply_inflation"] = bool(
+                cost_state["inflation"].get("apply", False)
+            )
+            st.session_state["cost_model.inflation_rate_pct"] = _clamp_pct(
+                cost_state["inflation"].get("rate_pct", 0.0)
+            )
         for row in cost_state.get("personnel", []):
             year_index = int(row["Year"].split()[-1])
             st.session_state[
@@ -2517,16 +2564,23 @@ def run_app():
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
+        st.markdown("**MBO Financial Model**")
+        st.markdown("OVERVIEW")
+        st.markdown("OPERATING MODEL")
+        st.markdown("FINANCING")
+        st.markdown("VALUATION")
+        st.markdown("SETTINGS")
+
         nav_options = [
             "Overview",
-            "Operating Model / P&L",
-            "Operating Model / Cashflow & Liquidity",
-            "Operating Model / Balance Sheet",
-            "Financing / Financing & Debt",
-            "Financing / Equity Case",
-            "Valuation / Valuation & Purchase Price",
-            "Settings / Assumptions",
-            "Settings / Model Settings",
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "Financing & Debt",
+            "Equity Case",
+            "Valuation & Purchase Price",
+            "Assumptions",
+            "Model Settings",
         ]
         page = st.sidebar.radio(
             "Navigation",
@@ -2534,17 +2588,6 @@ def run_app():
             key="page",
             label_visibility="collapsed",
         )
-        page_map = {
-            "Operating Model / P&L": "Operating Model (P&L)",
-            "Operating Model / Cashflow & Liquidity": "Cashflow & Liquidity",
-            "Operating Model / Balance Sheet": "Balance Sheet",
-            "Financing / Financing & Debt": "Financing & Debt",
-            "Financing / Equity Case": "Equity Case",
-            "Valuation / Valuation & Purchase Price": "Valuation & Purchase Price",
-            "Settings / Assumptions": "Assumptions",
-            "Settings / Model Settings": "Model Settings",
-        }
-        page = page_map.get(page, page)
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
