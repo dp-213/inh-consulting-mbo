@@ -907,6 +907,18 @@ def format_int(value):
     return f"{int(round(value)):,}"
 
 
+def _clamp_pct(value):
+    if value is None or pd.isna(value):
+        return 0.0
+    return max(0.0, min(float(value), 1.0))
+
+
+def _non_negative(value):
+    if value is None or pd.isna(value):
+        return 0.0
+    return max(0.0, float(value))
+
+
 def _style_totals(df, columns_to_bold):
     def style_row(_):
         return [
