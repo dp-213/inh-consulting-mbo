@@ -1960,7 +1960,8 @@ def run_app():
     with st.sidebar:
         nav_css = """
         <style>
-          div[data-testid="stSidebar"] {
+          div[data-testid="stSidebar"],
+          div[data-testid="stSidebarContent"] {
             background: #f7f8fa;
           }
           div[data-testid="stSidebar"] > div {
@@ -2003,6 +2004,7 @@ def run_app():
           .nav-settings-block .nav-item {
             font-size: 0.9rem;
           }
+          div[data-testid="stSidebar"] .stButton > button,
           div[data-testid="stSidebar"] button {
             width: 100%;
             justify-content: flex-start;
@@ -2013,6 +2015,7 @@ def run_app():
             border: 1px solid transparent;
             font-weight: 400;
           }
+          div[data-testid="stSidebar"] .stButton > button:hover,
           div[data-testid="stSidebar"] button:hover {
             background: #edf2f7;
             border-color: transparent;
