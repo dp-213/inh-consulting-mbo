@@ -8,6 +8,18 @@ def _non_negative(value):
     return max(0.0, float(value))
 
 
+def _percent_to_display(value):
+    if value is None or pd.isna(value):
+        return value
+    return float(value) * 100
+
+
+def _percent_from_display(value):
+    if value is None or pd.isna(value):
+        return value
+    return float(value) / 100
+
+
 def format_currency(value):
     if value is None or pd.isna(value):
         return ""
@@ -93,7 +105,7 @@ def render_cost_model_assumptions(input_model):
             "Unit": ["", "%"],
             "Value": [
                 bool(cost_state["inflation"].get("apply", False)),
-                float(cost_state["inflation"].get("rate_pct", 0.0)),
+                _percent_to_display(cost_state["inflation"].get("rate_pct", 0.0)),
             ],
         }
     )
@@ -104,12 +116,14 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.NumberColumn(),
+            "Value": st.column_config.NumberColumn(format=",.2f"),
         },
         use_container_width=True,
     )
     cost_state["inflation"]["apply"] = bool(inflation_edit.loc[0, "Value"])
-    cost_state["inflation"]["rate_pct"] = _non_negative(inflation_edit.loc[1, "Value"])
+    cost_state["inflation"]["rate_pct"] = _percent_from_display(
+        _non_negative(inflation_edit.loc[1, "Value"])
+    )
 
     st.markdown("### Consultant Costs")
     consultant_table = {
@@ -129,6 +143,7 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
+            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
         },
         use_container_width=True,
     )
@@ -158,6 +173,7 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
+            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
         },
         use_container_width=True,
     )
@@ -186,6 +202,7 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
+            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
         },
         use_container_width=True,
     )
@@ -223,6 +240,7 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
+            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
         },
         use_container_width=True,
     )
@@ -256,9 +274,21 @@ def render_cost_model_assumptions(input_model):
             cost_state["variable_costs"][year_index]["Communication Type"],
         ]
         value_table[col] = [
-            cost_state["variable_costs"][year_index]["Training Value"],
-            cost_state["variable_costs"][year_index]["Travel Value"],
-            cost_state["variable_costs"][year_index]["Communication Value"],
+            _percent_to_display(
+                cost_state["variable_costs"][year_index]["Training Value"]
+            )
+            if cost_state["variable_costs"][year_index]["Training Type"] == "%"
+            else cost_state["variable_costs"][year_index]["Training Value"],
+            _percent_to_display(
+                cost_state["variable_costs"][year_index]["Travel Value"]
+            )
+            if cost_state["variable_costs"][year_index]["Travel Type"] == "%"
+            else cost_state["variable_costs"][year_index]["Travel Value"],
+            _percent_to_display(
+                cost_state["variable_costs"][year_index]["Communication Value"]
+            )
+            if cost_state["variable_costs"][year_index]["Communication Type"] == "%"
+            else cost_state["variable_costs"][year_index]["Communication Value"],
         ]
     type_df = pd.DataFrame(type_table)
     value_df = pd.DataFrame(value_table)
@@ -284,6 +314,7 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
+            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
         },
         use_container_width=True,
     )
@@ -297,15 +328,24 @@ def render_cost_model_assumptions(input_model):
         cost_state["variable_costs"][year_index]["Communication Type"] = type_edit.loc[
             2, year_columns[year_index]
         ]
-        cost_state["variable_costs"][year_index]["Training Value"] = _non_negative(
+        training_value = _non_negative(
             value_edit.loc[0, year_columns[year_index]]
         )
-        cost_state["variable_costs"][year_index]["Travel Value"] = _non_negative(
+        travel_value = _non_negative(
             value_edit.loc[1, year_columns[year_index]]
         )
-        cost_state["variable_costs"][year_index]["Communication Value"] = _non_negative(
+        communication_value = _non_negative(
             value_edit.loc[2, year_columns[year_index]]
         )
+        if cost_state["variable_costs"][year_index]["Training Type"] == "%":
+            training_value = _percent_from_display(training_value)
+        if cost_state["variable_costs"][year_index]["Travel Type"] == "%":
+            travel_value = _percent_from_display(travel_value)
+        if cost_state["variable_costs"][year_index]["Communication Type"] == "%":
+            communication_value = _percent_from_display(communication_value)
+        cost_state["variable_costs"][year_index]["Training Value"] = training_value
+        cost_state["variable_costs"][year_index]["Travel Value"] = travel_value
+        cost_state["variable_costs"][year_index]["Communication Value"] = communication_value
 
     st.markdown("### Cost Summary")
     scenario = st.session_state.get("assumptions.scenario", "Base")
@@ -317,57 +357,70 @@ def render_cost_model_assumptions(input_model):
     cost_totals = build_cost_model_outputs(
         assumptions_state, revenue_final_by_year
     )
-    summary_rows = []
+    summary_rows = {
+        "Consultant": [],
+        "Backoffice": [],
+        "Management": [],
+        "Total Personnel": [],
+        "Fixed OH": [],
+        "Variable": [],
+        "Total Operating Costs": [],
+    }
     for year_index in range(5):
-        summary_rows.append(
-            {
-                "Year": f"Year {year_index}",
-                "Consultant": cost_totals[year_index]["consultant_costs"],
-                "Backoffice": cost_totals[year_index]["backoffice_costs"],
-                "Management": cost_totals[year_index]["management_costs"],
-                "Total Personnel": cost_totals[year_index]["personnel_costs"],
-                "Fixed OH": (
-                    cost_totals[year_index]["overhead_and_variable_costs"]
-                    - sum(
-                        _non_negative(cost_state["variable_costs"][year_index][f"{prefix} Value"])
-                        if cost_state["variable_costs"][year_index][f"{prefix} Type"] == "EUR"
-                        else revenue_final_by_year[year_index]
-                        * _non_negative(cost_state["variable_costs"][year_index][f"{prefix} Value"])
-                        for prefix in ["Training", "Travel", "Communication"]
-                    )
-                ),
-                "Variable": (
-                    cost_totals[year_index]["overhead_and_variable_costs"]
-                    - sum(
-                        _non_negative(cost_state["fixed_overhead"][year_index][col])
-                        for col in [
-                            "Advisory",
-                            "Legal",
-                            "IT & Software",
-                            "Office Rent",
-                            "Services",
-                            "Other Services",
-                        ]
-                    )
-                ),
-                "Total Operating Costs": cost_totals[year_index]["total_operating_costs"],
-            }
+        fixed_total = sum(
+            _non_negative(cost_state["fixed_overhead"][year_index][col])
+            for col in [
+                "Advisory",
+                "Legal",
+                "IT & Software",
+                "Office Rent",
+                "Services",
+                "Other Services",
+            ]
         )
-    summary_df = pd.DataFrame(summary_rows)
-    for col in [
-        "Consultant",
-        "Backoffice",
-        "Management",
-        "Total Personnel",
-        "Fixed OH",
-        "Variable",
-        "Total Operating Costs",
-    ]:
-        summary_df[col] = summary_df[col].apply(format_currency)
+        variable_total = sum(
+            _non_negative(cost_state["variable_costs"][year_index][f"{prefix} Value"])
+            if cost_state["variable_costs"][year_index][f"{prefix} Type"] == "EUR"
+            else revenue_final_by_year[year_index]
+            * _non_negative(cost_state["variable_costs"][year_index][f"{prefix} Value"])
+            for prefix in ["Training", "Travel", "Communication"]
+        )
+        summary_rows["Consultant"].append(
+            cost_totals[year_index]["consultant_costs"]
+        )
+        summary_rows["Backoffice"].append(
+            cost_totals[year_index]["backoffice_costs"]
+        )
+        summary_rows["Management"].append(
+            cost_totals[year_index]["management_costs"]
+        )
+        summary_rows["Total Personnel"].append(
+            cost_totals[year_index]["personnel_costs"]
+        )
+        summary_rows["Fixed OH"].append(fixed_total)
+        summary_rows["Variable"].append(variable_total)
+        summary_rows["Total Operating Costs"].append(
+            cost_totals[year_index]["total_operating_costs"]
+        )
+
+    summary_table = {
+        "Parameter": list(summary_rows.keys()),
+        "Unit": ["EUR"] * len(summary_rows),
+    }
+    for year_index, col in enumerate(year_columns):
+        summary_table[col] = [
+            summary_rows[row_key][year_index] for row_key in summary_rows
+        ]
+    summary_df = pd.DataFrame(summary_table)
     st.data_editor(
         summary_df,
         hide_index=True,
         key="cost_model.summary",
         disabled=True,
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+        },
         use_container_width=True,
     )

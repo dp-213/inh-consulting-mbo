@@ -43,6 +43,42 @@ def _format_section_title(section_key):
     return section_key.replace("_", " ").title()
 
 
+def _percent_to_display(value):
+    if value is None or pd.isna(value):
+        return value
+    return float(value) * 100
+
+
+def _percent_from_display(value):
+    if value is None or pd.isna(value):
+        return value
+    return float(value) / 100
+
+
+def _apply_unit_display(df, value_col="Value", unit_col="Unit"):
+    display_df = df.copy()
+    if value_col in display_df.columns and unit_col in display_df.columns:
+        display_df[value_col] = display_df.apply(
+            lambda row: _percent_to_display(row[value_col])
+            if row[unit_col] == "%"
+            else row[value_col],
+            axis=1,
+        )
+    return display_df
+
+
+def _restore_unit_values(df, value_col="Value", unit_col="Unit"):
+    restored_df = df.copy()
+    if value_col in restored_df.columns and unit_col in restored_df.columns:
+        restored_df[value_col] = restored_df.apply(
+            lambda row: _percent_from_display(row[value_col])
+            if row[unit_col] == "%"
+            else row[value_col],
+            axis=1,
+        )
+    return restored_df
+
+
 def _build_model_snapshot_payload(
     input_model,
     assumptions_state,
@@ -196,17 +232,20 @@ def render_advanced_assumptions(input_model):
 
     st.markdown("### Financing Assumptions")
     financing_df = pd.DataFrame(assumptions_state["financing"])
+    financing_display = _apply_unit_display(financing_df)
     financing_edit = st.data_editor(
-        financing_df,
+        financing_display,
         hide_index=True,
         key="assumptions.financing",
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
+            "Value": st.column_config.NumberColumn(format=",.2f"),
         },
         use_container_width=True,
     )
+    financing_edit = _restore_unit_values(financing_edit)
     assumptions_state["financing"] = financing_edit.to_dict("records")
     for _, row in financing_edit.iterrows():
         parameter = row["Parameter"]
@@ -221,17 +260,20 @@ def render_advanced_assumptions(input_model):
 
     st.markdown("### Equity & Investor Assumptions")
     equity_df = pd.DataFrame(assumptions_state["equity"])
+    equity_display = _apply_unit_display(equity_df)
     equity_edit = st.data_editor(
-        equity_df,
+        equity_display,
         hide_index=True,
         key="assumptions.equity",
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
+            "Value": st.column_config.NumberColumn(format=",.2f"),
         },
         use_container_width=True,
     )
+    equity_edit = _restore_unit_values(equity_edit)
     assumptions_state["equity"] = equity_edit.to_dict("records")
     for _, row in equity_edit.iterrows():
         parameter = row["Parameter"]
@@ -252,17 +294,20 @@ def render_advanced_assumptions(input_model):
 
     st.markdown("### Cashflow Assumptions")
     cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
+    cashflow_display = _apply_unit_display(cashflow_df)
     cashflow_edit = st.data_editor(
-        cashflow_df,
+        cashflow_display,
         hide_index=True,
         key="assumptions.cashflow",
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
+            "Value": st.column_config.NumberColumn(format=",.2f"),
         },
         use_container_width=True,
     )
+    cashflow_edit = _restore_unit_values(cashflow_edit)
     assumptions_state["cashflow"] = cashflow_edit.to_dict("records")
     for _, row in cashflow_edit.iterrows():
         parameter = row["Parameter"]
@@ -279,17 +324,20 @@ def render_advanced_assumptions(input_model):
 
     st.markdown("### Balance Sheet Assumptions")
     balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
+    balance_display = _apply_unit_display(balance_df)
     balance_edit = st.data_editor(
-        balance_df,
+        balance_display,
         hide_index=True,
         key="assumptions.balance_sheet",
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
+            "Value": st.column_config.NumberColumn(format=",.2f"),
         },
         use_container_width=True,
     )
+    balance_edit = _restore_unit_values(balance_edit)
     assumptions_state["balance_sheet"] = balance_edit.to_dict("records")
     for _, row in balance_edit.iterrows():
         parameter = row["Parameter"]
@@ -302,17 +350,20 @@ def render_advanced_assumptions(input_model):
 
     st.markdown("### Valuation Assumptions")
     valuation_df = pd.DataFrame(assumptions_state["valuation"])
+    valuation_display = _apply_unit_display(valuation_df)
     valuation_edit = st.data_editor(
-        valuation_df,
+        valuation_display,
         hide_index=True,
         key="assumptions.valuation",
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
+            "Value": st.column_config.NumberColumn(format=",.2f"),
         },
         use_container_width=True,
     )
+    valuation_edit = _restore_unit_values(valuation_edit)
     assumptions_state["valuation"] = valuation_edit.to_dict("records")
     for _, row in valuation_edit.iterrows():
         parameter = row["Parameter"]
@@ -2649,7 +2700,9 @@ def run_app():
           div[data-testid="stRadio"] label:hover {
             background: #eef2f7;
           }
-          div[data-testid="stRadio"] input {
+          div[data-testid="stRadio"] input,
+          div[data-testid="stRadio"] svg,
+          div[data-testid="stRadio"] label > div:first-child {
             display: none;
           }
           div[data-testid="stRadio"] input:checked + div {
@@ -2733,14 +2786,21 @@ def run_app():
 
         def _sidebar_editor(title, key, df, column_config):
             st.markdown(f"### {title}")
+            display_df = _apply_unit_display(df)
+            config = dict(column_config)
+            for col in display_df.columns:
+                if col not in config:
+                    config[col] = st.column_config.NumberColumn(
+                        format=",.2f"
+                    )
             edited = st.data_editor(
-                df,
+                display_df,
                 hide_index=True,
                 key=key,
-                column_config=column_config,
+                column_config=config,
                 use_container_width=True,
             )
-            return edited
+            return _restore_unit_values(edited)
 
         if page == "Cashflow & Liquidity":
             cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
