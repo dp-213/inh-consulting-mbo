@@ -19,6 +19,7 @@ def calculate_debt_schedule(input_model, cashflow_result):
     )
     amort_type = financing_assumptions.get("amortization_type", "Linear")
     amort_period = financing_assumptions.get("amortization_period_years", 5)
+    grace_period = financing_assumptions.get("grace_period_years", 0)
     special_year = financing_assumptions.get("special_repayment_year", None)
     special_amount = financing_assumptions.get("special_repayment_amount_eur", 0.0)
     min_dscr = financing_assumptions.get("minimum_dscr", 1.3)
@@ -39,7 +40,13 @@ def calculate_debt_schedule(input_model, cashflow_result):
             )
         else:
             scheduled_repayment = (
-                initial_debt / amort_period if i < amort_period else 0.0
+                0.0
+                if i < grace_period
+                else (
+                    initial_debt / amort_period
+                    if i < amort_period
+                    else 0.0
+                )
             )
         special_repayment = (
             special_amount if special_year == i else 0.0
@@ -51,7 +58,8 @@ def calculate_debt_schedule(input_model, cashflow_result):
 
         # DSCR uses operating cash flow divided by total debt service.
         operating_cf = year_data["operating_cf"]
-        dscr = operating_cf / debt_service if debt_service != 0 else 0
+        cfads = operating_cf - year_data.get("capex", 0.0)
+        dscr = cfads / debt_service if debt_service != 0 else 0
 
         # Reduce principal after payment.
         outstanding_principal = max(opening_debt - total_repayment, 0.0)
@@ -70,6 +78,7 @@ def calculate_debt_schedule(input_model, cashflow_result):
                 "debt_service": debt_service,
                 "outstanding_principal": outstanding_principal,
                 "dscr": dscr,
+                "cfads": cfads,
                 "minimum_dscr": min_dscr,
                 "covenant_breach": dscr < min_dscr,
             }

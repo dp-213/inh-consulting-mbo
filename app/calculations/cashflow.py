@@ -49,6 +49,7 @@ def calculate_cashflow(input_model, pnl_result):
     outstanding_principal = debt_amount
     amort_type = financing_assumptions.get("amortization_type", "Linear")
     amort_period = financing_assumptions.get("amortization_period_years", 5)
+    grace_period = financing_assumptions.get("grace_period_years", 0)
     special_year = financing_assumptions.get("special_repayment_year", None)
     special_amount = financing_assumptions.get("special_repayment_amount_eur", 0.0)
 
@@ -67,7 +68,13 @@ def calculate_cashflow(input_model, pnl_result):
             )
         else:
             scheduled_repayment = (
-                debt_amount / amort_period if i < amort_period else 0.0
+                0.0
+                if i < grace_period
+                else (
+                    debt_amount / amort_period
+                    if i < amort_period
+                    else 0.0
+                )
             )
         special_repayment = (
             special_amount if special_year == i else 0.0
