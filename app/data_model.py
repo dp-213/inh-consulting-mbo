@@ -427,3 +427,49 @@ class InputModel:
                 editable=True,
             ),
         }
+
+
+def create_demo_input_model():
+    """
+    Create an InputModel populated with reasonable demo values.
+    """
+    input_model = InputModel()
+
+    # Fill previously empty or optional fields with demo values.
+    input_model.operating_assumptions[
+        "avg_backoffice_salary_eur_per_year"
+    ].value = 80000
+
+    input_model.transaction_and_financing[
+        "special_repayment_amount_eur"
+    ].value = 0
+    input_model.transaction_and_financing[
+        "special_repayment_year"
+    ].value = 3
+
+    input_model.valuation_assumptions["multiple_valuation"][
+        "buyer_multiple"
+    ].value = 5.0
+    input_model.valuation_assumptions["multiple_valuation"][
+        "seller_multiple"
+    ].value = 7.0
+
+    input_model.valuation_assumptions["dcf_valuation"][
+        "discount_rate_wacc"
+    ].value = 0.10
+    input_model.valuation_assumptions["dcf_valuation"][
+        "explicit_forecast_years"
+    ].value = 5
+    input_model.valuation_assumptions["dcf_valuation"][
+        "terminal_growth_rate"
+    ].value = 0.02
+    input_model.valuation_assumptions["dcf_valuation"][
+        "buyer_adjustment_factor"
+    ].value = 0.95
+    input_model.valuation_assumptions["dcf_valuation"][
+        "seller_adjustment_factor"
+    ].value = 1.05
+
+    input_model.valuation_assumptions["valuation_display_mode"].value = "range"
+
+    return input_model

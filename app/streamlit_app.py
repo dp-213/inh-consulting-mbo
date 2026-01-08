@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from app.data_model import InputModel
+from app.data_model import InputModel, create_demo_input_model
 import app.run_model as run_model
 
 
@@ -21,7 +21,8 @@ def run_app():
     st.title("Financial Model")
 
     # Build input model and apply sidebar overrides.
-    input_model = InputModel()
+    use_demo = st.sidebar.checkbox("Use demo values", value=True)
+    input_model = create_demo_input_model() if use_demo else InputModel()
 
     scenario = st.sidebar.selectbox("Scenario", ["Base", "Best", "Worst"])
     input_model.scenario_selection["selected_scenario"].value = scenario
