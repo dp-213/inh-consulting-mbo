@@ -1809,21 +1809,467 @@ def run_app():
 
         explain_pnl = st.toggle("Explain P&L logic")
         if explain_pnl:
-            st.markdown("**Revenue**")
-            st.write(
-                "Guaranteed revenue is a utilization floor in years 1–3. "
-                "Non-guaranteed revenue reflects utilization above that floor."
+            def _format_currency_expl(value):
+                formatted = format_currency(value)
+                return formatted if formatted else "—"
+
+            def _format_pct_expl(value):
+                formatted = format_pct(value)
+                return formatted if formatted else "—"
+
+            def _format_int_expl(value):
+                formatted = format_int(value)
+                return formatted if formatted else "—"
+
+            def _safe_calc(values, func):
+                if any(value is None for value in values):
+                    return None
+                try:
+                    return func(*values)
+                except Exception:
+                    return None
+
+            year_labels = [f"Year {year_index}" for year_index in year_indexes]
+            utilization_by_year = getattr(
+                input_model, "utilization_by_year", [utilization_field.value] * 5
             )
-            st.markdown("**Personnel Costs**")
+
+            st.markdown("### Revenue Logic")
             st.write(
-                "Consultant and backoffice compensation include base, bonus, "
-                "and payroll burden with wage inflation."
+                "Revenue is built from delivery capacity and pricing. Day rate "
+                "grows by the annual day-rate growth assumption. Utilization is "
+                "set per year and guarantees create a floor for revenue in years 1–3."
             )
-            st.markdown("**Operating Expenses**")
+
+            st.caption(
+                f"Day Rate_y = {_format_int_expl(day_rate_field.value)} EUR "
+                f"× (1 + {_format_pct_expl(day_rate_growth_field.value)})^y"
+            )
+
+            driver_metrics = {
+                "Consulting FTE": {},
+                "Workdays per Year": {},
+                "Utilization %": {},
+                "Day Rate (EUR)": {},
+                "Guarantee %": {},
+            }
+            revenue_metrics = {}
+            missing_revenue_inputs = [
+                name
+                for name, value in [
+                    ("Consulting FTE", fte_field.value),
+                    ("FTE Growth %", fte_growth_field.value),
+                    ("Workdays per Year", work_days_field.value),
+                    ("Day Rate (EUR)", day_rate_field.value),
+                    ("Day Rate Growth %", day_rate_growth_field.value),
+                    ("Utilization (per year)", utilization_by_year),
+                ]
+                if value is None
+            ]
+
+            for year_index, year_label in enumerate(year_labels):
+                consultants_fte = _safe_calc(
+                    [fte_field.value, fte_growth_field.value],
+                    lambda fte, growth: fte * ((1 + growth) ** year_index),
+                )
+                day_rate_year = _safe_calc(
+                    [day_rate_field.value, day_rate_growth_field.value],
+                    lambda rate, growth: rate * ((1 + growth) ** year_index),
+                )
+                utilization = (
+                    utilization_by_year[year_index]
+                    if isinstance(utilization_by_year, list)
+                    else None
+                )
+                guarantee_pct = 0
+                if year_index == 0:
+                    guarantee_pct = guarantee_y1_field.value
+                elif year_index == 1:
+                    guarantee_pct = guarantee_y2_field.value
+                elif year_index == 2:
+                    guarantee_pct = guarantee_y3_field.value
+
+                theoretical_revenue = _safe_calc(
+                    [
+                        consultants_fte,
+                        work_days_field.value,
+                        utilization,
+                        day_rate_year,
+                    ],
+                    lambda fte, days, util, rate: fte * days * util * rate,
+                )
+                guaranteed_revenue = _safe_calc(
+                    [
+                        consultants_fte,
+                        work_days_field.value,
+                        day_rate_year,
+                        guarantee_pct,
+                    ],
+                    lambda fte, days, rate, guarantee: fte * days * rate * guarantee,
+                )
+                non_guaranteed_revenue = _safe_calc(
+                    [
+                        consultants_fte,
+                        work_days_field.value,
+                        day_rate_year,
+                        utilization,
+                        guarantee_pct,
+                    ],
+                    lambda fte, days, rate, util, guarantee: fte
+                    * days
+                    * rate
+                    * max(util - guarantee, 0),
+                )
+
+                driver_metrics["Consulting FTE"][year_label] = consultants_fte
+                driver_metrics["Workdays per Year"][year_label] = (
+                    work_days_field.value
+                )
+                driver_metrics["Utilization %"][year_label] = utilization
+                driver_metrics["Day Rate (EUR)"][year_label] = day_rate_year
+                driver_metrics["Guarantee %"][year_label] = guarantee_pct
+
+                for metric, value in (
+                    ("Theoretical Revenue", theoretical_revenue),
+                    ("Guaranteed Revenue", guaranteed_revenue),
+                    ("Non-Guaranteed Revenue", non_guaranteed_revenue),
+                ):
+                    if metric not in revenue_metrics:
+                        revenue_metrics[metric] = {
+                            year: None for year in year_labels
+                        }
+                    revenue_metrics[metric][year_label] = value
+
+            driver_table = pd.DataFrame.from_dict(
+                driver_metrics, orient="index"
+            )
+            driver_table = driver_table[year_labels]
+            for metric in driver_table.index:
+                if metric in {"Utilization %", "Guarantee %"}:
+                    driver_table.loc[metric] = driver_table.loc[metric].apply(
+                        _format_pct_expl
+                    )
+                elif metric in {"Consulting FTE", "Workdays per Year", "Day Rate (EUR)"}:
+                    driver_table.loc[metric] = driver_table.loc[metric].apply(
+                        _format_int_expl
+                    )
+                else:
+                    driver_table.loc[metric] = driver_table.loc[metric].apply(
+                        _format_currency_expl
+                    )
+            st.dataframe(driver_table, use_container_width=True)
+
+            revenue_table = pd.DataFrame.from_dict(
+                revenue_metrics, orient="index"
+            )
+            revenue_table = revenue_table[year_labels].applymap(
+                _format_currency_expl
+            )
+            st.dataframe(revenue_table, use_container_width=True)
+            st.caption(
+                "Formula: FTE × Workdays × Utilization_y × DayRate_y, where "
+                "DayRate_y = DayRate × (1 + Day Rate Growth)^y."
+            )
+            if missing_revenue_inputs:
+                st.caption(
+                    f"Missing inputs: {', '.join(missing_revenue_inputs)}."
+                )
+
+            st.markdown("### Personnel Costs Logic")
             st.write(
-                "Operating expenses include advisors, IT, office, and services, "
-                "inflated annually by overhead inflation."
+                "Consultant compensation is driven by base cost per consultant, "
+                "bonus and payroll burden, with wage inflation applied annually. "
+                "Backoffice costs follow the same inflation logic."
             )
+
+            personnel_metrics = {}
+            missing_personnel_inputs = [
+                name
+                for name, value in [
+                    ("Consulting FTE", fte_field.value),
+                    ("FTE Growth %", fte_growth_field.value),
+                    ("Consultant Base Cost", consultant_base_cost),
+                    ("Bonus %", bonus_pct),
+                    ("Payroll Burden %", payroll_pct),
+                    ("Wage Inflation %", wage_inflation),
+                    ("Backoffice FTE", backoffice_fte_start),
+                    ("Backoffice Growth %", backoffice_growth),
+                    ("Backoffice Salary", backoffice_salary),
+                ]
+                if value is None
+            ]
+
+            for year_index, year_label in enumerate(year_labels):
+                consultants_fte = _safe_calc(
+                    [fte_field.value, fte_growth_field.value],
+                    lambda fte, growth: fte * ((1 + growth) ** year_index),
+                )
+                consultant_cost_per_fte = _safe_calc(
+                    [consultant_base_cost, bonus_pct, payroll_pct, wage_inflation],
+                    lambda base, bonus, payroll, inflation: base
+                    * ((1 + bonus) + payroll)
+                    * ((1 + inflation) ** year_index),
+                )
+                consultant_comp = _safe_calc(
+                    [consultants_fte, consultant_cost_per_fte],
+                    lambda fte, cost: fte * cost,
+                )
+                backoffice_fte = _safe_calc(
+                    [backoffice_fte_start, backoffice_growth],
+                    lambda fte, growth: fte * ((1 + growth) ** year_index),
+                )
+                backoffice_cost_per_fte = _safe_calc(
+                    [backoffice_salary, payroll_pct, wage_inflation],
+                    lambda salary, payroll, inflation: salary
+                    * (1 + payroll)
+                    * ((1 + inflation) ** year_index),
+                )
+                backoffice_comp = _safe_calc(
+                    [backoffice_fte, backoffice_cost_per_fte],
+                    lambda fte, cost: fte * cost,
+                )
+                management_comp = 0
+                total_personnel = _safe_calc(
+                    [consultant_comp, backoffice_comp, management_comp],
+                    lambda a, b, c: a + b + c,
+                )
+
+                for metric, value in (
+                    ("Consultant Compensation", consultant_comp),
+                    ("Backoffice Compensation", backoffice_comp),
+                    ("Management / MD Compensation", management_comp),
+                    ("Total Personnel Costs", total_personnel),
+                ):
+                    if metric not in personnel_metrics:
+                        personnel_metrics[metric] = {
+                            year: None for year in year_labels
+                        }
+                    personnel_metrics[metric][year_label] = value
+
+            personnel_table = pd.DataFrame.from_dict(
+                personnel_metrics, orient="index"
+            )
+            personnel_table = personnel_table[year_labels].applymap(
+                _format_currency_expl
+            )
+            st.dataframe(personnel_table, use_container_width=True)
+            personnel_ratio_table = pd.DataFrame.from_dict(
+                {"Personnel Cost Ratio": line_items["Personnel Cost Ratio"]},
+                orient="index",
+            )
+            personnel_ratio_table = personnel_ratio_table[year_labels]
+            personnel_ratio_table = personnel_ratio_table.applymap(
+                _format_pct_expl
+            )
+            st.dataframe(personnel_ratio_table, use_container_width=True)
+            if missing_personnel_inputs:
+                st.caption(
+                    f"Missing inputs: {', '.join(missing_personnel_inputs)}."
+                )
+
+            st.markdown("### Operating Expenses Logic")
+            st.write(
+                "Operating expenses are built from fixed annual costs inflated by "
+                "the overhead inflation assumption."
+            )
+
+            opex_metrics = {}
+            missing_opex_inputs = [
+                name
+                for name, value in [
+                    ("External Advisors", input_model.overhead_and_variable_costs["legal_audit_eur_per_year"].value),
+                    ("IT", input_model.overhead_and_variable_costs["it_and_software_eur_per_year"].value),
+                    ("Office", input_model.overhead_and_variable_costs["rent_eur_per_year"].value),
+                    ("Insurance", input_model.overhead_and_variable_costs["insurance_eur_per_year"].value),
+                    ("Other Services", input_model.overhead_and_variable_costs["other_overhead_eur_per_year"].value),
+                    ("Overhead Inflation %", overhead_inflation),
+                ]
+                if value is None
+            ]
+
+            for year_index, year_label in enumerate(year_labels):
+                external_advisors = _safe_calc(
+                    [
+                        input_model.overhead_and_variable_costs[
+                            "legal_audit_eur_per_year"
+                        ].value,
+                        overhead_inflation,
+                    ],
+                    lambda base, inflation: base * ((1 + inflation) ** year_index),
+                )
+                it_cost = _safe_calc(
+                    [
+                        input_model.overhead_and_variable_costs[
+                            "it_and_software_eur_per_year"
+                        ].value,
+                        overhead_inflation,
+                    ],
+                    lambda base, inflation: base * ((1 + inflation) ** year_index),
+                )
+                office_cost = _safe_calc(
+                    [
+                        input_model.overhead_and_variable_costs[
+                            "rent_eur_per_year"
+                        ].value,
+                        overhead_inflation,
+                    ],
+                    lambda base, inflation: base * ((1 + inflation) ** year_index),
+                )
+                other_services = _safe_calc(
+                    [
+                        input_model.overhead_and_variable_costs[
+                            "insurance_eur_per_year"
+                        ].value,
+                        input_model.overhead_and_variable_costs[
+                            "other_overhead_eur_per_year"
+                        ].value,
+                        overhead_inflation,
+                    ],
+                    lambda insurance, other, inflation: (insurance + other)
+                    * ((1 + inflation) ** year_index),
+                )
+                total_opex = _safe_calc(
+                    [external_advisors, it_cost, office_cost, other_services],
+                    lambda a, b, c, d: a + b + c + d,
+                )
+
+                for metric, value in (
+                    ("External Consulting / Advisors", external_advisors),
+                    ("IT", it_cost),
+                    ("Office", office_cost),
+                    ("Other Services", other_services),
+                    ("Total Operating Expenses", total_opex),
+                ):
+                    if metric not in opex_metrics:
+                        opex_metrics[metric] = {
+                            year: None for year in year_labels
+                        }
+                    opex_metrics[metric][year_label] = value
+
+            opex_table = pd.DataFrame.from_dict(opex_metrics, orient="index")
+            opex_table = opex_table[year_labels].applymap(
+                _format_currency_expl
+            )
+            st.dataframe(opex_table, use_container_width=True)
+            opex_ratio_table = pd.DataFrame.from_dict(
+                {"Opex Ratio": line_items["Opex Ratio"]},
+                orient="index",
+            )
+            opex_ratio_table = opex_ratio_table[year_labels]
+            opex_ratio_table = opex_ratio_table.applymap(_format_pct_expl)
+            st.dataframe(opex_ratio_table, use_container_width=True)
+            if missing_opex_inputs:
+                st.caption(
+                    f"Missing inputs: {', '.join(missing_opex_inputs)}."
+                )
+
+            st.markdown("### Earnings Bridge")
+            st.write(
+                "EBITDA bridges revenue to operating costs. EBIT subtracts "
+                "depreciation, then interest and taxes produce net income."
+            )
+
+            earnings_metrics = {}
+            for year_index, year_label in enumerate(year_labels):
+                revenue = line_items["Total Revenue"][year_label]
+                total_personnel = line_items["Total Personnel Costs"][year_label]
+                total_operating = line_items["Total Operating Expenses"][year_label]
+                ebitda = line_items["EBITDA"][year_label]
+                interest = line_items["Interest Expense"][year_label]
+                taxes = line_items["Taxes"][year_label]
+                net_income = line_items["Net Income (Jahresueberschuss)"][
+                    year_label
+                ]
+                ebit = line_items["EBIT"][year_label]
+                ebt = line_items["EBT"][year_label]
+
+                for metric, value in (
+                    ("Total Revenue", revenue),
+                    ("Total Personnel Costs", total_personnel),
+                    ("Total Operating Expenses", total_operating),
+                    ("EBITDA", ebitda),
+                    ("Depreciation", depreciation),
+                    ("EBIT", ebit),
+                    ("Interest Expense", interest),
+                    ("EBT", ebt),
+                    ("Taxes", taxes),
+                    ("Net Income (Jahresueberschuss)", net_income),
+                ):
+                    if metric not in earnings_metrics:
+                        earnings_metrics[metric] = {
+                            year: None for year in year_labels
+                        }
+                    earnings_metrics[metric][year_label] = value
+
+            earnings_table = pd.DataFrame.from_dict(
+                earnings_metrics, orient="index"
+            )
+            earnings_table = earnings_table[year_labels].applymap(
+                _format_currency_expl
+            )
+            st.dataframe(earnings_table, use_container_width=True)
+
+            st.markdown("### KPI Definitions")
+            st.write(
+                "KPIs summarize profitability and efficiency using the P&L "
+                "line items for each year."
+            )
+
+            kpi_metrics = {
+                "Revenue per Consultant": {},
+                "EBITDA Margin": {},
+                "EBIT Margin": {},
+                "Personnel Cost Ratio": {},
+                "Guaranteed Revenue %": {},
+                "Non-Guaranteed Revenue %": {},
+                "Net Margin": {},
+                "Opex Ratio": {},
+            }
+            for year_label in year_labels:
+                kpi_metrics["Revenue per Consultant"][year_label] = line_items[
+                    "Revenue per Consultant"
+                ][year_label]
+                kpi_metrics["EBITDA Margin"][year_label] = line_items[
+                    "EBITDA Margin"
+                ][year_label]
+                kpi_metrics["EBIT Margin"][year_label] = line_items[
+                    "EBIT Margin"
+                ][year_label]
+                kpi_metrics["Personnel Cost Ratio"][year_label] = line_items[
+                    "Personnel Cost Ratio"
+                ][year_label]
+                kpi_metrics["Guaranteed Revenue %"][year_label] = line_items[
+                    "Guaranteed Revenue %"
+                ][year_label]
+                kpi_metrics["Non-Guaranteed Revenue %"][year_label] = line_items[
+                    "Non-Guaranteed Revenue %"
+                ][year_label]
+                kpi_metrics["Net Margin"][year_label] = line_items[
+                    "Net Margin"
+                ][year_label]
+                kpi_metrics["Opex Ratio"][year_label] = line_items[
+                    "Opex Ratio"
+                ][year_label]
+
+            kpi_table = pd.DataFrame.from_dict(kpi_metrics, orient="index")
+            kpi_table = kpi_table[year_labels]
+            percent_kpis = {
+                "EBITDA Margin",
+                "EBIT Margin",
+                "Personnel Cost Ratio",
+                "Guaranteed Revenue %",
+                "Non-Guaranteed Revenue %",
+                "Net Margin",
+                "Opex Ratio",
+            }
+            for metric in kpi_table.index:
+                formatter = (
+                    _format_pct_expl
+                    if metric in percent_kpis
+                    else _format_currency_expl
+                )
+                kpi_table.loc[metric] = kpi_table.loc[metric].apply(formatter)
+            st.dataframe(kpi_table, use_container_width=True)
 
         pnl_excel = _build_pnl_excel(input_model)
         st.download_button(
