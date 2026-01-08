@@ -217,6 +217,15 @@ def _render_inline_controls(title, controls, columns=3):
                         key=widget_key,
                     )
                     _set_field_value(control["field_key"], value)
+                else:
+                    value = st.number_input(
+                        control["label"],
+                        value=float(control["value"]),
+                        step=control.get("step", 1.0),
+                        format=control.get("format", "%.0f"),
+                        key=widget_key,
+                    )
+                    _set_field_value(control["field_key"], value)
 
 
 def _render_pnl_html(pnl_statement, section_rows, bold_rows):
@@ -287,15 +296,6 @@ def _render_pnl_html(pnl_statement, section_rows, bold_rows):
         f"<tbody>{''.join(body_rows)}</tbody></table>"
     )
     st.markdown(table_html, unsafe_allow_html=True)
-                else:
-                    value = st.number_input(
-                        control["label"],
-                        value=float(control["value"]),
-                        step=control.get("step", 1.0),
-                        format=control.get("format", "%.0f"),
-                        key=widget_key,
-                    )
-                    _set_field_value(control["field_key"], value)
 
 
 def run_app():
