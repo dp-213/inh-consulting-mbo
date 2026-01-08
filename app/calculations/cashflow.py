@@ -3,10 +3,19 @@ def calculate_cashflow(input_model, pnl_result):
     Build a simple multi-year cash flow statement from P&L results.
     Returns a list of yearly dictionaries with a running cash balance.
     """
-    debt_amount = input_model.financing["debt_amount"]
-    interest_rate = input_model.financing["interest_rate"]
-    equity_amount = input_model.financing["equity_amount"]
-    amortization_rate = input_model.financing["amortization_rate"]
+    # Map legacy financing fields to Excel-equivalent transaction inputs.
+    debt_amount = input_model.transaction_and_financing[
+        "senior_term_loan_start_eur"
+    ].value
+    interest_rate = input_model.transaction_and_financing[
+        "senior_interest_rate_pct"
+    ].value
+    annual_repayment = input_model.transaction_and_financing[
+        "senior_repayment_per_year_eur"
+    ].value
+    equity_amount = input_model.transaction_and_financing[
+        "equity_contribution_eur"
+    ].value
 
     capex = input_model.operations["capex"]
     working_capital_change = input_model.operations["working_capital_change"]
@@ -27,7 +36,7 @@ def calculate_cashflow(input_model, pnl_result):
 
         # Financing cash flow includes interest, debt repayment, and initial funding.
         interest = debt_amount * interest_rate
-        principal_repayment = debt_amount * amortization_rate
+        principal_repayment = annual_repayment
         financing_cf = -(interest + principal_repayment)
 
         # In the first year, add initial debt and equity funding.

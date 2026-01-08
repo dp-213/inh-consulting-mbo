@@ -3,9 +3,16 @@ def calculate_debt_schedule(input_model, cashflow_result):
     Build a simple debt schedule using cash flow results.
     Returns a list of yearly dictionaries.
     """
-    initial_debt = input_model.financing["debt_amount"]
-    interest_rate = input_model.financing["interest_rate"]
-    amortization_rate = input_model.financing["amortization_rate"]
+    # Map legacy financing fields to Excel-equivalent transaction inputs.
+    initial_debt = input_model.transaction_and_financing[
+        "senior_term_loan_start_eur"
+    ].value
+    interest_rate = input_model.transaction_and_financing[
+        "senior_interest_rate_pct"
+    ].value
+    annual_repayment = input_model.transaction_and_financing[
+        "senior_repayment_per_year_eur"
+    ].value
 
     schedule = []
     outstanding_principal = initial_debt
@@ -16,7 +23,7 @@ def calculate_debt_schedule(input_model, cashflow_result):
 
         # Interest is based on opening principal.
         interest_expense = outstanding_principal * interest_rate
-        principal_payment = outstanding_principal * amortization_rate
+        principal_payment = annual_repayment
         debt_service = interest_expense + principal_payment
 
         # DSCR uses operating cash flow divided by total debt service.
