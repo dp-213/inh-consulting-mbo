@@ -357,39 +357,118 @@ def run_app():
             "Valuation perspective, purchase price context, and high-level "
             "deal view."
         )
-        summary = {
-            "initial_equity": investment_result["initial_equity"],
-            "exit_value": investment_result["exit_value"],
-            "irr": investment_result["irr"],
-        }
-        summary_table = pd.DataFrame([summary])
-        kpi_col_1, kpi_col_2, kpi_col_3 = st.columns(3)
-        kpi_col_1.metric(
-            "Equity (Start)", format_currency(summary["initial_equity"])
+        st.markdown("### Seller View")
+        st.write(
+            "Seller view reflects upside valuation using a multiple and a "
+            "no-exit DCF based on plan free cash flow."
         )
-        kpi_col_2.metric(
-            "Exit Value", format_currency(summary["exit_value"])
+
+        seller_multiple = input_model.valuation_assumptions[
+            "multiple_valuation"
+        ]["seller_multiple"].value
+        seller_multiple = 0 if seller_multiple is None else seller_multiple
+
+        avg_ebit = (
+            pd.DataFrame.from_dict(pnl_result, orient="index")["ebit"].mean()
         )
-        kpi_col_3.metric("IRR", format_pct(summary["irr"]))
-        summary_display = summary_table.copy()
-        summary_display.rename(
-            columns={
-                "initial_equity": "Eigenkapital (Start, EUR)",
-                "exit_value": "Exit Value (EUR)",
-                "irr": "IRR (%)",
-            },
-            inplace=True,
+        seller_multiple_value = avg_ebit * seller_multiple
+
+        wacc = input_model.valuation_assumptions["dcf_valuation"][
+            "discount_rate_wacc"
+        ].value
+        wacc = 0 if wacc is None else wacc
+
+        free_cashflows = []
+        for year_data in cashflow_result[:5]:
+            free_cashflows.append(
+                year_data["operating_cf"] + year_data["investing_cf"]
+            )
+        dcf_value = 0
+        for i, cashflow in enumerate(free_cashflows, start=1):
+            dcf_value += cashflow / ((1 + wacc) ** i) if wacc != 0 else cashflow
+
+        seller_kpi_col_1, seller_kpi_col_2 = st.columns(2)
+        seller_kpi_col_1.metric(
+            "EBIT Multiple Valuation",
+            format_currency(seller_multiple_value),
+            help="Average EBIT multiplied by seller multiple assumption.",
         )
-        summary_format_map = {
-            "Eigenkapital (Start, EUR)": format_currency,
-            "Exit Value (EUR)": format_currency,
-            "IRR (%)": format_pct,
-        }
-        summary_totals = ["Eigenkapital (Start, EUR)", "Exit Value (EUR)"]
-        summary_styled = _style_totals(
-            summary_display, summary_totals
-        ).format(summary_format_map)
-        st.dataframe(summary_styled, use_container_width=True)
+        seller_kpi_col_2.metric(
+            "DCF Valuation (No Exit)",
+            format_currency(dcf_value),
+            help="5-year free cash flow discounted at WACC.",
+        )
+
+        st.markdown("### Buyer View")
+        st.write(
+            "Buyer view reflects affordability based on liquidity, "
+            "bankability, and equity return thresholds."
+        )
+
+        min_cash_balance = (
+            pd.DataFrame(cashflow_result)["cash_balance"].min()
+        )
+        min_dscr = (
+            pd.DataFrame(debt_schedule)["dscr"].min()
+            if debt_schedule
+            else 0
+        )
+        target_irr = input_model.valuation_assumptions["dcf_valuation"][
+            "discount_rate_wacc"
+        ].value
+        target_irr = 0 if target_irr is None else target_irr
+        actual_irr = investment_result["irr"]
+
+        cash_ok = 1 if min_cash_balance >= 0 else 0
+        dscr_ratio = min_dscr / 1.3 if 1.3 != 0 else 0
+        irr_ratio = (
+            actual_irr / target_irr if target_irr not in (0, None) else 1
+        )
+        affordability_factor = min(cash_ok, dscr_ratio, irr_ratio, 1)
+
+        purchase_price = input_model.transaction_and_financing[
+            "purchase_price_eur"
+        ].value
+        buyer_value = purchase_price * affordability_factor
+
+        buyer_kpi_col_1, buyer_kpi_col_2, buyer_kpi_col_3 = st.columns(3)
+        buyer_kpi_col_1.metric(
+            "Max Affordable Price",
+            format_currency(buyer_value),
+            help=(
+                "Scaled purchase price based on min cash >= 0, "
+                "DSCR >= 1.3, and equity IRR vs target."
+            ),
+        )
+        buyer_kpi_col_2.metric(
+            "Minimum DSCR",
+            f"{min_dscr:.2f}x",
+            help="Lowest DSCR observed across the debt schedule.",
+        )
+        buyer_kpi_col_3.metric(
+            "Equity IRR vs Target",
+            f"{actual_irr:.1%} vs {target_irr:.1%}",
+            help="Actual equity IRR compared to target hurdle rate.",
+        )
+
+        st.markdown("### Valuation Gap")
+        st.write(
+            "Difference between seller expectations and buyer affordability."
+        )
+        seller_value = max(seller_multiple_value, dcf_value)
+        valuation_gap = seller_value - buyer_value
+        gap_col_1, gap_col_2 = st.columns(2)
+        gap_col_1.metric(
+            "Seller Value",
+            format_currency(seller_value),
+            help="Higher of seller multiple and DCF valuation.",
+        )
+        gap_col_2.metric(
+            "Buyer Value",
+            format_currency(buyer_value),
+            help="Affordability-based buyer price ceiling.",
+        )
+        st.caption(f"Valuation gap: {format_currency(valuation_gap)}")
 
     if page == "Operating Model":
         st.header("Operating Model")
