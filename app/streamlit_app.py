@@ -3806,7 +3806,7 @@ def run_app():
                     "guaranteed_floor"
                 ]
                 revenue_metrics["Modeled Revenue"][year_label] = components[
-                    "modeled_total"
+                    "growth_adjusted_revenue"
                 ]
                 revenue_metrics["Final Revenue"][year_label] = components[
                     "final_total"
