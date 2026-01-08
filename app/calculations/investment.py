@@ -3,7 +3,10 @@ def calculate_investment(input_model, cashflow_result):
     Calculate basic equity investment performance metrics.
     Returns a dictionary with initial equity, cashflows, exit value, and IRR.
     """
-    equity_amount = input_model.financing["equity_amount"]
+    # Map legacy financing fields to Excel-equivalent transaction inputs.
+    equity_amount = input_model.transaction_and_financing[
+        "equity_contribution_eur"
+    ].value
     exit_multiple = input_model.assumptions["exit_multiple"]
     growth_rate = input_model.assumptions["growth_rate"]
     base_ebit = input_model.operations["ebit"]
