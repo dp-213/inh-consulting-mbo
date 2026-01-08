@@ -1,13 +1,17 @@
-def calculate_balance_sheet(input_model, cashflow_result, debt_schedule, pnl_result=None):
+def calculate_balance_sheet(
+    input_model, cashflow_result, debt_schedule, pnl_result=None
+):
     """
-    Build a simplified multi-year balance sheet.
+    Build a simplified multi-year balance sheet for a consulting model.
     Returns a list of yearly dictionaries.
     """
     balance_sheet = []
-    working_capital_balance = 0.0
-    retained_earnings = 0.0
 
-    # Build a simple net income lookup if P&L results are provided.
+    balance_assumptions = getattr(input_model, "balance_sheet_assumptions", {})
+    opening_equity = balance_assumptions.get("opening_equity_eur", 0.0)
+    depreciation_rate = balance_assumptions.get("depreciation_rate_pct", 0.0)
+
+    # Build a net income lookup from P&L results.
     net_income_by_year = {}
     if pnl_result is not None:
         if isinstance(pnl_result, dict):
@@ -23,37 +27,50 @@ def calculate_balance_sheet(input_model, cashflow_result, debt_schedule, pnl_res
                     "net_income", 0
                 )
 
-    for year_data, debt_data in zip(cashflow_result, debt_schedule):
+    debt_by_year = {
+        debt_data["year"]: debt_data["outstanding_principal"]
+        for debt_data in debt_schedule
+    }
+
+    equity_start = opening_equity
+    fixed_assets = 0.0
+
+    for year_data in cashflow_result:
         year = year_data["year"]
         cash_balance = year_data["cash_balance"]
-        outstanding_principal = debt_data["outstanding_principal"]
+        capex = year_data.get("capex", 0.0)
 
-        # Working capital change is derived from cashflow and net income when available.
-        net_income = net_income_by_year.get(year, 0)
-        working_capital_change = net_income - year_data["operating_cf"]
-        working_capital_balance += working_capital_change
+        # Depreciate existing fixed assets; capex increases the base.
+        depreciation = (fixed_assets + capex) * depreciation_rate
+        fixed_assets = max(fixed_assets + capex - depreciation, 0.0)
 
-        # Retained earnings accumulate net income from the P&L.
-        retained_earnings += net_income
+        financial_debt = debt_by_year.get(year, 0.0)
+        net_income = net_income_by_year.get(year, 0.0)
+        dividends = 0.0
+        equity_end = equity_start + net_income - dividends
 
-        # Assets are limited to cash and working capital in this simplified model.
-        assets = cash_balance + working_capital_balance
-
-        # Liabilities are the remaining debt balance.
-        liabilities = outstanding_principal
-
-        # Equity is the residual needed to make the balance sheet balance.
-        equity = assets - liabilities
+        total_assets = cash_balance + fixed_assets
+        total_liabilities = financial_debt
+        total_liabilities_equity = total_liabilities + equity_end
+        balance_check = total_assets - total_liabilities_equity
 
         balance_sheet.append(
             {
                 "year": year,
-                "assets": assets,
-                "liabilities": liabilities,
-                "equity": equity,
-                "working_capital": working_capital_balance,
-                "retained_earnings": retained_earnings,
+                "cash": cash_balance,
+                "fixed_assets": fixed_assets,
+                "total_assets": total_assets,
+                "financial_debt": financial_debt,
+                "total_liabilities": total_liabilities,
+                "equity_start": equity_start,
+                "net_income": net_income,
+                "dividends": dividends,
+                "equity_end": equity_end,
+                "total_liabilities_equity": total_liabilities_equity,
+                "balance_check": balance_check,
             }
         )
+
+        equity_start = equity_end
 
     return balance_sheet

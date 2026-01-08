@@ -65,6 +65,20 @@ def _default_cashflow_assumptions():
     }
 
 
+def _default_balance_sheet_assumptions(input_model):
+    opening_equity = input_model.transaction_and_financing[
+        "equity_contribution_eur"
+    ].value
+    minimum_cash = input_model.capex_and_working_capital[
+        "minimum_cash_balance_eur"
+    ].value
+    return {
+        "opening_equity_eur": opening_equity,
+        "depreciation_rate_pct": 0.20,
+        "minimum_cash_balance_eur": minimum_cash,
+    }
+
+
 def _seed_session_defaults(input_model):
     def _seed_section(section_data, prefix=""):
         for key, value in section_data.items():
@@ -97,6 +111,9 @@ def _seed_session_defaults(input_model):
 
     for key, value in _default_cashflow_assumptions().items():
         st.session_state.setdefault(f"cashflow.{key}", value)
+
+    for key, value in _default_balance_sheet_assumptions(input_model).items():
+        st.session_state.setdefault(f"balance_sheet.{key}", value)
 
 
 def _render_input_field(
@@ -436,11 +453,94 @@ def _render_cashflow_html(cashflow_statement, section_rows, bold_rows):
     st.markdown(table_html, unsafe_allow_html=True)
 
 
+def _render_balance_sheet_html(balance_statement, section_rows, bold_rows):
+    def escape(text):
+        return (
+            str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    columns = ["Line Item", "Year 0", "Year 1", "Year 2", "Year 3", "Year 4"]
+    header_cells = "".join(f"<th>{escape(col)}</th>" for col in columns)
+
+    body_rows = []
+    for _, row in balance_statement.iterrows():
+        label = row["Line Item"]
+        row_class = ""
+        if label in section_rows:
+            row_class = "section-row"
+        elif label in bold_rows:
+            row_class = "total-row"
+        cells = []
+        for col in columns:
+            value = row[col]
+            cell_class = ""
+            if col != "Line Item":
+                value = format_currency(value)
+                try:
+                    if float(row[col]) < 0:
+                        cell_class = "negative"
+                except (TypeError, ValueError):
+                    cell_class = ""
+            cell_value = "&nbsp;" if value in ("", None) else escape(value)
+            cells.append(f"<td class=\"{cell_class}\">{cell_value}</td>")
+        body_rows.append(f"<tr class=\"{row_class}\">{''.join(cells)}</tr>")
+
+    css = """
+    <style>
+      .balance-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .balance-table col.line-item { width: 42%; }
+      .balance-table col.year { width: 11.6%; }
+      .balance-table th, .balance-table td {
+        padding: 2px 6px;
+        white-space: nowrap;
+        line-height: 1.0;
+        border: 0;
+        font-size: 0.9rem;
+      }
+      .balance-table th { text-align: right; font-weight: 600; }
+      .balance-table th:first-child { text-align: left; }
+      .balance-table td { text-align: right; }
+      .balance-table td:first-child { text-align: left; }
+      .balance-table .section-row td {
+        font-weight: 700;
+        background: #f9fafb;
+      }
+      .balance-table .total-row td {
+        font-weight: 700;
+        background: #f3f4f6;
+        border-top: 1px solid #c7c7c7;
+      }
+      .balance-table td.negative { color: #b45309; }
+    </style>
+    """
+    colgroup = (
+        "<colgroup>"
+        "<col class=\"line-item\"/>"
+        "<col class=\"year\"/><col class=\"year\"/><col class=\"year\"/>"
+        "<col class=\"year\"/><col class=\"year\"/>"
+        "</colgroup>"
+    )
+    table_html = (
+        f"{css}<table class=\"balance-table\">{colgroup}"
+        f"<thead><tr>{header_cells}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody></table>"
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
 def _build_pnl_excel(input_model):
     scenario = input_model.scenario_selection["selected_scenario"].value
     scenario_key = scenario.lower()
     cashflow_assumptions = getattr(
         input_model, "cashflow_assumptions", _default_cashflow_assumptions()
+    )
+    balance_assumptions = getattr(
+        input_model,
+        "balance_sheet_assumptions",
+        _default_balance_sheet_assumptions(input_model),
     )
 
     assumptions = [
@@ -486,6 +586,7 @@ def _build_pnl_excel(input_model):
         ws_pnl = wb.create_sheet("P&L")
         ws_kpi = wb.create_sheet("KPIs")
         ws_cashflow = wb.create_sheet("Cashflow")
+        ws_balance = wb.create_sheet("Balance Sheet")
 
         assumption_cells = {
             name: f"Assumptions!B{idx + 2}" for idx, (name, _) in enumerate(assumptions)
@@ -775,6 +876,136 @@ def _build_pnl_excel(input_model):
             value="Closing Cash = Opening Cash + Net Cashflow.",
         )
 
+        ws_balance["A1"] = "Balance Sheet Assumptions"
+        balance_assumption_rows = [
+            ("Opening Equity (EUR)", balance_assumptions["opening_equity_eur"]),
+            ("Depreciation Rate (%)", balance_assumptions["depreciation_rate_pct"]),
+            ("Minimum Cash Balance (EUR)", balance_assumptions["minimum_cash_balance_eur"]),
+            ("Opening Fixed Assets (EUR)", 0),
+        ]
+        for idx, (label, value) in enumerate(balance_assumption_rows, start=2):
+            ws_balance.cell(row=idx, column=1, value=label)
+            ws_balance.cell(row=idx, column=2, value=value)
+
+        balance_table_start = 8
+        ws_balance.cell(row=balance_table_start, column=1, value="Line Item")
+        for idx, header in enumerate(year_headers, start=2):
+            ws_balance.cell(row=balance_table_start, column=idx, value=header)
+
+        balance_items = [
+            "ASSETS",
+            "Cash",
+            "Fixed Assets (Net)",
+            "Total Assets",
+            "LIABILITIES",
+            "Financial Debt",
+            "Total Liabilities",
+            "EQUITY",
+            "Equity at Start of Year",
+            "Net Income",
+            "Dividends",
+            "Equity at End of Year",
+            "CHECK",
+            "Total Assets",
+            "Total Liabilities + Equity",
+        ]
+        for row_idx, item in enumerate(
+            balance_items, start=balance_table_start + 1
+        ):
+            ws_balance.cell(row=row_idx, column=1, value=item)
+
+        balance_row_map = {
+            "Cash": balance_table_start + 2,
+            "Fixed Assets (Net)": balance_table_start + 3,
+            "Total Assets (Assets)": balance_table_start + 4,
+            "Financial Debt": balance_table_start + 6,
+            "Total Liabilities": balance_table_start + 7,
+            "Equity at Start of Year": balance_table_start + 9,
+            "Net Income": balance_table_start + 10,
+            "Dividends": balance_table_start + 11,
+            "Equity at End of Year": balance_table_start + 12,
+            "Total Assets (Check)": balance_table_start + 14,
+            "Total Liabilities + Equity": balance_table_start + 15,
+        }
+
+        opening_equity_cell = "B2"
+        depreciation_rate_cell = "B3"
+        opening_fixed_assets_cell = "B5"
+        debt_amount_cell = assumption_cells["Debt Amount (EUR)"]
+        repayment_cell = assumption_cells["Annual Debt Repayment (EUR)"]
+
+        for year_index in range(5):
+            col = year_col(2 + year_index)
+            prev_col = year_col(1 + year_index) if year_index > 0 else None
+            ws_balance[f"{col}{balance_row_map['Cash']}"] = (
+                f"=Cashflow!{col}{cashflow_row_map['Closing Cash']}"
+            )
+
+            if year_index == 0:
+                ws_balance[f"{col}{balance_row_map['Fixed Assets (Net)']}"] = (
+                    f"=MAX({opening_fixed_assets_cell}"
+                    f"+Cashflow!{col}{cashflow_row_map['Capex']}"
+                    f"-({opening_fixed_assets_cell}"
+                    f"+Cashflow!{col}{cashflow_row_map['Capex']})*{depreciation_rate_cell},0)"
+                )
+                ws_balance[f"{col}{balance_row_map['Equity at Start of Year']}"] = (
+                    f"={opening_equity_cell}"
+                )
+            else:
+                ws_balance[f"{col}{balance_row_map['Fixed Assets (Net)']}"] = (
+                    f"=MAX({prev_col}{balance_row_map['Fixed Assets (Net)']}"
+                    f"+Cashflow!{col}{cashflow_row_map['Capex']}"
+                    f"-({prev_col}{balance_row_map['Fixed Assets (Net)']}"
+                    f"+Cashflow!{col}{cashflow_row_map['Capex']})*{depreciation_rate_cell},0)"
+                )
+                ws_balance[f"{col}{balance_row_map['Equity at Start of Year']}"] = (
+                    f"={prev_col}{balance_row_map['Equity at End of Year']}"
+                )
+
+            ws_balance[f"{col}{balance_row_map['Total Assets (Assets)']}"] = (
+                f"={col}{balance_row_map['Cash']}+{col}{balance_row_map['Fixed Assets (Net)']}"
+            )
+            ws_balance[f"{col}{balance_row_map['Financial Debt']}"] = (
+                f"=MAX({debt_amount_cell}-{repayment_cell}*{year_index + 1},0)"
+            )
+            ws_balance[f"{col}{balance_row_map['Total Liabilities']}"] = (
+                f"={col}{balance_row_map['Financial Debt']}"
+            )
+            ws_balance[f"{col}{balance_row_map['Net Income']}"] = (
+                f"='P&L'!{col}23"
+            )
+            ws_balance[f"{col}{balance_row_map['Dividends']}"] = "=0"
+            ws_balance[f"{col}{balance_row_map['Equity at End of Year']}"] = (
+                f"={col}{balance_row_map['Equity at Start of Year']}"
+                f"+{col}{balance_row_map['Net Income']}"
+                f"-{col}{balance_row_map['Dividends']}"
+            )
+            ws_balance[f"{col}{balance_row_map['Total Assets (Check)']}"] = (
+                f"={col}{balance_row_map['Total Assets (Assets)']}"
+            )
+            ws_balance[f"{col}{balance_row_map['Total Liabilities + Equity']}"] = (
+                f"={col}{balance_row_map['Total Liabilities']}"
+                f"+{col}{balance_row_map['Equity at End of Year']}"
+            )
+
+        balance_notes_row = balance_table_start + len(balance_items) + 2
+        ws_balance.cell(row=balance_notes_row, column=1, value="Notes")
+        ws_balance.cell(
+            row=balance_notes_row + 1,
+            column=1,
+            value="Fixed Assets end = prior assets + capex - depreciation.",
+        )
+        ws_balance.cell(
+            row=balance_notes_row + 2,
+            column=1,
+            value="Equity end = equity start + net income - dividends.",
+        )
+        ws_balance.cell(
+            row=balance_notes_row + 3,
+            column=1,
+            value="Total Assets should equal Total Liabilities + Equity.",
+        )
+
         writer.close()
 
     output.seek(0)
@@ -787,6 +1018,7 @@ def run_app():
     base_model = create_demo_input_model()
     st.session_state.setdefault("edit_pnl_assumptions", True)
     st.session_state.setdefault("edit_cashflow_assumptions", False)
+    st.session_state.setdefault("edit_balance_sheet_assumptions", False)
     if not st.session_state.get("defaults_initialized"):
         _seed_session_defaults(base_model)
         st.session_state["defaults_initialized"] = True
@@ -1186,6 +1418,45 @@ def run_app():
                 },
             ]
             _render_inline_controls("Cashflow Drivers", cashflow_controls, columns=1)
+        if page == "Balance Sheet" and st.session_state.get(
+            "edit_balance_sheet_assumptions"
+        ):
+            st.markdown("## Balance Sheet Assumptions")
+            balance_defaults = _default_balance_sheet_assumptions(base_model)
+            balance_controls = [
+                {
+                    "type": "number",
+                    "label": "Opening Equity (EUR)",
+                    "field_key": "balance_sheet.opening_equity_eur",
+                    "value": _get_current_value(
+                        "balance_sheet.opening_equity_eur",
+                        balance_defaults["opening_equity_eur"],
+                    ),
+                    "step": 100000.0,
+                    "format": "%.0f",
+                },
+                {
+                    "type": "pct",
+                    "label": "Depreciation Rate (%)",
+                    "field_key": "balance_sheet.depreciation_rate_pct",
+                    "value": _get_current_value(
+                        "balance_sheet.depreciation_rate_pct",
+                        balance_defaults["depreciation_rate_pct"],
+                    ),
+                },
+                {
+                    "type": "number",
+                    "label": "Minimum Cash Balance (EUR)",
+                    "field_key": "balance_sheet.minimum_cash_balance_eur",
+                    "value": _get_current_value(
+                        "balance_sheet.minimum_cash_balance_eur",
+                        balance_defaults["minimum_cash_balance_eur"],
+                    ),
+                    "step": 50000.0,
+                    "format": "%.0f",
+                },
+            ]
+            _render_inline_controls("Balance Sheet Drivers", balance_controls, columns=1)
 
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
@@ -1420,6 +1691,22 @@ def run_app():
         ),
     }
 
+    balance_defaults = _default_balance_sheet_assumptions(input_model)
+    input_model.balance_sheet_assumptions = {
+        "opening_equity_eur": st.session_state.get(
+            "balance_sheet.opening_equity_eur",
+            balance_defaults["opening_equity_eur"],
+        ),
+        "depreciation_rate_pct": st.session_state.get(
+            "balance_sheet.depreciation_rate_pct",
+            balance_defaults["depreciation_rate_pct"],
+        ),
+        "minimum_cash_balance_eur": st.session_state.get(
+            "balance_sheet.minimum_cash_balance_eur",
+            balance_defaults["minimum_cash_balance_eur"],
+        ),
+    }
+
     # Run model calculations in the standard order.
     pnl_result = run_model.calculate_pnl(input_model)
     pnl_list = _pnl_dict_to_list(pnl_result)
@@ -1428,7 +1715,7 @@ def run_app():
         input_model, cashflow_result
     )
     balance_sheet = run_model.calculate_balance_sheet(
-        input_model, cashflow_result, debt_schedule
+        input_model, cashflow_result, debt_schedule, pnl_result
     )
     investment_result = run_model.calculate_investment(
         input_model, cashflow_result, pnl_result
@@ -2937,124 +3224,273 @@ def run_app():
 
     if page == "Balance Sheet":
         st.header("Balance Sheet")
-        st.write(
-            "Assets, liabilities, and equity position by year."
-        )
-        scenario_options = ["Base", "Best", "Worst"]
-        selected_scenario = st.session_state.get(
-            "scenario_selection.selected_scenario",
-            input_model.scenario_selection["selected_scenario"].value,
-        )
-        scenario_index = (
-            scenario_options.index(selected_scenario)
-            if selected_scenario in scenario_options
-            else 0
-        )
-        min_cash_field = _get_field_by_path(
-            input_model.__dict__,
-            ["capex_and_working_capital", "minimum_cash_balance_eur"],
-        )
-        dso_field = _get_field_by_path(
-            input_model.__dict__,
-            ["capex_and_working_capital", "dso_days"],
-        )
-        capex_field = _get_field_by_path(
-            input_model.__dict__,
-            ["capex_and_working_capital", "capex_eur_per_year"],
-        )
-        depreciation_field = _get_field_by_path(
-            input_model.__dict__,
-            ["capex_and_working_capital", "depreciation_eur_per_year"],
-        )
-        tax_field = _get_field_by_path(
-            input_model.__dict__,
-            ["tax_and_distributions", "tax_rate_pct"],
-        )
+        st.write("Simplified balance sheet (5-year plan)")
+        if st.button(
+            "Edit Balance Sheet Assumptions",
+            key="edit_balance_sheet_assumptions_button",
+            help="Open balance sheet assumptions in the sidebar",
+        ):
+            st.session_state["edit_balance_sheet_assumptions"] = True
 
-        balance_controls = [
-            {
-                "type": "select",
-                "label": "Scenario",
-                "options": scenario_options,
-                "index": scenario_index,
-                "field_key": "scenario_selection.selected_scenario",
-            },
-            {
-                "type": "number",
-                "label": "Minimum Cash (EUR)",
-                "field_key": "capex_and_working_capital.minimum_cash_balance_eur",
-                "value": min_cash_field.value,
-                "step": 50000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "int",
-                "label": "DSO (days)",
-                "field_key": "capex_and_working_capital.dso_days",
-                "value": dso_field.value,
-            },
-            {
-                "type": "number",
-                "label": "Capex (EUR)",
-                "field_key": "capex_and_working_capital.capex_eur_per_year",
-                "value": capex_field.value,
-                "step": 10000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Depreciation (EUR)",
-                "field_key": "capex_and_working_capital.depreciation_eur_per_year",
-                "value": depreciation_field.value,
-                "step": 10000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "pct",
-                "label": "Tax Rate (%)",
-                "field_key": "tax_and_distributions.tax_rate_pct",
-                "value": tax_field.value,
-            },
+        balance_line_items = {}
+
+        def _set_balance_value(name, year_label, value):
+            if name not in balance_line_items:
+                balance_line_items[name] = {
+                    "Line Item": name,
+                    "Year 0": "",
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                }
+            balance_line_items[name][year_label] = value
+
+        for row in balance_sheet:
+            year_label = f"Year {row['year']}"
+            _set_balance_value("Cash", year_label, row["cash"])
+            _set_balance_value(
+                "Fixed Assets (Net)", year_label, row["fixed_assets"]
+            )
+            _set_balance_value(
+                "Total Assets", year_label, row["total_assets"]
+            )
+            _set_balance_value(
+                "Financial Debt", year_label, row["financial_debt"]
+            )
+            _set_balance_value(
+                "Total Liabilities", year_label, row["total_liabilities"]
+            )
+            _set_balance_value(
+                "Equity at Start of Year", year_label, row["equity_start"]
+            )
+            _set_balance_value("Net Income", year_label, row["net_income"])
+            _set_balance_value("Dividends", year_label, row["dividends"])
+            _set_balance_value(
+                "Equity at End of Year", year_label, row["equity_end"]
+            )
+            _set_balance_value(
+                "Total Liabilities + Equity",
+                year_label,
+                row["total_liabilities_equity"],
+            )
+            _set_balance_value(
+                "Total Assets",
+                year_label,
+                row["total_assets"],
+            )
+
+        balance_row_order = [
+            "ASSETS",
+            "Cash",
+            "Fixed Assets (Net)",
+            "Total Assets",
+            "LIABILITIES",
+            "Financial Debt",
+            "Total Liabilities",
+            "EQUITY",
+            "Equity at Start of Year",
+            "Net Income",
+            "Dividends",
+            "Equity at End of Year",
+            "CHECK",
+            "Total Assets",
+            "Total Liabilities + Equity",
         ]
-        _render_inline_controls("Key Inputs", balance_controls, columns=3)
 
-        balance_table = pd.DataFrame(balance_sheet)
-        avg_assets = balance_table["assets"].mean()
-        avg_liabilities = balance_table["liabilities"].mean()
-        avg_equity = balance_table["equity"].mean()
+        balance_rows = []
+        for label in balance_row_order:
+            if label in ("ASSETS", "LIABILITIES", "EQUITY", "CHECK"):
+                balance_rows.append(
+                    {
+                        "Line Item": label,
+                        "Year 0": "",
+                        "Year 1": "",
+                        "Year 2": "",
+                        "Year 3": "",
+                        "Year 4": "",
+                    }
+                )
+            else:
+                row = balance_line_items.get(label)
+                if row:
+                    balance_rows.append(row)
+                else:
+                    balance_rows.append(
+                        {
+                            "Line Item": label,
+                            "Year 0": "",
+                            "Year 1": "",
+                            "Year 2": "",
+                            "Year 3": "",
+                            "Year 4": "",
+                        }
+                    )
 
-        kpi_col_1, kpi_col_2, kpi_col_3 = st.columns(3)
-        kpi_col_1.metric("Avg Assets", format_currency(avg_assets))
-        kpi_col_2.metric("Avg Liabilities", format_currency(avg_liabilities))
-        kpi_col_3.metric("Avg Equity", format_currency(avg_equity))
-
-        balance_display = balance_table.copy()
-        balance_display["year"] = balance_display["year"].map(
-            lambda x: f"Year {int(x)}" if pd.notna(x) else ""
-        )
-        balance_display.rename(
-            columns={
-                "year": "Year",
-                "assets": "Assets (m EUR)",
-                "liabilities": "Liabilities (m EUR)",
-                "equity": "Equity (m EUR)",
-                "working_capital": "Working Capital (m EUR)",
-                "retained_earnings": "Retained Earnings (m EUR)",
-            },
-            inplace=True,
-        )
-        balance_format_map = {
-            "Assets (m EUR)": format_currency,
-            "Liabilities (m EUR)": format_currency,
-            "Equity (m EUR)": format_currency,
-            "Working Capital (m EUR)": format_currency,
-            "Retained Earnings (m EUR)": format_currency,
+        balance_statement = pd.DataFrame(balance_rows)
+        balance_section_rows = {"ASSETS", "LIABILITIES", "EQUITY", "CHECK"}
+        balance_total_rows = {
+            "Total Assets",
+            "Total Liabilities",
+            "Equity at End of Year",
+            "Total Liabilities + Equity",
         }
-        balance_totals = ["Assets (m EUR)", "Equity (m EUR)"]
-        balance_styled = _style_totals(
-            balance_display, balance_totals
-        ).format(balance_format_map)
-        st.dataframe(balance_styled, use_container_width=True)
+        _render_balance_sheet_html(
+            balance_statement, balance_section_rows, balance_total_rows
+        )
+
+        reconciliation_issues = [
+            f"Year {row['year']}"
+            for row in balance_sheet
+            if abs(row["balance_check"]) > 1e-2
+        ]
+        if reconciliation_issues:
+            st.warning(
+                "Balance sheet does not reconcile in "
+                f"{', '.join(reconciliation_issues)}."
+            )
+
+        cashflow_years = [f"Year {i}" for i in range(5)]
+        ebitda_by_year = pd.DataFrame.from_dict(
+            pnl_result, orient="index"
+        )["ebitda"].to_dict()
+        kpi_metrics = {
+            "Net Debt": {},
+            "Equity Ratio": {},
+            "Net Debt / EBITDA": {},
+            "Minimum Cash Headroom": {},
+        }
+        min_cash = input_model.balance_sheet_assumptions[
+            "minimum_cash_balance_eur"
+        ]
+
+        for row in balance_sheet:
+            year_label = f"Year {row['year']}"
+            net_debt = row["financial_debt"] - row["cash"]
+            equity_ratio = (
+                row["equity_end"] / row["total_assets"]
+                if row["total_assets"]
+                else 0
+            )
+            ebitda = ebitda_by_year.get(f"Year {row['year']}", 0)
+            net_debt_to_ebitda = (
+                net_debt / ebitda if ebitda else 0
+            )
+            cash_headroom = row["cash"] - min_cash
+
+            kpi_metrics["Net Debt"][year_label] = net_debt
+            kpi_metrics["Equity Ratio"][year_label] = equity_ratio
+            kpi_metrics["Net Debt / EBITDA"][year_label] = net_debt_to_ebitda
+            kpi_metrics["Minimum Cash Headroom"][year_label] = cash_headroom
+
+        kpi_table = pd.DataFrame.from_dict(kpi_metrics, orient="index")
+        kpi_table = kpi_table[cashflow_years]
+        for metric in kpi_table.index:
+            if metric in {"Equity Ratio"}:
+                kpi_table.loc[metric] = kpi_table.loc[metric].apply(
+                    format_pct
+                )
+            elif metric == "Net Debt / EBITDA":
+                kpi_table.loc[metric] = kpi_table.loc[metric].apply(
+                    lambda value: f"{value:.2f}x"
+                )
+            else:
+                kpi_table.loc[metric] = kpi_table.loc[metric].apply(
+                    format_currency
+                )
+        st.markdown("### KPI Summary")
+        st.dataframe(kpi_table, use_container_width=True)
+
+        explain_balance = st.toggle("Explain Balance Sheet Logic")
+        if explain_balance:
+            balance_assumptions = input_model.balance_sheet_assumptions
+            st.markdown("### Balance Sheet Scope")
+            st.write(
+                "This balance sheet is intentionally simplified for a consulting "
+                "carve-out. It focuses on cash, fixed assets, debt, and equity "
+                "to support decision-making and bank discussions."
+            )
+            st.write(
+                "Receivables, payables, and inventory are excluded because the "
+                "model uses a working-capital proxy in cashflow."
+            )
+
+            st.markdown("### Asset Logic")
+            asset_table = pd.DataFrame.from_dict(
+                {
+                    "Cash": balance_line_items["Cash"],
+                    "Fixed Assets (Net)": balance_line_items[
+                        "Fixed Assets (Net)"
+                    ],
+                    "Total Assets": balance_line_items["Total Assets"],
+                },
+                orient="index",
+            )
+            asset_table = asset_table[cashflow_years].applymap(
+                format_currency
+            )
+            st.dataframe(asset_table, use_container_width=True)
+            st.caption(
+                "Cash is taken directly from the cashflow closing cash balance."
+            )
+            st.caption(
+                "Fixed Assets end = Prior Fixed Assets + Capex - Depreciation."
+            )
+            st.caption(
+                "Depreciation = (Fixed Assets + Capex) × "
+                f"{format_pct(balance_assumptions['depreciation_rate_pct'])}."
+            )
+
+            st.markdown("### Debt Logic")
+            debt_table = pd.DataFrame.from_dict(
+                {
+                    "Financial Debt": balance_line_items["Financial Debt"],
+                    "Total Liabilities": balance_line_items["Total Liabilities"],
+                },
+                orient="index",
+            )
+            debt_table = debt_table[cashflow_years].applymap(format_currency)
+            st.dataframe(debt_table, use_container_width=True)
+            st.caption(
+                "Financial debt follows the debt schedule from the financing model."
+            )
+
+            st.markdown("### Equity Logic")
+            equity_table = pd.DataFrame.from_dict(
+                {
+                    "Equity at Start of Year": balance_line_items[
+                        "Equity at Start of Year"
+                    ],
+                    "Net Income": balance_line_items["Net Income"],
+                    "Dividends": balance_line_items["Dividends"],
+                    "Equity at End of Year": balance_line_items[
+                        "Equity at End of Year"
+                    ],
+                },
+                orient="index",
+            )
+            equity_table = equity_table[cashflow_years].applymap(
+                format_currency
+            )
+            st.dataframe(equity_table, use_container_width=True)
+            st.caption(
+                "Equity end = Equity start + Net Income - Dividends (assumed 0)."
+            )
+
+            st.markdown("### Reconciliation Check")
+            check_table = pd.DataFrame.from_dict(
+                {
+                    "Total Assets": balance_line_items["Total Assets"],
+                    "Total Liabilities + Equity": balance_line_items[
+                        "Total Liabilities + Equity"
+                    ],
+                },
+                orient="index",
+            )
+            check_table = check_table[cashflow_years].applymap(
+                format_currency
+            )
+            st.dataframe(check_table, use_container_width=True)
 
     if page == "Financing & Debt":
         st.header("Financing & Debt")
