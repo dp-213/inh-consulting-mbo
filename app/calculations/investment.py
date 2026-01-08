@@ -1,4 +1,6 @@
-def calculate_investment(input_model, cashflow_result, pnl_result=None):
+def calculate_investment(
+    input_model, cashflow_result, pnl_result=None, balance_sheet=None
+):
     """
     Calculate basic equity investment performance metrics.
     Returns a dictionary with initial equity, cashflows, exit value, and IRR.
@@ -17,18 +19,23 @@ def calculate_investment(input_model, cashflow_result, pnl_result=None):
     if pnl_result:
         final_year_ebit = pnl_result[-1].get("ebit", 0)
 
-    exit_value = final_year_ebit * exit_multiple
+    enterprise_value = final_year_ebit * exit_multiple
+    net_debt_exit = 0.0
+    excess_cash = 0.0
+    if balance_sheet:
+        last_year = balance_sheet[-1]
+        net_debt_exit = last_year.get("financial_debt", 0.0)
+        excess_cash = last_year.get("cash", 0.0)
+    exit_value = enterprise_value - net_debt_exit + excess_cash
 
-    # Build equity cashflows: initial outflow, then yearly net cashflows.
+    # Build equity cashflows: initial outflow, dividends (if any), exit proceeds.
     equity_cashflows = [-equity_amount]
-    for i, year_data in enumerate(cashflow_result):
-        cashflow = year_data["net_cashflow"]
-
-        # Add exit value in the final year.
+    for i in range(len(cashflow_result)):
+        dividend = 0.0
         if i == len(cashflow_result) - 1:
-            cashflow += exit_value
-
-        equity_cashflows.append(cashflow)
+            equity_cashflows.append(dividend + exit_value)
+        else:
+            equity_cashflows.append(dividend)
 
     irr = _calculate_irr(equity_cashflows)
 
@@ -36,6 +43,9 @@ def calculate_investment(input_model, cashflow_result, pnl_result=None):
         "initial_equity": equity_amount,
         "equity_cashflows": equity_cashflows,
         "exit_value": exit_value,
+        "enterprise_value": enterprise_value,
+        "net_debt_exit": net_debt_exit,
+        "excess_cash_exit": excess_cash,
         "irr": irr,
     }
 

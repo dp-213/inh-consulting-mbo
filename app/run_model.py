@@ -23,7 +23,7 @@ def run_model():
         input_model, cashflow_result, debt_schedule, pnl_result
     )
     investment_result = calculate_investment(
-        input_model, cashflow_result, pnl_result
+        input_model, cashflow_result, pnl_result, balance_sheet
     )
 
     # Collect all outputs in one dictionary.
