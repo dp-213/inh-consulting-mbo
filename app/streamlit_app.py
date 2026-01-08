@@ -122,13 +122,33 @@ def _apply_section_values(section_data, edited_values):
 def run_app():
     st.title("Financial Model")
 
-    # Build input model and collect editable values from the sidebar.
-    base_model = create_demo_input_model()
-    edited_values = {}
-
+    # Navigation for question-driven layout.
     with st.sidebar:
-        st.markdown("## Assumptions")
-        st.write("Sidebar active")
+        st.markdown("## Navigation")
+        page = st.radio(
+            "Go to",
+            [
+                "Overview",
+                "Operating Model",
+                "Financing & Bankability",
+                "Equity & Value",
+                "Assumptions (Advanced)",
+            ],
+        )
+
+    # Build input model and collect editable values from the assumptions page.
+    base_model = create_demo_input_model()
+    edited_values = st.session_state.get("edited_values", {})
+    selected_scenario = st.session_state.get(
+        "selected_scenario",
+        base_model.scenario_selection["selected_scenario"].value,
+    )
+
+    if page == "Assumptions (Advanced)":
+        st.header("Assumptions (Advanced)")
+        st.write(
+            "Review and adjust all input assumptions from the Excel sheet."
+        )
 
         scenario_options = ["Base", "Best", "Worst"]
         scenario_default = base_model.scenario_selection[
@@ -163,6 +183,7 @@ def run_app():
                     ].value
         st.session_state["selected_scenario"] = selected_scenario
 
+        edited_values = {}
         for section_key, section_data in base_model.__dict__.items():
             if not isinstance(section_data, dict):
                 continue
@@ -174,6 +195,7 @@ def run_app():
                     selected_scenario=selected_scenario.lower(),
                     is_scenario_section=section_key == "scenario_parameters",
                 )
+        st.session_state["edited_values"] = edited_values
 
     input_model = create_demo_input_model()
     if "scenario_selection" in edited_values:
@@ -199,23 +221,12 @@ def run_app():
         input_model, cashflow_result, pnl_result
     )
 
-    (
-        tab_overview,
-        tab_pnl,
-        tab_cashflow,
-        tab_debt,
-        tab_equity,
-    ) = st.tabs(
-        [
-            "Overview",
-            "Operating Model (P&L)",
-            "Cashflow Details",
-            "Debt Schedule",
-            "Equity Case",
-        ]
-    )
-
-    with tab_overview:
+    if page == "Overview":
+        st.header("Overview")
+        st.write(
+            "Top-level view of operating performance, liquidity, and "
+            "equity outcomes."
+        )
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
         cashflow_table = pd.DataFrame(cashflow_result)
 
@@ -255,23 +266,12 @@ def run_app():
         st.markdown("### Equity Case")
         st.write("IRR and equity cashflows summarize investor outcomes.")
 
-    with tab_pnl:
-        pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
-
-        total_revenue_avg = pnl_table["revenue"].mean()
-        ebitda_margin = (
-            pnl_table["ebitda"].sum() / pnl_table["revenue"].sum()
-            if pnl_table["revenue"].sum() != 0
-            else 0
+    if page == "Operating Model":
+        st.header("Operating Model")
+        st.write(
+            "Detailed revenue and cost build-up based on operating inputs."
         )
-        ebit_avg = pnl_table["ebit"].mean()
-        net_income_avg = pnl_table["net_income"].mean()
-
-        kpi_col_1, kpi_col_2, kpi_col_3, kpi_col_4 = st.columns(4)
-        kpi_col_1.metric("Avg Revenue", f"{total_revenue_avg:,.0f} EUR")
-        kpi_col_2.metric("EBITDA Margin", f"{ebitda_margin:.1%}")
-        kpi_col_3.metric("Avg EBIT", f"{ebit_avg:,.0f} EUR")
-        kpi_col_4.metric("Avg Net Income", f"{net_income_avg:,.0f} EUR")
+        pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
 
         pnl_display = pnl_table.copy()
         year_labels = []
@@ -316,17 +316,12 @@ def run_app():
 
         st.table(pnl_display)
 
-    with tab_cashflow:
+    if page == "Financing & Bankability":
+        st.header("Financing & Bankability")
+        st.write(
+            "Cash generation, debt service, and liquidity position."
+        )
         cashflow_table = pd.DataFrame(cashflow_result)
-        min_cash_balance = cashflow_table["cash_balance"].min()
-        avg_operating_cf = cashflow_table["operating_cf"].mean()
-        cumulative_cashflow = cashflow_table["net_cashflow"].sum()
-
-        kpi_col_1, kpi_col_2, kpi_col_3 = st.columns(3)
-        kpi_col_1.metric("Minimum Cash", f"{min_cash_balance:,.0f} EUR")
-        kpi_col_2.metric("Avg Operating CF", f"{avg_operating_cf:,.0f} EUR")
-        kpi_col_3.metric("Cumulative CF", f"{cumulative_cashflow:,.0f} EUR")
-
         cashflow_display = cashflow_table.copy()
         cashflow_display["year"] = cashflow_display["year"].map(
             lambda x: f"Year {int(x)}" if pd.notna(x) else ""
@@ -356,30 +351,7 @@ def run_app():
                 )
         st.table(cashflow_display)
 
-    with tab_debt:
         debt_table = pd.DataFrame(debt_schedule)
-        initial_debt = (
-            debt_table["outstanding_principal"].iloc[0]
-            + debt_table["principal_payment"].iloc[0]
-        )
-        min_dscr = (
-            debt_table["dscr"].min() if "dscr" in debt_table.columns else 0
-        )
-
-        fully_repaid_year = None
-        for _, row in debt_table.iterrows():
-            if row["outstanding_principal"] <= 0:
-                fully_repaid_year = f"Year {int(row['year'])}"
-                break
-        debt_repaid_label = (
-            f"Yes ({fully_repaid_year})" if fully_repaid_year else "No"
-        )
-
-        kpi_col_1, kpi_col_2, kpi_col_3 = st.columns(3)
-        kpi_col_1.metric("Initial Debt", f"{initial_debt:,.0f} EUR")
-        kpi_col_2.metric("Minimum DSCR", f"{min_dscr:.2f}x")
-        kpi_col_3.metric("Debt Fully Repaid", debt_repaid_label)
-
         debt_display = debt_table.copy()
         debt_display["year"] = debt_display["year"].map(
             lambda x: f"Year {int(x)}" if pd.notna(x) else ""
@@ -412,7 +384,11 @@ def run_app():
             )
         st.table(debt_display)
 
-    with tab_equity:
+    if page == "Equity & Value":
+        st.header("Equity & Value")
+        st.write(
+            "Investor returns and exit value based on current assumptions."
+        )
         summary = {
             "initial_equity": investment_result["initial_equity"],
             "exit_value": investment_result["exit_value"],
@@ -421,30 +397,6 @@ def run_app():
         summary_table = pd.DataFrame([summary])
 
         equity_cashflows = investment_result["equity_cashflows"]
-        total_equity_invested = investment_result["initial_equity"]
-        total_distributions = sum(
-            cf for cf in equity_cashflows if cf > 0
-        )
-        cash_on_cash_multiple = (
-            total_distributions / abs(total_equity_invested)
-            if total_equity_invested
-            else 0
-        )
-
-        kpi_col_1, kpi_col_2, kpi_col_3 = st.columns(3)
-        kpi_col_1.metric(
-            "Total Equity Invested",
-            f"{total_equity_invested:,.0f} EUR",
-        )
-        kpi_col_2.metric(
-            "IRR",
-            f"{investment_result['irr']:.1%}",
-        )
-        kpi_col_3.metric(
-            "Cash-on-Cash Multiple",
-            f"{cash_on_cash_multiple:.2f}x",
-        )
-
         summary_display = summary_table.copy()
         summary_display.rename(
             columns={
