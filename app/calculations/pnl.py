@@ -51,15 +51,15 @@ def calculate_pnl(input_model):
     avg_consultant_base_cost_eur_per_year = input_model.personnel_cost_assumptions[
         "avg_consultant_base_cost_eur_per_year"
     ].value
-    bonus_pct_of_base = input_model.personnel_cost_assumptions[
-        "bonus_pct_of_base"
-    ].value
-    payroll_burden_pct_of_comp = input_model.personnel_cost_assumptions[
-        "payroll_burden_pct_of_comp"
-    ].value
     wage_inflation_pct = input_model.personnel_cost_assumptions[
         "wage_inflation_pct"
     ].value
+    management_md_cost = getattr(
+        input_model, "management_md_cost_eur_per_year", 0.0
+    )
+    management_md_growth = getattr(
+        input_model, "management_md_cost_growth_pct", 0.0
+    )
 
     # Overhead and variable costs.
     rent_eur_per_year = input_model.overhead_and_variable_costs[
@@ -153,22 +153,20 @@ def calculate_pnl(input_model):
         revenue = guaranteed_revenue + non_guaranteed_revenue
 
         # Consultant personnel cost: base + bonus + payroll burden, inflated.
-        consultant_cost_per_fte = avg_consultant_base_cost_eur_per_year * (
-            (1 + bonus_pct_of_base) + payroll_burden_pct_of_comp
-        )
+        # Consultant all-in cost per FTE drives compensation directly.
+        consultant_cost_per_fte = avg_consultant_base_cost_eur_per_year
         consultant_cost_per_fte *= (1 + wage_inflation_pct) ** year_index
         consultant_personnel_cost = consultants_fte * consultant_cost_per_fte
 
-        # Backoffice personnel cost: salary plus payroll burden, inflated.
-        backoffice_cost_per_fte = (
-            avg_backoffice_salary_eur_per_year
-            * (1 + payroll_burden_pct_of_comp)
-        )
+        # Backoffice personnel cost: all-in cost per FTE with inflation.
+        backoffice_cost_per_fte = avg_backoffice_salary_eur_per_year
         backoffice_cost_per_fte *= (1 + wage_inflation_pct) ** year_index
         backoffice_personnel_cost = backoffice_fte * backoffice_cost_per_fte
 
-        # Managing Directors: not defined in inputs; set to zero for v1.
-        managing_directors_cost = 0
+        # Management / MD cost from assumptions with annual growth.
+        managing_directors_cost = management_md_cost * (
+            (1 + management_md_growth) ** year_index
+        )
 
         total_personnel_costs = (
             consultant_personnel_cost

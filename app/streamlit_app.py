@@ -1953,6 +1953,10 @@ def run_app():
                 st.session_state["personnel_cost_assumptions.bonus_pct_of_base"] = _clamp_pct(row["Base Value (EUR)"])
             elif role == "Backoffice Cost per FTE":
                 st.session_state["operating_assumptions.avg_backoffice_salary_eur_per_year"] = _non_negative(row["Base Value (EUR)"])
+            elif role == "Management / MD Cost":
+                # Wire management fixed cost and growth into session state.
+                st.session_state["personnel_costs.management_md_cost_eur"] = _non_negative(row["Base Value (EUR)"])
+                st.session_state["personnel_costs.management_md_growth_pct"] = _clamp_pct(row["Growth (%)"])
 
         for row in state["opex"]:
             category = row["Category"]
@@ -2448,7 +2452,9 @@ def run_app():
                 ] = _non_negative(row["Base Value (EUR)"])
                 st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
             elif role == "Management / MD Cost":
-                st.session_state["assumptions.management_md_cost_eur"] = _non_negative(row["Base Value (EUR)"])
+                # Wire management fixed cost and growth into session state.
+                st.session_state["personnel_costs.management_md_cost_eur"] = _non_negative(row["Base Value (EUR)"])
+                st.session_state["personnel_costs.management_md_growth_pct"] = _clamp_pct(row["Growth (%)"])
 
         st.markdown("### Operating Expenses (Opex)")
         opex_df = pd.DataFrame(assumptions_state["opex"])
@@ -2635,6 +2641,14 @@ def run_app():
         _apply_section_values(
             getattr(input_model, section_key), section_values
         )
+
+    # Map management cost assumptions into the runtime input model.
+    input_model.management_md_cost_eur_per_year = st.session_state.get(
+        "personnel_costs.management_md_cost_eur", 0.0
+    )
+    input_model.management_md_cost_growth_pct = st.session_state.get(
+        "personnel_costs.management_md_growth_pct", 0.0
+    )
 
     utilization_by_year = st.session_state.get("utilization_by_year")
     if not isinstance(utilization_by_year, list) or len(utilization_by_year) != 5:
@@ -3895,6 +3909,12 @@ def run_app():
         payroll_pct = input_model.personnel_cost_assumptions[
             "payroll_burden_pct_of_comp"
         ].value
+        management_cost = getattr(
+            input_model, "management_md_cost_eur_per_year", 0.0
+        )
+        management_growth = getattr(
+            input_model, "management_md_cost_growth_pct", 0.0
+        )
         backoffice_fte_start = input_model.operating_assumptions[
             "backoffice_fte_start"
         ].value
@@ -3959,20 +3979,23 @@ def run_app():
             )
             total_revenue = guaranteed_revenue + non_guaranteed_revenue
 
-            consultant_cost_per_fte = consultant_base_cost * (
-                (1 + bonus_pct) + payroll_pct
-            )
+            # Consultant all-in cost per FTE drives compensation directly.
+            consultant_cost_per_fte = consultant_base_cost
             consultant_cost_per_fte *= (1 + wage_inflation) ** year_index
             consultant_comp = consultant_cost_per_fte * consultants_fte
 
             backoffice_fte = backoffice_fte_start * (
                 (1 + backoffice_growth) ** year_index
             )
-            backoffice_cost_per_fte = backoffice_salary * (1 + payroll_pct)
+            # Backoffice all-in cost per FTE drives compensation directly.
+            backoffice_cost_per_fte = backoffice_salary
             backoffice_cost_per_fte *= (1 + wage_inflation) ** year_index
             backoffice_comp = backoffice_cost_per_fte * backoffice_fte
 
-            management_comp = 0
+            # Management / MD cost comes from assumptions with growth.
+            management_comp = management_cost * (
+                (1 + management_growth) ** year_index
+            )
 
             external_advisors = input_model.overhead_and_variable_costs[
                 "legal_audit_eur_per_year"
@@ -4349,9 +4372,10 @@ def run_app():
 
             st.markdown("### Personnel Costs Logic")
             st.write(
-                "Consultant compensation is driven by base cost per consultant, "
-                "bonus and payroll burden, with wage inflation applied annually. "
-                "Backoffice costs follow the same inflation logic."
+                "Consultant compensation uses the all-in cost per consultant with "
+                "wage inflation applied annually. Backoffice costs follow the "
+                "same inflation logic. Management cost is a fixed annual amount "
+                "grown by the management growth rate."
             )
 
             personnel_metrics = {}
@@ -4361,12 +4385,12 @@ def run_app():
                     ("Consulting FTE", fte_field.value),
                     ("FTE Growth %", fte_growth_field.value),
                     ("Consultant Base Cost", consultant_base_cost),
-                    ("Bonus %", bonus_pct),
-                    ("Payroll Burden %", payroll_pct),
                     ("Wage Inflation %", wage_inflation),
                     ("Backoffice FTE", backoffice_fte_start),
                     ("Backoffice Growth %", backoffice_growth),
                     ("Backoffice Salary", backoffice_salary),
+                    ("Management / MD Cost", management_cost),
+                    ("Management / MD Growth", management_growth),
                 ]
                 if value is None
             ]
@@ -4377,9 +4401,8 @@ def run_app():
                     lambda fte, growth: fte * ((1 + growth) ** year_index),
                 )
                 consultant_cost_per_fte = _safe_calc(
-                    [consultant_base_cost, bonus_pct, payroll_pct, wage_inflation],
-                    lambda base, bonus, payroll, inflation: base
-                    * ((1 + bonus) + payroll)
+                    [consultant_base_cost, wage_inflation],
+                    lambda base, inflation: base
                     * ((1 + inflation) ** year_index),
                 )
                 consultant_comp = _safe_calc(
@@ -4391,16 +4414,18 @@ def run_app():
                     lambda fte, growth: fte * ((1 + growth) ** year_index),
                 )
                 backoffice_cost_per_fte = _safe_calc(
-                    [backoffice_salary, payroll_pct, wage_inflation],
-                    lambda salary, payroll, inflation: salary
-                    * (1 + payroll)
+                    [backoffice_salary, wage_inflation],
+                    lambda salary, inflation: salary
                     * ((1 + inflation) ** year_index),
                 )
                 backoffice_comp = _safe_calc(
                     [backoffice_fte, backoffice_cost_per_fte],
                     lambda fte, cost: fte * cost,
                 )
-                management_comp = 0
+                management_comp = _safe_calc(
+                    [management_cost, management_growth],
+                    lambda cost, growth: cost * ((1 + growth) ** year_index),
+                )
                 total_personnel = _safe_calc(
                     [consultant_comp, backoffice_comp, management_comp],
                     lambda a, b, c: a + b + c,
