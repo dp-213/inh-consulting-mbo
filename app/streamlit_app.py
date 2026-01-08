@@ -2717,7 +2717,7 @@ def run_app():
 
         st.markdown("### C. Financing & Risk Snapshot")
         min_dscr_value = min(row["dscr"] for row in debt_schedule)
-        dscr_threshold = financing_assumptions["minimum_dscr"]
+        dscr_threshold = input_model.financing_assumptions["minimum_dscr"]
         stress_years = [
             f"Year {row['year']}"
             for row in debt_schedule
