@@ -1730,7 +1730,7 @@ def run_app():
         st.session_state["defaults_initialized"] = True
 
     # Navigation for question-driven layout.
-    st.session_state.setdefault("nav_page", "Overview")
+    st.session_state.setdefault("current_page", "Overview")
     with st.sidebar:
         nav_css = """
         <style>
@@ -1768,7 +1768,7 @@ def run_app():
         st.markdown(nav_css, unsafe_allow_html=True)
 
         def _nav_item(label):
-            if st.session_state["nav_page"] == label:
+            if st.session_state["current_page"] == label:
                 st.markdown(
                     f"<div class=\"nav-item active\">{label}</div>",
                     unsafe_allow_html=True,
@@ -1779,7 +1779,7 @@ def run_app():
                     key=f"nav_{label}",
                     use_container_width=True,
                 ):
-                    st.session_state["nav_page"] = label
+                    st.session_state["current_page"] = label
 
         st.markdown("<div class=\"nav-section\">OVERVIEW</div>", unsafe_allow_html=True)
         _nav_item("Overview")
@@ -1800,7 +1800,7 @@ def run_app():
         _nav_item("Assumptions (Advanced)")
         _nav_item("Settings")
 
-        page = st.session_state["nav_page"]
+        page = st.session_state["current_page"]
         if page == "Cashflow & Liquidity" and st.session_state.get(
             "edit_cashflow_assumptions"
         ):
@@ -2044,6 +2044,84 @@ def run_app():
     )
     scenario_key = selected_scenario.lower()
 
+    def _seed_assumptions_state():
+        return {
+            "revenue_drivers": [
+                {
+                    "Parameter": "Consulting FTE",
+                    "Unit": "FTE",
+                    "Base": base_model.operating_assumptions["consulting_fte_start"].value,
+                    "Best": base_model.operating_assumptions["consulting_fte_start"].value,
+                    "Worst": base_model.operating_assumptions["consulting_fte_start"].value,
+                    "Description": "Starting consulting headcount.",
+                },
+                {
+                    "Parameter": "Workdays per Year",
+                    "Unit": "Days",
+                    "Base": base_model.operating_assumptions["work_days_per_year"].value,
+                    "Best": base_model.operating_assumptions["work_days_per_year"].value,
+                    "Worst": base_model.operating_assumptions["work_days_per_year"].value,
+                    "Description": "Standard workdays per consultant.",
+                },
+                {
+                    "Parameter": "Utilization (%)",
+                    "Unit": "%",
+                    "Base": base_model.scenario_parameters["utilization_rate"]["base"].value,
+                    "Best": base_model.scenario_parameters["utilization_rate"]["best"].value,
+                    "Worst": base_model.scenario_parameters["utilization_rate"]["worst"].value,
+                    "Description": "Billable utilization rate.",
+                },
+                {
+                    "Parameter": "Day Rate (EUR)",
+                    "Unit": "EUR",
+                    "Base": base_model.scenario_parameters["day_rate_eur"]["base"].value,
+                    "Best": base_model.scenario_parameters["day_rate_eur"]["best"].value,
+                    "Worst": base_model.scenario_parameters["day_rate_eur"]["worst"].value,
+                    "Description": "Base daily billing rate.",
+                },
+                {
+                    "Parameter": "Day Rate Growth (% p.a.)",
+                    "Unit": "%",
+                    "Base": base_model.operating_assumptions["day_rate_growth_pct"].value,
+                    "Best": base_model.operating_assumptions["day_rate_growth_pct"].value,
+                    "Worst": base_model.operating_assumptions["day_rate_growth_pct"].value,
+                    "Description": "Annual pricing growth.",
+                },
+            ],
+            "revenue_guarantees": [
+                {"Year": "Year 1", "Guarantee %": base_model.operating_assumptions["revenue_guarantee_pct_year_1"].value, "Description": "Guaranteed share of revenue in Year 1."},
+                {"Year": "Year 2", "Guarantee %": base_model.operating_assumptions["revenue_guarantee_pct_year_2"].value, "Description": "Guaranteed share of revenue in Year 2."},
+                {"Year": "Year 3", "Guarantee %": base_model.operating_assumptions["revenue_guarantee_pct_year_3"].value, "Description": "Guaranteed share of revenue in Year 3."},
+            ],
+            "personnel_costs": [
+                {"Role": "Consultant Base Salary", "Cost Type": "Fixed", "Base Value (EUR)": base_model.personnel_cost_assumptions["avg_consultant_base_cost_eur_per_year"].value, "Growth (%)": base_model.personnel_cost_assumptions["wage_inflation_pct"].value, "Notes": "Base salary per consultant."},
+                {"Role": "Consultant Variable (% Revenue)", "Cost Type": "Percent of Base", "Base Value (EUR)": base_model.personnel_cost_assumptions["bonus_pct_of_base"].value, "Growth (%)": "", "Notes": "Bonus as % of base salary."},
+                {"Role": "Backoffice Cost per FTE", "Cost Type": "Fixed", "Base Value (EUR)": base_model.operating_assumptions["avg_backoffice_salary_eur_per_year"].value, "Growth (%)": base_model.personnel_cost_assumptions["wage_inflation_pct"].value, "Notes": "Average backoffice salary."},
+                {"Role": "Management / MD Cost", "Cost Type": "Fixed", "Base Value (EUR)": 0.0, "Growth (%)": "", "Notes": "Not modeled in v1."},
+            ],
+            "opex": [
+                {"Category": "External Consulting", "Cost Type": "Fixed", "Value": base_model.overhead_and_variable_costs["legal_audit_eur_per_year"].value, "Unit": "EUR", "Notes": "External advisors."},
+                {"Category": "IT", "Cost Type": "Fixed", "Value": base_model.overhead_and_variable_costs["it_and_software_eur_per_year"].value, "Unit": "EUR", "Notes": "IT and software."},
+                {"Category": "Office", "Cost Type": "Fixed", "Value": base_model.overhead_and_variable_costs["rent_eur_per_year"].value, "Unit": "EUR", "Notes": "Office rent."},
+                {"Category": "Other Services", "Cost Type": "Fixed", "Value": base_model.overhead_and_variable_costs["other_overhead_eur_per_year"].value, "Unit": "EUR", "Notes": "Other services (excludes insurance)."},
+            ],
+            "financing": [
+                {"Parameter": "Senior Debt Amount", "Value": base_model.transaction_and_financing["senior_term_loan_start_eur"].value, "Unit": "EUR", "Notes": "Opening senior term loan."},
+                {"Parameter": "Interest Rate", "Value": base_model.transaction_and_financing["senior_interest_rate_pct"].value, "Unit": "%", "Notes": "Fixed interest rate."},
+                {"Parameter": "Amortisation Years", "Value": _default_financing_assumptions(base_model)["amortization_period_years"], "Unit": "Years", "Notes": "Linear amortisation period."},
+                {"Parameter": "Transaction Fees (%)", "Value": _default_valuation_assumptions(base_model)["transaction_cost_pct"], "Unit": "%", "Notes": "Fees as % of EV."},
+            ],
+            "equity": [
+                {"Parameter": "Sponsor Equity Contribution", "Value": _default_equity_assumptions(base_model)["sponsor_equity_eur"], "Unit": "EUR", "Notes": "Management equity contribution."},
+                {"Parameter": "Investor Equity Contribution", "Value": _default_equity_assumptions(base_model)["investor_equity_eur"], "Unit": "EUR", "Notes": "External investor contribution."},
+                {"Parameter": "Investor Exit Year", "Value": _default_equity_assumptions(base_model)["exit_year"], "Unit": "Year", "Notes": "Exit year for investor."},
+                {"Parameter": "Exit Multiple (x EBITDA)", "Value": _default_equity_assumptions(base_model)["exit_multiple"], "Unit": "x", "Notes": "Exit multiple on EBITDA."},
+                {"Parameter": "Distribution Rule", "Value": "Pro-rata", "Unit": "", "Notes": "Fixed distribution rule."},
+            ],
+        }
+
+    st.session_state.setdefault("assumptions", _seed_assumptions_state())
+
     if page == "Assumptions (Advanced)":
         st.header("Assumptions (Advanced)")
         st.write("Master input sheet – all model assumptions in one place")
@@ -2094,95 +2172,16 @@ def run_app():
             for i in range(5):
                 st.session_state[f"utilization_by_year.{i}"] = util_value
 
-        revenue_rows = [
-            {
-                "Parameter": "Consulting FTE",
-                "Unit": "FTE",
-                "Base": st.session_state.get(
-                    "operating_assumptions.consulting_fte_start",
-                    base_model.operating_assumptions["consulting_fte_start"].value,
-                ),
-                "Best": st.session_state.get(
-                    "operating_assumptions.consulting_fte_start",
-                    base_model.operating_assumptions["consulting_fte_start"].value,
-                ),
-                "Worst": st.session_state.get(
-                    "operating_assumptions.consulting_fte_start",
-                    base_model.operating_assumptions["consulting_fte_start"].value,
-                ),
-                "Description": "Starting consulting headcount.",
-            },
-            {
-                "Parameter": "Workdays per Year",
-                "Unit": "Days",
-                "Base": st.session_state.get(
-                    "operating_assumptions.work_days_per_year",
-                    base_model.operating_assumptions["work_days_per_year"].value,
-                ),
-                "Best": st.session_state.get(
-                    "operating_assumptions.work_days_per_year",
-                    base_model.operating_assumptions["work_days_per_year"].value,
-                ),
-                "Worst": st.session_state.get(
-                    "operating_assumptions.work_days_per_year",
-                    base_model.operating_assumptions["work_days_per_year"].value,
-                ),
-                "Description": "Standard workdays per consultant.",
-            },
-            {
-                "Parameter": "Utilization (%)",
-                "Unit": "%",
-                "Base": st.session_state.get(
-                    "scenario_parameters.utilization_rate.base",
-                    base_model.scenario_parameters["utilization_rate"]["base"].value,
-                ),
-                "Best": st.session_state.get(
-                    "scenario_parameters.utilization_rate.best",
-                    base_model.scenario_parameters["utilization_rate"]["best"].value,
-                ),
-                "Worst": st.session_state.get(
-                    "scenario_parameters.utilization_rate.worst",
-                    base_model.scenario_parameters["utilization_rate"]["worst"].value,
-                ),
-                "Description": "Billable utilization rate.",
-            },
-            {
-                "Parameter": "Day Rate (EUR)",
-                "Unit": "EUR",
-                "Base": st.session_state.get(
-                    "scenario_parameters.day_rate_eur.base",
-                    base_model.scenario_parameters["day_rate_eur"]["base"].value,
-                ),
-                "Best": st.session_state.get(
-                    "scenario_parameters.day_rate_eur.best",
-                    base_model.scenario_parameters["day_rate_eur"]["best"].value,
-                ),
-                "Worst": st.session_state.get(
-                    "scenario_parameters.day_rate_eur.worst",
-                    base_model.scenario_parameters["day_rate_eur"]["worst"].value,
-                ),
-                "Description": "Base daily billing rate.",
-            },
-            {
-                "Parameter": "Day Rate Growth (% p.a.)",
-                "Unit": "%",
-                "Base": st.session_state.get(
-                    "operating_assumptions.day_rate_growth_pct",
-                    base_model.operating_assumptions["day_rate_growth_pct"].value,
-                ),
-                "Best": st.session_state.get(
-                    "operating_assumptions.day_rate_growth_pct",
-                    base_model.operating_assumptions["day_rate_growth_pct"].value,
-                ),
-                "Worst": st.session_state.get(
-                    "operating_assumptions.day_rate_growth_pct",
-                    base_model.operating_assumptions["day_rate_growth_pct"].value,
-                ),
-                "Description": "Annual pricing growth.",
-            },
-        ]
+        assumptions_state = st.session_state["assumptions"]
+        revenue_df = pd.DataFrame(assumptions_state["revenue_drivers"])
+        active_label = selected_scenario
+        base_label = "Base (Active)" if active_label == "Base" else "Base"
+        best_label = "Best (Active)" if active_label == "Best" else "Best"
+        worst_label = "Worst (Active)" if active_label == "Worst" else "Worst"
+        revenue_df = revenue_df.rename(
+            columns={"Base": base_label, "Best": best_label, "Worst": worst_label}
+        )
         st.markdown("### Revenue Drivers")
-        revenue_df = pd.DataFrame(revenue_rows)
         revenue_edit = st.data_editor(
             revenue_df,
             hide_index=True,
@@ -2191,9 +2190,22 @@ def run_app():
                 "Parameter": st.column_config.TextColumn(disabled=True),
                 "Unit": st.column_config.TextColumn(disabled=True),
                 "Description": st.column_config.TextColumn(disabled=True),
+                base_label: st.column_config.NumberColumn(
+                    disabled=auto_sync and active_label != "Base"
+                ),
+                best_label: st.column_config.NumberColumn(
+                    disabled=auto_sync and active_label != "Best"
+                ),
+                worst_label: st.column_config.NumberColumn(
+                    disabled=auto_sync and active_label != "Worst"
+                ),
             },
             use_container_width=True,
         )
+        revenue_edit = revenue_edit.rename(
+            columns={base_label: "Base", best_label: "Best", worst_label: "Worst"}
+        )
+        assumptions_state["revenue_drivers"] = revenue_edit.to_dict("records")
         for _, row in revenue_edit.iterrows():
             param = row["Parameter"]
             if param == "Utilization (%)":
@@ -2212,13 +2224,7 @@ def run_app():
                 st.session_state["operating_assumptions.day_rate_growth_pct"] = _clamp_pct(row["Base"])
 
         st.markdown("### Revenue Guarantees")
-        guarantee_df = pd.DataFrame(
-            [
-                {"Year": "Year 1", "Guarantee %": st.session_state.get("operating_assumptions.revenue_guarantee_pct_year_1", base_model.operating_assumptions["revenue_guarantee_pct_year_1"].value), "Description": "Guaranteed share of revenue in Year 1."},
-                {"Year": "Year 2", "Guarantee %": st.session_state.get("operating_assumptions.revenue_guarantee_pct_year_2", base_model.operating_assumptions["revenue_guarantee_pct_year_2"].value), "Description": "Guaranteed share of revenue in Year 2."},
-                {"Year": "Year 3", "Guarantee %": st.session_state.get("operating_assumptions.revenue_guarantee_pct_year_3", base_model.operating_assumptions["revenue_guarantee_pct_year_3"].value), "Description": "Guaranteed share of revenue in Year 3."},
-            ]
-        )
+        guarantee_df = pd.DataFrame(assumptions_state["revenue_guarantees"])
         guarantee_edit = st.data_editor(
             guarantee_df,
             hide_index=True,
@@ -2229,6 +2235,7 @@ def run_app():
             },
             use_container_width=True,
         )
+        assumptions_state["revenue_guarantees"] = guarantee_edit.to_dict("records")
         guarantee_map = {
             "Year 1": "operating_assumptions.revenue_guarantee_pct_year_1",
             "Year 2": "operating_assumptions.revenue_guarantee_pct_year_2",
@@ -2240,56 +2247,7 @@ def run_app():
                 st.session_state[key] = _clamp_pct(row["Guarantee %"])
 
         st.markdown("### Personnel Costs")
-        personnel_df = pd.DataFrame(
-            [
-                {
-                    "Role": "Consultant Base Salary",
-                    "Cost Type": "Fixed",
-                    "Base Value (EUR)": st.session_state.get(
-                        "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year",
-                        base_model.personnel_cost_assumptions["avg_consultant_base_cost_eur_per_year"].value,
-                    ),
-                    "Growth (%)": st.session_state.get(
-                        "personnel_cost_assumptions.wage_inflation_pct",
-                        base_model.personnel_cost_assumptions["wage_inflation_pct"].value,
-                    ),
-                    "Notes": "Base salary per consultant.",
-                },
-                {
-                    "Role": "Consultant Variable (% Revenue)",
-                    "Cost Type": "Percent of Base",
-                    "Base Value (EUR)": st.session_state.get(
-                        "personnel_cost_assumptions.bonus_pct_of_base",
-                        base_model.personnel_cost_assumptions["bonus_pct_of_base"].value,
-                    ),
-                    "Growth (%)": "",
-                    "Notes": "Bonus as % of base salary.",
-                },
-                {
-                    "Role": "Backoffice Cost per FTE",
-                    "Cost Type": "Fixed",
-                    "Base Value (EUR)": st.session_state.get(
-                        "operating_assumptions.avg_backoffice_salary_eur_per_year",
-                        base_model.operating_assumptions["avg_backoffice_salary_eur_per_year"].value,
-                    ),
-                    "Growth (%)": st.session_state.get(
-                        "personnel_cost_assumptions.wage_inflation_pct",
-                        base_model.personnel_cost_assumptions["wage_inflation_pct"].value,
-                    ),
-                    "Notes": "Average backoffice salary.",
-                },
-                {
-                    "Role": "Management / MD Cost",
-                    "Cost Type": "Fixed",
-                    "Base Value (EUR)": st.session_state.get(
-                        "assumptions.management_md_cost_eur",
-                        0.0,
-                    ),
-                    "Growth (%)": "",
-                    "Notes": "Not modeled in v1.",
-                },
-            ]
-        )
+        personnel_df = pd.DataFrame(assumptions_state["personnel_costs"])
         personnel_edit = st.data_editor(
             personnel_df,
             hide_index=True,
@@ -2301,6 +2259,7 @@ def run_app():
             },
             use_container_width=True,
         )
+        assumptions_state["personnel_costs"] = personnel_edit.to_dict("records")
         for _, row in personnel_edit.iterrows():
             role = row["Role"]
             if role == "Consultant Base Salary":
@@ -2319,50 +2278,7 @@ def run_app():
                 st.session_state["assumptions.management_md_cost_eur"] = _non_negative(row["Base Value (EUR)"])
 
         st.markdown("### Operating Expenses (Opex)")
-        opex_df = pd.DataFrame(
-            [
-                {
-                    "Category": "External Consulting",
-                    "Cost Type": "Fixed",
-                    "Value": st.session_state.get(
-                        "overhead_and_variable_costs.legal_audit_eur_per_year",
-                        base_model.overhead_and_variable_costs["legal_audit_eur_per_year"].value,
-                    ),
-                    "Unit": "EUR",
-                    "Notes": "External advisors.",
-                },
-                {
-                    "Category": "IT",
-                    "Cost Type": "Fixed",
-                    "Value": st.session_state.get(
-                        "overhead_and_variable_costs.it_and_software_eur_per_year",
-                        base_model.overhead_and_variable_costs["it_and_software_eur_per_year"].value,
-                    ),
-                    "Unit": "EUR",
-                    "Notes": "IT and software.",
-                },
-                {
-                    "Category": "Office",
-                    "Cost Type": "Fixed",
-                    "Value": st.session_state.get(
-                        "overhead_and_variable_costs.rent_eur_per_year",
-                        base_model.overhead_and_variable_costs["rent_eur_per_year"].value,
-                    ),
-                    "Unit": "EUR",
-                    "Notes": "Office rent.",
-                },
-                {
-                    "Category": "Other Services",
-                    "Cost Type": "Fixed",
-                    "Value": st.session_state.get(
-                        "overhead_and_variable_costs.other_overhead_eur_per_year",
-                        base_model.overhead_and_variable_costs["other_overhead_eur_per_year"].value,
-                    ),
-                    "Unit": "EUR",
-                    "Notes": "Other services (excludes insurance).",
-                },
-            ]
-        )
+        opex_df = pd.DataFrame(assumptions_state["opex"])
         opex_edit = st.data_editor(
             opex_df,
             hide_index=True,
@@ -2375,6 +2291,7 @@ def run_app():
             },
             use_container_width=True,
         )
+        assumptions_state["opex"] = opex_edit.to_dict("records")
         for _, row in opex_edit.iterrows():
             category = row["Category"]
             if category == "External Consulting":
@@ -2387,46 +2304,7 @@ def run_app():
                 st.session_state["overhead_and_variable_costs.other_overhead_eur_per_year"] = _non_negative(row["Value"])
 
         st.markdown("### Financing Assumptions")
-        financing_df = pd.DataFrame(
-            [
-                {
-                    "Parameter": "Senior Debt Amount",
-                    "Value": st.session_state.get(
-                        "transaction_and_financing.senior_term_loan_start_eur",
-                        base_model.transaction_and_financing["senior_term_loan_start_eur"].value,
-                    ),
-                    "Unit": "EUR",
-                    "Notes": "Opening senior term loan.",
-                },
-                {
-                    "Parameter": "Interest Rate",
-                    "Value": st.session_state.get(
-                        "transaction_and_financing.senior_interest_rate_pct",
-                        base_model.transaction_and_financing["senior_interest_rate_pct"].value,
-                    ),
-                    "Unit": "%",
-                    "Notes": "Fixed interest rate.",
-                },
-                {
-                    "Parameter": "Amortisation Years",
-                    "Value": st.session_state.get(
-                        "financing.amortization_period_years",
-                        _default_financing_assumptions(base_model)["amortization_period_years"],
-                    ),
-                    "Unit": "Years",
-                    "Notes": "Linear amortisation period.",
-                },
-                {
-                    "Parameter": "Transaction Fees (%)",
-                    "Value": st.session_state.get(
-                        "valuation.transaction_cost_pct",
-                        _default_valuation_assumptions(base_model)["transaction_cost_pct"],
-                    ),
-                    "Unit": "%",
-                    "Notes": "Fees as % of EV.",
-                },
-            ]
-        )
+        financing_df = pd.DataFrame(assumptions_state["financing"])
         financing_edit = st.data_editor(
             financing_df,
             hide_index=True,
@@ -2438,6 +2316,7 @@ def run_app():
             },
             use_container_width=True,
         )
+        assumptions_state["financing"] = financing_edit.to_dict("records")
         for _, row in financing_edit.iterrows():
             parameter = row["Parameter"]
             if parameter == "Senior Debt Amount":
@@ -2450,52 +2329,7 @@ def run_app():
                 st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
 
         st.markdown("### Equity & Investor Assumptions")
-        equity_df = pd.DataFrame(
-            [
-                {
-                    "Parameter": "Sponsor Equity Contribution",
-                    "Value": st.session_state.get(
-                        "equity.sponsor_equity_eur",
-                        _default_equity_assumptions(base_model)["sponsor_equity_eur"],
-                    ),
-                    "Unit": "EUR",
-                    "Notes": "Management equity contribution.",
-                },
-                {
-                    "Parameter": "Investor Equity Contribution",
-                    "Value": st.session_state.get(
-                        "equity.investor_equity_eur",
-                        _default_equity_assumptions(base_model)["investor_equity_eur"],
-                    ),
-                    "Unit": "EUR",
-                    "Notes": "External investor contribution.",
-                },
-                {
-                    "Parameter": "Investor Exit Year",
-                    "Value": st.session_state.get(
-                        "equity.exit_year",
-                        _default_equity_assumptions(base_model)["exit_year"],
-                    ),
-                    "Unit": "Year",
-                    "Notes": "Exit year for investor.",
-                },
-                {
-                    "Parameter": "Exit Multiple (x EBITDA)",
-                    "Value": st.session_state.get(
-                        "equity.exit_multiple",
-                        _default_equity_assumptions(base_model)["exit_multiple"],
-                    ),
-                    "Unit": "x",
-                    "Notes": "Exit multiple on EBITDA.",
-                },
-                {
-                    "Parameter": "Distribution Rule",
-                    "Value": "Pro-rata",
-                    "Unit": "",
-                    "Notes": "Fixed distribution rule.",
-                },
-            ]
-        )
+        equity_df = pd.DataFrame(assumptions_state["equity"])
         equity_edit = st.data_editor(
             equity_df,
             hide_index=True,
@@ -2507,6 +2341,7 @@ def run_app():
             },
             use_container_width=True,
         )
+        assumptions_state["equity"] = equity_edit.to_dict("records")
         for _, row in equity_edit.iterrows():
             parameter = row["Parameter"]
             if parameter == "Sponsor Equity Contribution":
