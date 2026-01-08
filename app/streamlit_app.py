@@ -1,7 +1,6 @@
 import io
 import json
 import subprocess
-from urllib.parse import quote
 from datetime import datetime
 import zipfile
 import pandas as pd
@@ -43,6 +42,134 @@ def _pnl_dict_to_list(pnl_dict):
 def _format_section_title(section_key):
     return section_key.replace("_", " ").title()
 
+
+def _build_model_snapshot_payload(
+    input_model,
+    assumptions_state,
+    pnl_result,
+    cashflow_result,
+    balance_sheet,
+    debt_schedule,
+    investment_result,
+):
+    scenario = st.session_state.get("assumptions.scenario", "Base")
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+        ).decode("utf-8").strip()
+    except Exception:
+        commit = "unknown"
+
+    revenue_state = assumptions_state.get("revenue_model", {})
+    cost_state = assumptions_state.get("cost_model", {})
+
+    payload = {
+        "meta": {
+            "timestamp": datetime.utcnow().isoformat(),
+            "app_version": commit,
+            "scenario": scenario,
+            "currency": "EUR",
+            "planning_horizon_years": 5,
+        },
+        "assumptions": {
+            "revenue_model": revenue_state,
+            "cost_model": cost_state,
+            "financing": assumptions_state.get("financing", []),
+            "equity": assumptions_state.get("equity", []),
+            "cashflow": assumptions_state.get("cashflow", []),
+            "balance_sheet": assumptions_state.get("balance_sheet", []),
+            "valuation": assumptions_state.get("valuation", []),
+        },
+        "outputs": {
+            "pnl": pnl_result,
+            "cashflow": cashflow_result,
+            "balance_sheet": balance_sheet,
+            "debt_schedule": debt_schedule,
+            "investment": investment_result,
+        },
+        "layout": {
+            "Overview": [
+                "Deal Economics KPIs",
+                "Affordability KPIs",
+                "Business Robustness table",
+                "Risk Flags checklist",
+                "Management Takeaway",
+            ],
+            "Operating Model (P&L)": [
+                "Full P&L statement (Years 0–4)",
+                "P&L KPI block",
+            ],
+            "Cashflow & Liquidity": [
+                "Cashflow statement (Years 0–4)",
+                "Cashflow KPIs",
+            ],
+            "Balance Sheet": [
+                "Simplified balance sheet (Years 0–4)",
+                "Balance KPIs",
+            ],
+            "Financing & Debt": [
+                "Debt schedule",
+                "Debt service & covenants",
+                "Financing KPIs",
+            ],
+            "Valuation & Purchase Price": [
+                "Seller valuation table",
+                "Buyer valuation table",
+                "Purchase price bridge",
+                "Valuation KPIs",
+            ],
+            "Equity Case": [
+                "Equity KPIs",
+                "Sources & Uses",
+                "Equity ownership",
+                "Equity cashflows",
+                "Equity KPIs table",
+            ],
+            "Revenue Model": [
+                "Revenue drivers (Year 0–4)",
+                "Guarantee inputs",
+                "Revenue bridge summary",
+            ],
+            "Cost Model": [
+                "Personnel cost inputs",
+                "Overhead inputs",
+                "Cost summary",
+            ],
+            "Other Assumptions": [
+                "Financing assumptions",
+                "Equity assumptions",
+                "Cashflow assumptions",
+                "Balance sheet assumptions",
+                "Valuation assumptions",
+            ],
+        },
+        "logic": [
+            "Revenue uses Revenue Model output: final revenue = max(guaranteed floor, modeled revenue).",
+            "P&L consumes final revenue and total operating costs (Cost Model).",
+            "Operating cashflow = EBITDA – cash taxes – working capital delta.",
+            "Free cashflow = operating cashflow – capex.",
+            "Debt service = interest on opening debt + scheduled repayment.",
+            "Equity IRR uses equity injections and exit proceeds only.",
+        ],
+        "notes": [
+            "Distributions are pro-rata with no waterfall.",
+            "Investor exits fully in the selected exit year.",
+        ],
+    }
+    return payload
+
+
+def _build_model_snapshot_zip(payload):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr("snapshot.json", json.dumps(payload, indent=2))
+        zip_file.writestr(
+            "README.txt",
+            "Model snapshot for AI review. Use snapshot.json as ground truth.",
+        )
+    buffer.seek(0)
+    return buffer
 
 
 
@@ -2513,33 +2640,55 @@ def run_app():
             min-width: 280px;
             max-width: 280px;
           }
-          .nav-section {
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin-top: 0.9rem;
-            margin-bottom: 0.35rem;
-          }
-          .nav-item {
+          div[data-testid="stRadio"] label {
             padding: 0.35rem 0.6rem 0.35rem 0.8rem;
             border-radius: 4px;
             margin-bottom: 0.2rem;
             color: #374151;
           }
-          .nav-item a {
-            text-decoration: none;
-            color: inherit;
-            display: block;
-          }
-          .nav-item:hover {
+          div[data-testid="stRadio"] label:hover {
             background: #eef2f7;
           }
-          .nav-item.active {
+          div[data-testid="stRadio"] input {
+            display: none;
+          }
+          div[data-testid="stRadio"] input:checked + div {
             background: #e9eef7;
             border-left: 3px solid #3b82f6;
             color: #111827;
             font-weight: 600;
+          }
+          div[data-testid="stRadio"] label:nth-child(1)::before,
+          div[data-testid="stRadio"] label:nth-child(2)::before,
+          div[data-testid="stRadio"] label:nth-child(5)::before,
+          div[data-testid="stRadio"] label:nth-child(8)::before,
+          div[data-testid="stRadio"] label:nth-child(10)::before,
+          div[data-testid="stRadio"] label:nth-child(11)::before {
+            display: block;
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin: 0.9rem 0 0.35rem;
+          }
+          div[data-testid="stRadio"] label:nth-child(1)::before {
+            content: "OVERVIEW";
+            margin-top: 0;
+          }
+          div[data-testid="stRadio"] label:nth-child(2)::before {
+            content: "OPERATING MODEL";
+          }
+          div[data-testid="stRadio"] label:nth-child(5)::before {
+            content: "PLANNING";
+          }
+          div[data-testid="stRadio"] label:nth-child(8)::before {
+            content: "FINANCING";
+          }
+          div[data-testid="stRadio"] label:nth-child(10)::before {
+            content: "VALUATION";
+          }
+          div[data-testid="stRadio"] label:nth-child(11)::before {
+            content: "SETTINGS";
           }
         </style>
         """
@@ -2573,49 +2722,13 @@ def run_app():
             "Model Settings",
         ]
 
-        query_params = st.experimental_get_query_params()
-        query_page = query_params.get("page", [None])[0]
-        if query_page in nav_options:
-            st.session_state["page"] = query_page
-
-        page = st.session_state["page"]
-
         st.markdown("**MBO Financial Model**")
-        st.markdown("<div class=\"nav-section\">OVERVIEW</div>", unsafe_allow_html=True)
-
-        def _nav_link(label):
-            href = f"?page={quote(label)}"
-            active = " active" if page == label else ""
-            st.markdown(
-                (
-                    f"<div class=\"nav-item{active}\">"
-                    f"<a href=\"{href}\" target=\"_self\">{label}</a>"
-                    "</div>"
-                ),
-                unsafe_allow_html=True,
-            )
-
-        _nav_link("Overview")
-
-        st.markdown("<div class=\"nav-section\">OPERATING MODEL</div>", unsafe_allow_html=True)
-        _nav_link("Operating Model (P&L)")
-        _nav_link("Cashflow & Liquidity")
-        _nav_link("Balance Sheet")
-
-        st.markdown("<div class=\"nav-section\">PLANNING</div>", unsafe_allow_html=True)
-        _nav_link("Revenue Model")
-        _nav_link("Cost Model")
-        _nav_link("Other Assumptions")
-
-        st.markdown("<div class=\"nav-section\">FINANCING</div>", unsafe_allow_html=True)
-        _nav_link("Financing & Debt")
-        _nav_link("Equity Case")
-
-        st.markdown("<div class=\"nav-section\">VALUATION</div>", unsafe_allow_html=True)
-        _nav_link("Valuation & Purchase Price")
-
-        st.markdown("<div class=\"nav-section\">SETTINGS</div>", unsafe_allow_html=True)
-        _nav_link("Model Settings")
+        page = st.sidebar.radio(
+            "",
+            nav_options,
+            key="page",
+            label_visibility="collapsed",
+        )
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
@@ -2948,7 +3061,7 @@ def run_app():
         st.header("Model Settings")
         st.caption("Model transparency, export, and technical controls")
 
-        st.markdown("### Developer Tools")
+        st.markdown("### Model Snapshot / Export")
         st.markdown(
             """
             <div style="background:#f3f4f6;padding:12px 14px;border-radius:6px;">
@@ -2963,7 +3076,15 @@ def run_app():
             "Generate Model Snapshot for GPT",
             key="generate_model_snapshot",
         ):
-            payload = _build_model_snapshot_payload()
+            payload = _build_model_snapshot_payload(
+                input_model,
+                st.session_state["assumptions"],
+                pnl_result,
+                cashflow_result,
+                balance_sheet,
+                debt_schedule,
+                investment_result,
+            )
             st.session_state["model_snapshot_payload"] = payload
             st.session_state["model_snapshot_text"] = json.dumps(
                 payload, indent=2
@@ -2972,13 +3093,13 @@ def run_app():
                 payload
             )
 
-            if st.session_state.get("model_snapshot_payload"):
-                st.download_button(
-                    "Download Snapshot ZIP",
-                    data=st.session_state["model_snapshot_zip"],
-                    file_name="model_snapshot.zip",
-                    mime="application/zip",
-                )
+        if st.session_state.get("model_snapshot_payload"):
+            st.download_button(
+                "Download Snapshot ZIP",
+                data=st.session_state["model_snapshot_zip"],
+                file_name="model_snapshot.zip",
+                mime="application/zip",
+            )
             if st.button(
                 "Copy GPT Prompt",
                 key="copy_gpt_prompt",
@@ -3008,43 +3129,43 @@ def run_app():
                 height=420,
             )
 
-        st.markdown("### Calculation Logic")
+        st.markdown("### Model Transparency")
         st.markdown("**Revenue Logic**")
         st.write(
-            "Revenue is calculated as consulting FTE multiplied by workdays, "
-            "utilization, and the applicable day rate (including growth)."
+            "Revenue follows the Revenue Model bridge, with the final revenue "
+            "equal to the maximum of the guaranteed floor and modeled revenue."
         )
         st.markdown("**Cost Logic**")
         st.write(
-            "Personnel costs use base salary, bonus, and payroll burden with "
-            "wage inflation. Operating expenses include fixed overhead items."
+            "Operating costs are sourced from the Cost Model and aggregated into "
+            "personnel, fixed overhead, and variable costs."
         )
         st.markdown("**Financing Logic**")
         st.write(
-            "Debt service equals interest on opening debt plus scheduled "
-            "repayment over the amortisation period."
+            "Debt service equals interest on opening debt plus scheduled repayment "
+            "over the amortisation period."
         )
         st.markdown("**Equity Logic**")
         st.write(
-            "Investor exits in the selected year at the exit multiple. "
-            "Sponsor retains residual equity thereafter."
+            "Investor exits in the selected year at the exit multiple. Sponsor "
+            "retains residual equity thereafter."
         )
 
-        st.markdown("### Data Persistence")
+        st.markdown("### Model State")
         st.write(
             "Inputs are stored in Streamlit session_state during the session."
         )
         st.write("Values do not persist across a full browser refresh.")
-        st.write("All assumptions are exported to the Excel model.")
+        st.write("Revenue and cost planning live in dedicated model pages.")
 
         st.markdown("### Export Status")
         st.write("Excel export: Enabled (Beta)")
         st.write(
-            "Sheets included: Assumptions, P&L, Cashflow, Balance Sheet, "
-            "Valuation, Financing, Equity"
+            "Sheets included: Assumptions, Revenue Model, Cost Model, P&L, "
+            "Cashflow, Balance Sheet, Valuation, Financing, Equity"
         )
 
-        with st.expander("Danger Zone", expanded=False):
+        with st.expander("Model Controls", expanded=False):
             reset_confirm = st.checkbox(
                 "I understand this will reset model state",
                 key="reset_confirm",
