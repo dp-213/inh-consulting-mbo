@@ -213,12 +213,49 @@ def run_app():
                     ].value
         st.session_state["selected_scenario"] = selected_scenario
 
+        section_order = [
+            "scenario_parameters",
+            "operating_assumptions",
+            "personnel_cost_assumptions",
+            "overhead_and_variable_costs",
+            "capex_and_working_capital",
+            "transaction_and_financing",
+            "tax_and_distributions",
+            "valuation_assumptions",
+        ]
+        section_labels = {
+            "scenario_parameters": "Scenario Parameters",
+            "operating_assumptions": "Operating Assumptions",
+            "personnel_cost_assumptions": "Personnel Costs",
+            "overhead_and_variable_costs": "Overhead & Variable Costs",
+            "capex_and_working_capital": "Capex & Working Capital",
+            "transaction_and_financing": "Transaction & Financing",
+            "tax_and_distributions": "Tax & Valuation",
+            "valuation_assumptions": "Tax & Valuation",
+        }
+        section_help = {
+            "scenario_parameters": "Scenario-specific utilization and day-rate inputs.",
+            "operating_assumptions": "Headcount and delivery capacity assumptions.",
+            "personnel_cost_assumptions": "Compensation, bonus, and payroll drivers.",
+            "overhead_and_variable_costs": "Fixed overhead and revenue-linked costs.",
+            "capex_and_working_capital": "Capex, depreciation, and liquidity settings.",
+            "transaction_and_financing": "Purchase price and debt structure inputs.",
+            "tax_and_distributions": "Tax rates and payout assumptions.",
+            "valuation_assumptions": "Buyer/seller valuation and DCF parameters.",
+        }
+
         edited_values = {}
-        for section_key, section_data in base_model.__dict__.items():
+        for section_key in section_order:
+            if section_key not in base_model.__dict__:
+                continue
+            section_data = base_model.__dict__[section_key]
             if not isinstance(section_data, dict):
                 continue
-            section_title = _format_section_title(section_key)
+            section_title = section_labels.get(
+                section_key, _format_section_title(section_key)
+            )
             with st.expander(section_title, expanded=False):
+                st.caption(section_help.get(section_key, ""))
                 edited_values[section_key] = _render_section(
                     section_data,
                     section_key,
