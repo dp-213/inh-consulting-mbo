@@ -68,9 +68,58 @@ def run_app():
         input_model, cashflow_result, pnl_result
     )
 
-    tab_pnl, tab_cashflow, tab_debt, tab_equity = st.tabs(
-        ["P&L", "Cashflow", "Debt", "Equity"]
+    (
+        tab_overview,
+        tab_pnl,
+        tab_cashflow,
+        tab_debt,
+        tab_equity,
+    ) = st.tabs(
+        [
+            "Overview",
+            "Operating Model (P&L)",
+            "Cashflow Details",
+            "Debt Schedule",
+            "Equity Case",
+        ]
     )
+
+    with tab_overview:
+        pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
+        cashflow_table = pd.DataFrame(cashflow_result)
+
+        total_revenue_avg = pnl_table["revenue"].mean()
+        ebitda_margin = (
+            pnl_table["ebitda"].sum() / pnl_table["revenue"].sum()
+            if pnl_table["revenue"].sum() != 0
+            else 0
+        )
+        ebit_avg = pnl_table["ebit"].mean()
+        min_cash_balance = cashflow_table["cash_balance"].min()
+        irr = investment_result["irr"]
+
+        kpi_col_1, kpi_col_2, kpi_col_3, kpi_col_4, kpi_col_5 = st.columns(5)
+        kpi_col_1.metric("Avg Revenue", f"{total_revenue_avg:,.0f} EUR")
+        kpi_col_2.metric("EBITDA Margin", f"{ebitda_margin:.1%}")
+        kpi_col_3.metric("Avg EBIT", f"{ebit_avg:,.0f} EUR")
+        kpi_col_4.metric("Minimum Cash", f"{min_cash_balance:,.0f} EUR")
+        kpi_col_5.metric("IRR", f"{irr:.1%}")
+
+        st.markdown(f"**Scenario:** {scenario}")
+
+        st.markdown("### Operating Performance")
+        st.write(
+            "Revenue, EBITDA, and EBIT reflect the selected scenario and "
+            "operating assumptions."
+        )
+
+        st.markdown("### Financing Overview")
+        st.write(
+            "Debt service and cash balance trends summarize financing capacity."
+        )
+
+        st.markdown("### Equity Case")
+        st.write("IRR and equity cashflows summarize investor outcomes.")
 
     with tab_pnl:
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
