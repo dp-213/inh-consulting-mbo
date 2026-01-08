@@ -2556,6 +2556,10 @@ def run_app():
             )
 
         text_lines = [
+            "Purpose",
+            "This export is intended for AI model introspection: "
+            "sharing assumptions, requesting changes, and validating outputs.",
+            "",
             "A. Global setup",
             f"Scenario: {scenario}",
             "Currency: EUR",
