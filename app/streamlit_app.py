@@ -2583,6 +2583,7 @@ def run_app():
         st.markdown("**MBO Financial Model**")
         st.markdown("OVERVIEW")
         st.markdown("OPERATING MODEL")
+        st.markdown("Assumptions")
         st.markdown("FINANCING")
         st.markdown("VALUATION")
         st.markdown("SETTINGS")
@@ -2592,10 +2593,12 @@ def run_app():
             "Operating Model (P&L)",
             "Cashflow & Liquidity",
             "Balance Sheet",
+            "Revenue Model",
+            "Cost Model",
+            "Other Assumptions",
             "Financing & Debt",
             "Equity Case",
             "Valuation & Purchase Price",
-            "Assumptions",
             "Model Settings",
         ]
         page = st.sidebar.radio(
@@ -2692,9 +2695,19 @@ def run_app():
             assumptions_state["equity"] = edited_equity.to_dict("records")
             _apply_assumptions_state()
 
-    if page == "Assumptions":
-        st.header("Assumptions")
-        st.write("Master input sheet – all model assumptions in one place")
+    if page == "Revenue Model":
+        render_revenue_model_assumptions(input_model)
+        _apply_assumptions_state()
+        return
+
+    if page == "Cost Model":
+        render_cost_model_assumptions(input_model)
+        _apply_assumptions_state()
+        return
+
+    if page == "Other Assumptions":
+        st.header("Other Assumptions")
+        st.write("Master input sheet – all remaining assumptions.")
 
         scenario_options = ["Base", "Best", "Worst"]
         scenario_default = st.session_state.get(
@@ -2720,23 +2733,6 @@ def run_app():
         )
         st.info("Changes here affect all pages instantly.")
         st.session_state["scenario_selection.selected_scenario"] = selected_scenario
-
-        st.session_state.setdefault("assumptions.section", "Revenue Model")
-        section = st.radio(
-            "Assumptions Section",
-            ["Revenue Model", "Cost Model", "Advanced"],
-            horizontal=True,
-            key="assumptions.section",
-            label_visibility="collapsed",
-        )
-        if section == "Revenue Model":
-            render_revenue_model_assumptions(input_model)
-            _apply_assumptions_state()
-            return
-        if section == "Cost Model":
-            render_cost_model_assumptions(input_model)
-            _apply_assumptions_state()
-            return
         render_advanced_assumptions(input_model)
         return
 

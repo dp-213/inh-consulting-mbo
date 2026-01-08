@@ -103,7 +103,8 @@ def render_cost_model_assumptions(input_model):
 
     st.markdown("### Consultant Costs")
     consultant_table = {
-        "Parameter": ["Consultant FTE", "Consultant Loaded Cost (EUR)"],
+        "Parameter": ["Consultant FTE", "Consultant Loaded Cost"],
+        "Unit": ["FTE", "EUR"],
     }
     for year_index, col in enumerate(year_columns):
         consultant_table[col] = [
@@ -115,7 +116,10 @@ def render_cost_model_assumptions(input_model):
         consultant_df,
         hide_index=True,
         key="cost_model.consultant_table",
-        column_config={"Parameter": st.column_config.TextColumn(disabled=True)},
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+        },
         use_container_width=True,
     )
     for year_index in range(5):
@@ -128,7 +132,8 @@ def render_cost_model_assumptions(input_model):
 
     st.markdown("### Backoffice Costs")
     backoffice_table = {
-        "Parameter": ["Backoffice FTE", "Backoffice Loaded Cost (EUR)"],
+        "Parameter": ["Backoffice FTE", "Backoffice Loaded Cost"],
+        "Unit": ["FTE", "EUR"],
     }
     for year_index, col in enumerate(year_columns):
         backoffice_table[col] = [
@@ -140,7 +145,10 @@ def render_cost_model_assumptions(input_model):
         backoffice_df,
         hide_index=True,
         key="cost_model.backoffice_table",
-        column_config={"Parameter": st.column_config.TextColumn(disabled=True)},
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+        },
         use_container_width=True,
     )
     for year_index in range(5):
@@ -153,7 +161,8 @@ def render_cost_model_assumptions(input_model):
 
     st.markdown("### Management")
     management_table = {
-        "Parameter": ["Management Cost (EUR)"],
+        "Parameter": ["Management Cost"],
+        "Unit": ["EUR"],
     }
     for year_index, col in enumerate(year_columns):
         management_table[col] = [
@@ -164,7 +173,10 @@ def render_cost_model_assumptions(input_model):
         management_df,
         hide_index=True,
         key="cost_model.management_table",
-        column_config={"Parameter": st.column_config.TextColumn(disabled=True)},
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+        },
         use_container_width=True,
     )
     for year_index in range(5):
@@ -182,6 +194,7 @@ def render_cost_model_assumptions(input_model):
             "Services",
             "Other Services",
         ],
+        "Unit": ["EUR"] * 6,
     }
     for year_index, col in enumerate(year_columns):
         fixed_table[col] = [
@@ -197,7 +210,10 @@ def render_cost_model_assumptions(input_model):
         fixed_df,
         hide_index=True,
         key="cost_model.fixed_table",
-        column_config={"Parameter": st.column_config.TextColumn(disabled=True)},
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+        },
         use_container_width=True,
     )
     for year_index in range(5):
@@ -221,8 +237,8 @@ def render_cost_model_assumptions(input_model):
         )
 
     st.markdown("### Variable Costs")
-    type_table = {"Parameter": ["Training", "Travel", "Communication"]}
-    value_table = {"Parameter": ["Training", "Travel", "Communication"]}
+    type_table = {"Parameter": ["Training", "Travel", "Communication"], "Unit": ["Type"] * 3}
+    value_table = {"Parameter": ["Training", "Travel", "Communication"], "Unit": ["EUR / %"] * 3}
     for year_index, col in enumerate(year_columns):
         type_table[col] = [
             cost_state["variable_costs"][year_index]["Training Type"],
@@ -242,6 +258,7 @@ def render_cost_model_assumptions(input_model):
         key="cost_model.variable_type",
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
             "Year 0": st.column_config.SelectboxColumn(options=["EUR", "%"]),
             "Year 1": st.column_config.SelectboxColumn(options=["EUR", "%"]),
             "Year 2": st.column_config.SelectboxColumn(options=["EUR", "%"]),
@@ -254,7 +271,10 @@ def render_cost_model_assumptions(input_model):
         value_df,
         hide_index=True,
         key="cost_model.variable_value",
-        column_config={"Parameter": st.column_config.TextColumn(disabled=True)},
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+        },
         use_container_width=True,
     )
     for year_index in range(5):
@@ -334,4 +354,10 @@ def render_cost_model_assumptions(input_model):
         "Total Operating Costs",
     ]:
         summary_df[col] = summary_df[col].apply(format_currency)
-    st.dataframe(summary_df, use_container_width=True)
+    st.data_editor(
+        summary_df,
+        hide_index=True,
+        key="cost_model.summary",
+        disabled=True,
+        use_container_width=True,
+    )
