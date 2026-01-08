@@ -1,7 +1,7 @@
 def calculate_pnl(input_model):
     """
     Calculate a 5-year plan P&L based strictly on InputModel inputs.
-    Returns a dictionary keyed by year index (0-4).
+    Returns a list of yearly dictionaries with integer year indices.
     """
     planning_horizon_years = 5
 
@@ -101,7 +101,7 @@ def calculate_pnl(input_model):
     # Tax assumptions.
     tax_rate_pct = input_model.tax_and_distributions["tax_rate_pct"].value
 
-    pnl_by_year = {}
+    pnl_by_year = []
 
     reference_volume_eur = 20_000_000
 
@@ -197,15 +197,18 @@ def calculate_pnl(input_model):
         taxes = taxable_income * tax_rate_pct
         net_income = ebit - taxes
 
-        pnl_by_year[f"Year {year_index}"] = {
-            "revenue": revenue,
-            "personnel_costs": total_personnel_costs,
-            "overhead_and_variable_costs": overhead_and_variable_costs,
-            "ebitda": ebitda,
-            "depreciation": depreciation_eur_per_year,
-            "ebit": ebit,
-            "taxes": taxes,
-            "net_income": net_income,
-        }
+        pnl_by_year.append(
+            {
+                "year": year_index,
+                "revenue": revenue,
+                "personnel_costs": total_personnel_costs,
+                "overhead_and_variable_costs": overhead_and_variable_costs,
+                "ebitda": ebitda,
+                "depreciation": depreciation_eur_per_year,
+                "ebit": ebit,
+                "taxes": taxes,
+                "net_income": net_income,
+            }
+        )
 
     return pnl_by_year

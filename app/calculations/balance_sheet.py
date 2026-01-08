@@ -17,18 +17,10 @@ def calculate_balance_sheet(
     # Build a net income lookup from P&L results.
     net_income_by_year = {}
     if pnl_result is not None:
-        if isinstance(pnl_result, dict):
-            for year_label, year_data in pnl_result.items():
-                try:
-                    year_key = int(str(year_label).split()[-1])
-                except (ValueError, IndexError):
-                    year_key = year_label
-                net_income_by_year[year_key] = year_data.get("net_income", 0)
-        else:
-            for year_data in pnl_result:
-                net_income_by_year[year_data.get("year")] = year_data.get(
-                    "net_income", 0
-                )
+        for year_data in pnl_result:
+            net_income_by_year[year_data.get("year")] = year_data.get(
+                "net_income", 0
+            )
 
     debt_by_year = {
         debt_data["year"]: debt_data["outstanding_principal"]

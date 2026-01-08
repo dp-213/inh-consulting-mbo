@@ -14,23 +14,8 @@ def calculate_investment(input_model, cashflow_result, pnl_result=None):
 
     # Estimate exit value from the final year EBIT and exit multiple.
     final_year_ebit = 0
-    if pnl_result is not None:
-        if isinstance(pnl_result, dict):
-            year_key_map = {}
-            for year_label in pnl_result.keys():
-                try:
-                    year_key = int(str(year_label).split()[-1])
-                except (ValueError, IndexError):
-                    year_key = year_label
-                year_key_map[year_key] = year_label
-            if year_key_map:
-                last_year_key = max(year_key_map.keys())
-                final_year_ebit = pnl_result[year_key_map[last_year_key]].get(
-                    "ebit", 0
-                )
-        else:
-            if pnl_result:
-                final_year_ebit = pnl_result[-1].get("ebit", 0)
+    if pnl_result:
+        final_year_ebit = pnl_result[-1].get("ebit", 0)
 
     exit_value = final_year_ebit * exit_multiple
 
