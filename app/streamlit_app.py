@@ -2701,7 +2701,7 @@ def run_app():
             return "—"
         return formatter(value)
 
-    def _build_ai_export_text():
+    def _build_model_snapshot_text():
         scenario = input_model.scenario_selection["selected_scenario"].value
         scenario_key = scenario.lower()
         utilization_by_year = getattr(
@@ -2720,16 +2720,17 @@ def run_app():
         day_rate_growth = input_model.operating_assumptions[
             "day_rate_growth_pct"
         ].value
-        guarantee_y1 = input_model.operating_assumptions[
-            "revenue_guarantee_pct_year_1"
-        ].value
-        guarantee_y2 = input_model.operating_assumptions[
-            "revenue_guarantee_pct_year_2"
-        ].value
-        guarantee_y3 = input_model.operating_assumptions[
-            "revenue_guarantee_pct_year_3"
-        ].value
-
+        guarantees = [
+            input_model.operating_assumptions[
+                "revenue_guarantee_pct_year_1"
+            ].value,
+            input_model.operating_assumptions[
+                "revenue_guarantee_pct_year_2"
+            ].value,
+            input_model.operating_assumptions[
+                "revenue_guarantee_pct_year_3"
+            ].value,
+        ]
         pnl_lines = []
         fcf_lines = []
         dscr_lines = []
@@ -2754,71 +2755,68 @@ def run_app():
             )
 
         text_lines = [
-            "Purpose",
-            "This export is intended for AI model introspection: "
-            "sharing assumptions, requesting changes, and validating outputs.",
-            "",
-            "A. Global setup",
-            f"Scenario: {scenario}",
-            "Currency: EUR",
+            "1) Model Overview",
+            "Model type: Consulting MBO",
             "Planning horizon: 5 years (Year 0–Year 4)",
+            "Scenarios available: Base, Best, Worst",
             "",
-            "B. Operating assumptions",
-            f"Consulting FTE: {_format_value(input_model.operating_assumptions['consulting_fte_start'].value, format_int)}",
-            f"Workdays per year: {_format_value(input_model.operating_assumptions['work_days_per_year'].value, format_int)}",
-            "Utilization per year: "
+            "2) Assumptions",
+            "Revenue drivers:",
+            f"- Consulting FTE: {_format_value(input_model.operating_assumptions['consulting_fte_start'].value, format_int)}",
+            f"- Workdays per Year: {_format_value(input_model.operating_assumptions['work_days_per_year'].value, format_int)}",
+            "- Utilization per year: "
             + ", ".join(
                 f"Year {idx} {_format_value(value, format_pct)}"
                 for idx, value in enumerate(utilization_by_year)
             ),
-            f"Day rate (base + growth): {_format_value(day_rate_base, format_int)} EUR, {_format_value(day_rate_growth, format_pct)} growth",
-            "Revenue guarantees (per year): "
-            f"Y1 {_format_value(guarantee_y1, format_pct)}, "
-            f"Y2 {_format_value(guarantee_y2, format_pct)}, "
-            f"Y3 {_format_value(guarantee_y3, format_pct)}",
-            "",
-            "C. Cost assumptions",
-            f"Consultant base cost: {_format_value(input_model.personnel_cost_assumptions['avg_consultant_base_cost_eur_per_year'].value, format_int)} EUR",
-            f"Backoffice cost (avg salary): {_format_value(input_model.operating_assumptions['avg_backoffice_salary_eur_per_year'].value, format_int)} EUR",
-            "Opex breakdown:",
-            f"- External Advisors: {_format_value(input_model.overhead_and_variable_costs['legal_audit_eur_per_year'].value, format_currency)}",
+            f"- Day Rate (Base): {_format_value(day_rate_base, format_int)} EUR",
+            f"- Day Rate Growth: {_format_value(day_rate_growth, format_pct)}",
+            "Revenue guarantees:",
+            f"- Year 1: {_format_value(guarantees[0], format_pct)}",
+            f"- Year 2: {_format_value(guarantees[1], format_pct)}",
+            f"- Year 3: {_format_value(guarantees[2], format_pct)}",
+            "Personnel costs:",
+            f"- Consultant Base Cost: {_format_value(input_model.personnel_cost_assumptions['avg_consultant_base_cost_eur_per_year'].value, format_int)} EUR",
+            f"- Consultant Bonus: {_format_value(input_model.personnel_cost_assumptions['bonus_pct_of_base'].value, format_pct)}",
+            f"- Backoffice Cost per FTE: {_format_value(input_model.operating_assumptions['avg_backoffice_salary_eur_per_year'].value, format_int)} EUR",
+            "Opex:",
+            f"- External Consulting: {_format_value(input_model.overhead_and_variable_costs['legal_audit_eur_per_year'].value, format_currency)}",
             f"- IT: {_format_value(input_model.overhead_and_variable_costs['it_and_software_eur_per_year'].value, format_currency)}",
             f"- Office: {_format_value(input_model.overhead_and_variable_costs['rent_eur_per_year'].value, format_currency)}",
             f"- Other Services: {_format_value(input_model.overhead_and_variable_costs['other_overhead_eur_per_year'].value, format_currency)}",
+            "Financing assumptions:",
+            f"- Purchase Price: {_format_value(input_model.transaction_and_financing['purchase_price_eur'].value, format_currency)}",
+            f"- Debt Amount: {_format_value(input_model.transaction_and_financing['senior_term_loan_start_eur'].value, format_currency)}",
+            f"- Interest Rate: {_format_value(input_model.transaction_and_financing['senior_interest_rate_pct'].value, format_pct)}",
+            f"- Amortisation Years: {_format_value(input_model.financing_assumptions['amortization_period_years'], format_int)}",
+            f"- Transaction Fees (%): {_format_value(st.session_state.get('valuation.transaction_cost_pct', 0.0), format_pct)}",
+            "Equity & investor assumptions:",
+            f"- Sponsor Equity: {_format_value(st.session_state.get('equity.sponsor_equity_eur'), format_currency)}",
+            f"- Investor Equity: {_format_value(st.session_state.get('equity.investor_equity_eur'), format_currency)}",
+            f"- Investor Exit Year: Year {st.session_state.get('equity.exit_year')}",
+            f"- Exit Multiple: {_format_value(st.session_state.get('equity.exit_multiple'), lambda v: f'{v:.2f}x')}",
+            "- Distribution Rule: Pro-rata",
             "",
-            "D. Financing assumptions",
-            f"Purchase price: {_format_value(input_model.transaction_and_financing['purchase_price_eur'].value, format_currency)}",
-            f"Equity contribution: {_format_value(input_model.transaction_and_financing['equity_contribution_eur'].value, format_currency)}",
-            f"Debt amount: {_format_value(input_model.transaction_and_financing['senior_term_loan_start_eur'].value, format_currency)}",
-            f"Interest rate: {_format_value(input_model.transaction_and_financing['senior_interest_rate_pct'].value, format_pct)}",
-            f"Amortisation: Linear, {_format_value(input_model.financing_assumptions['amortization_period_years'], format_int)} years",
-            f"Minimum DSCR: {_format_value(input_model.financing_assumptions['minimum_dscr'], lambda v: f'{v:.2f}x')}",
+            "3) Calculation Logic (Plain English)",
+            "Revenue build-up: FTE × Workdays × Utilization × Day Rate.",
+            "EBITDA: Revenue minus Personnel Costs and Operating Expenses.",
+            "Cashflow: EBITDA minus Taxes, Working Capital Change, and Capex.",
+            "Debt service: Interest on opening debt plus scheduled repayment.",
+            "Equity cashflows: Investor exits in the exit year; sponsor retains residual equity.",
+            "Exit value: Exit EBITDA × Exit Multiple, less net debt.",
             "",
-            "E. Valuation assumptions",
-            f"Exit multiple: {_format_value(input_model.valuation_assumptions['multiple_valuation']['seller_multiple'].value, lambda v: f'{v:.2f}x')}",
-            f"Discount rate (DCF): {_format_value(input_model.valuation_assumptions['dcf_valuation']['discount_rate_wacc'].value, format_pct)}",
+            "4) KPI Definitions",
+            "EBITDA Margin = EBITDA / Revenue",
+            "DSCR = Operating Cashflow / Debt Service",
+            "IRR = Discount rate where NPV of cashflows = 0",
+            "MOIC = Total proceeds / Invested equity",
             "",
-            "F. Key outputs",
-            "Revenue, EBITDA, Net Income (per year):",
-            *pnl_lines,
-            "Free Cash Flow (per year):",
-            *fcf_lines,
-            "DSCR (per year):",
-            *dscr_lines,
-            f"IRR: {_format_value(investment_result.get('irr'), format_pct)}",
+            "5) Notes",
+            "Distributions: None modeled during the hold period.",
+            "Exit: Investor exits fully at the selected exit year.",
+            "Simplifications: Single debt tranche, no working capital schedule.",
         ]
         return "\n".join(text_lines)
-
-    with st.sidebar:
-        with st.expander("⚙️ Settings", expanded=False):
-            if st.button("Export Model Assumptions (AI)", key="export_ai"):
-                st.session_state["ai_export_text"] = _build_ai_export_text()
-            if st.session_state.get("ai_export_text"):
-                st.text_area(
-                    "Export",
-                    value=st.session_state["ai_export_text"],
-                    height=360,
-                )
 
     if page == "Overview":
         st.header("Overview")
@@ -2957,10 +2955,70 @@ def run_app():
 
     if page == "Settings":
         st.header("Settings")
+        st.write("Model transparency, export, and technical controls")
+
+        st.markdown("### Model Snapshot")
+        if st.button("Copy Full Model Snapshot", key="copy_model_snapshot"):
+            st.session_state["model_snapshot_text"] = _build_model_snapshot_text()
+        if st.session_state.get("model_snapshot_text"):
+            st.text_area(
+                "Snapshot",
+                value=st.session_state["model_snapshot_text"],
+                height=420,
+            )
+
+        st.markdown("### Calculation Logic")
+        st.markdown("**Revenue Logic**")
         st.write(
-            "Model utilities and exports are available in the sidebar "
-            "Settings panel."
+            "Revenue is calculated as consulting FTE multiplied by workdays, "
+            "utilization, and the applicable day rate (including growth)."
         )
+        st.markdown("**Cost Logic**")
+        st.write(
+            "Personnel costs use base salary, bonus, and payroll burden with "
+            "wage inflation. Operating expenses include fixed overhead items."
+        )
+        st.markdown("**Financing Logic**")
+        st.write(
+            "Debt service equals interest on opening debt plus scheduled "
+            "repayment over the amortisation period."
+        )
+        st.markdown("**Equity Logic**")
+        st.write(
+            "Investor exits in the selected year at the exit multiple. "
+            "Sponsor retains residual equity thereafter."
+        )
+
+        st.markdown("### Data Persistence")
+        st.write(
+            "Inputs are stored in Streamlit session_state during the session."
+        )
+        st.write("Values do not persist across a full browser refresh.")
+        st.write("All assumptions are exported to the Excel model.")
+
+        st.markdown("### Export Status")
+        st.write("Excel export: Enabled (Beta)")
+        st.write(
+            "Sheets included: Assumptions, P&L, Cashflow, Balance Sheet, "
+            "Valuation, Financing, Equity"
+        )
+
+        with st.expander("Danger Zone", expanded=False):
+            reset_confirm = st.checkbox(
+                "I understand this will reset model state",
+                key="reset_confirm",
+            )
+            if st.button("Reset Model", disabled=not reset_confirm):
+                st.session_state.clear()
+                st.rerun()
+            if st.button("Reset Scenario", disabled=not reset_confirm):
+                st.session_state["scenario_selection.selected_scenario"] = (
+                    base_model.scenario_selection["selected_scenario"].value
+                )
+                st.rerun()
+            if st.button("Clear Session State", disabled=not reset_confirm):
+                st.session_state.clear()
+                st.rerun()
 
     if page == "Valuation & Purchase Price":
         st.header("Valuation & Purchase Price")
