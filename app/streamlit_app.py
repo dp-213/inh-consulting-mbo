@@ -198,6 +198,323 @@ def render_revenue_model_assumptions(input_model):
         bridge_df[col] = bridge_df[col].apply(format_currency)
     st.dataframe(bridge_df, use_container_width=True)
 
+
+def render_general_assumptions(input_model):
+    # Currently uses the full advanced sheet for simplicity.
+    render_advanced_assumptions(input_model)
+
+
+def render_advanced_assumptions(input_model):
+    st.header("Assumptions")
+    st.write("Master input sheet – all model assumptions in one place")
+
+    scenario_options = ["Base", "Best", "Worst"]
+    scenario_default = input_model.scenario_selection[
+        "selected_scenario"
+    ].value
+    scenario_index = (
+        scenario_options.index(scenario_default)
+        if scenario_default in scenario_options
+        else 0
+    )
+    info_cols = st.columns([1, 1])
+    selected_scenario = info_cols[0].selectbox(
+        "Scenario",
+        scenario_options,
+        index=scenario_index,
+        key="assumptions.scenario",
+    )
+    auto_sync = info_cols[1].toggle(
+        "Auto-apply scenario values",
+        value=st.session_state.get("assumptions.auto_sync", True),
+        key="assumptions.auto_sync",
+    )
+    st.info("Changes here affect all pages instantly.")
+    st.session_state["scenario_selection.selected_scenario"] = (
+        selected_scenario
+    )
+    scenario_key = selected_scenario.lower()
+
+    if auto_sync:
+        util_value = st.session_state.get(
+            f"scenario_parameters.utilization_rate.{scenario_key}",
+            input_model.scenario_parameters["utilization_rate"][
+                scenario_key
+            ].value,
+        )
+        st.session_state["utilization_by_year"] = [util_value] * 5
+        for i in range(5):
+            st.session_state[f"utilization_by_year.{i}"] = util_value
+
+    assumptions_state = st.session_state["assumptions"]
+    revenue_df = pd.DataFrame(assumptions_state["revenue_drivers"])
+    active_label = selected_scenario
+    base_label = "Base (Active)" if active_label == "Base" else "Base"
+    best_label = "Best (Active)" if active_label == "Best" else "Best"
+    worst_label = "Worst (Active)" if active_label == "Worst" else "Worst"
+    revenue_df = revenue_df.rename(
+        columns={"Base": base_label, "Best": best_label, "Worst": worst_label}
+    )
+    st.markdown("### Revenue Drivers")
+    revenue_edit = st.data_editor(
+        revenue_df,
+        hide_index=True,
+        key="assumptions.revenue_drivers",
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+            "Description": st.column_config.TextColumn(disabled=True),
+            base_label: st.column_config.NumberColumn(
+                disabled=auto_sync and active_label != "Base"
+            ),
+            best_label: st.column_config.NumberColumn(
+                disabled=auto_sync and active_label != "Best"
+            ),
+            worst_label: st.column_config.NumberColumn(
+                disabled=auto_sync and active_label != "Worst"
+            ),
+        },
+        use_container_width=True,
+    )
+    revenue_edit = revenue_edit.rename(
+        columns={base_label: "Base", best_label: "Best", worst_label: "Worst"}
+    )
+    assumptions_state["revenue_drivers"] = revenue_edit.to_dict("records")
+    for _, row in revenue_edit.iterrows():
+        param = row["Parameter"]
+        if param == "Utilization (%)":
+            st.session_state["scenario_parameters.utilization_rate.base"] = _clamp_pct(row["Base"])
+            st.session_state["scenario_parameters.utilization_rate.best"] = _clamp_pct(row["Best"])
+            st.session_state["scenario_parameters.utilization_rate.worst"] = _clamp_pct(row["Worst"])
+        elif param == "Day Rate (EUR)":
+            st.session_state["scenario_parameters.day_rate_eur.base"] = _non_negative(row["Base"])
+            st.session_state["scenario_parameters.day_rate_eur.best"] = _non_negative(row["Best"])
+            st.session_state["scenario_parameters.day_rate_eur.worst"] = _non_negative(row["Worst"])
+        elif param == "Consulting FTE":
+            st.session_state["operating_assumptions.consulting_fte_start"] = _non_negative(row["Base"])
+        elif param == "Workdays per Year":
+            st.session_state["operating_assumptions.work_days_per_year"] = _non_negative(row["Base"])
+        elif param == "Day Rate Growth (% p.a.)":
+            st.session_state["operating_assumptions.day_rate_growth_pct"] = _clamp_pct(row["Base"])
+
+    st.markdown("### Revenue Guarantees")
+    guarantee_df = pd.DataFrame(assumptions_state["revenue_guarantees"])
+    guarantee_edit = st.data_editor(
+        guarantee_df,
+        hide_index=True,
+        key="assumptions.revenue_guarantees",
+        column_config={
+            "Year": st.column_config.TextColumn(disabled=True),
+            "Description": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    assumptions_state["revenue_guarantees"] = guarantee_edit.to_dict("records")
+    guarantee_map = {
+        "Year 1": "operating_assumptions.revenue_guarantee_pct_year_1",
+        "Year 2": "operating_assumptions.revenue_guarantee_pct_year_2",
+        "Year 3": "operating_assumptions.revenue_guarantee_pct_year_3",
+    }
+    for _, row in guarantee_edit.iterrows():
+        key = guarantee_map.get(row["Year"])
+        if key:
+            st.session_state[key] = _clamp_pct(row["Guarantee %"])
+
+    st.markdown("### Personnel Costs")
+    personnel_df = pd.DataFrame(assumptions_state["personnel_costs"])
+    personnel_edit = st.data_editor(
+        personnel_df,
+        hide_index=True,
+        key="assumptions.personnel_costs",
+        column_config={
+            "Role": st.column_config.TextColumn(disabled=True),
+            "Cost Type": st.column_config.TextColumn(disabled=True),
+            "Notes": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    assumptions_state["personnel_costs"] = personnel_edit.to_dict("records")
+    for _, row in personnel_edit.iterrows():
+        role = row["Role"]
+        if role == "Consultant Base Salary":
+            st.session_state[
+                "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year"
+            ] = _non_negative(row["Base Value (EUR)"])
+            st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
+        elif role == "Consultant Variable (% Revenue)":
+            st.session_state["personnel_cost_assumptions.bonus_pct_of_base"] = _clamp_pct(row["Base Value (EUR)"])
+        elif role == "Backoffice Cost per FTE":
+            st.session_state[
+                "operating_assumptions.avg_backoffice_salary_eur_per_year"
+            ] = _non_negative(row["Base Value (EUR)"])
+            st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
+        elif role == "Management / MD Cost":
+            st.session_state["personnel_costs.management_md_cost_eur"] = _non_negative(row["Base Value (EUR)"])
+            st.session_state["personnel_costs.management_md_growth_pct"] = _clamp_pct(row["Growth (%)"])
+
+    st.markdown("### Operating Expenses (Opex)")
+    opex_df = pd.DataFrame(assumptions_state["opex"])
+    opex_edit = st.data_editor(
+        opex_df,
+        hide_index=True,
+        key="assumptions.opex",
+        column_config={
+            "Category": st.column_config.TextColumn(disabled=True),
+            "Cost Type": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+            "Notes": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    assumptions_state["opex"] = opex_edit.to_dict("records")
+    for _, row in opex_edit.iterrows():
+        category = row["Category"]
+        if category == "External Consulting":
+            st.session_state["overhead_and_variable_costs.legal_audit_eur_per_year"] = _non_negative(row["Value"])
+        elif category == "IT":
+            st.session_state["overhead_and_variable_costs.it_and_software_eur_per_year"] = _non_negative(row["Value"])
+        elif category == "Office":
+            st.session_state["overhead_and_variable_costs.rent_eur_per_year"] = _non_negative(row["Value"])
+        elif category == "Other Services":
+            st.session_state["overhead_and_variable_costs.other_overhead_eur_per_year"] = _non_negative(row["Value"])
+
+    st.markdown("### Financing Assumptions")
+    financing_df = pd.DataFrame(assumptions_state["financing"])
+    financing_edit = st.data_editor(
+        financing_df,
+        hide_index=True,
+        key="assumptions.financing",
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+            "Notes": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    assumptions_state["financing"] = financing_edit.to_dict("records")
+    for _, row in financing_edit.iterrows():
+        parameter = row["Parameter"]
+        if parameter == "Senior Debt Amount":
+            st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = _non_negative(row["Value"])
+        elif parameter == "Interest Rate":
+            st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _clamp_pct(row["Value"])
+        elif parameter == "Amortisation Years":
+            st.session_state["financing.amortization_period_years"] = int(max(1, row["Value"]))
+        elif parameter == "Transaction Fees (%)":
+            st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
+
+    st.markdown("### Equity & Investor Assumptions")
+    equity_df = pd.DataFrame(assumptions_state["equity"])
+    equity_edit = st.data_editor(
+        equity_df,
+        hide_index=True,
+        key="assumptions.equity",
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+            "Notes": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    assumptions_state["equity"] = equity_edit.to_dict("records")
+    for _, row in equity_edit.iterrows():
+        parameter = row["Parameter"]
+        if parameter == "Sponsor Equity Contribution":
+            st.session_state["equity.sponsor_equity_eur"] = _non_negative(row["Value"])
+        elif parameter == "Investor Equity Contribution":
+            st.session_state["equity.investor_equity_eur"] = _non_negative(row["Value"])
+        elif parameter == "Investor Exit Year":
+            try:
+                exit_val = int(float(row["Value"]))
+            except (TypeError, ValueError):
+                exit_val = _default_equity_assumptions(input_model)["exit_year"]
+            st.session_state["equity.exit_year"] = int(
+                max(3, min(7, exit_val))
+            )
+        elif parameter == "Exit Multiple (x EBITDA)":
+            st.session_state["equity.exit_multiple"] = float(row["Value"])
+
+    st.markdown("### Cashflow Assumptions")
+    cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
+    cashflow_edit = st.data_editor(
+        cashflow_df,
+        hide_index=True,
+        key="assumptions.cashflow",
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+            "Notes": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    assumptions_state["cashflow"] = cashflow_edit.to_dict("records")
+    for _, row in cashflow_edit.iterrows():
+        parameter = row["Parameter"]
+        if parameter == "Tax Cash Rate":
+            st.session_state["cashflow.tax_cash_rate_pct"] = _clamp_pct(row["Value"])
+        elif parameter == "Tax Payment Lag":
+            st.session_state["cashflow.tax_payment_lag_years"] = int(max(0, min(1, row["Value"])))
+        elif parameter == "Capex (% of Revenue)":
+            st.session_state["cashflow.capex_pct_revenue"] = _clamp_pct(row["Value"])
+        elif parameter == "Working Capital (% of Revenue)":
+            st.session_state["cashflow.working_capital_pct_revenue"] = _clamp_pct(row["Value"])
+        elif parameter == "Opening Cash Balance":
+            st.session_state["cashflow.opening_cash_balance_eur"] = _non_negative(row["Value"])
+
+    st.markdown("### Balance Sheet Assumptions")
+    balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
+    balance_edit = st.data_editor(
+        balance_df,
+        hide_index=True,
+        key="assumptions.balance_sheet",
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+            "Notes": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    assumptions_state["balance_sheet"] = balance_edit.to_dict("records")
+    for _, row in balance_edit.iterrows():
+        parameter = row["Parameter"]
+        if parameter == "Opening Equity":
+            st.session_state["balance_sheet.opening_equity_eur"] = _non_negative(row["Value"])
+        elif parameter == "Depreciation Rate":
+            st.session_state["balance_sheet.depreciation_rate_pct"] = _clamp_pct(row["Value"])
+        elif parameter == "Minimum Cash Balance":
+            st.session_state["balance_sheet.minimum_cash_balance_eur"] = _non_negative(row["Value"])
+
+    st.markdown("### Valuation Assumptions")
+    valuation_df = pd.DataFrame(assumptions_state["valuation"])
+    valuation_edit = st.data_editor(
+        valuation_df,
+        hide_index=True,
+        key="assumptions.valuation",
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+            "Notes": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    assumptions_state["valuation"] = valuation_edit.to_dict("records")
+    for _, row in valuation_edit.iterrows():
+        parameter = row["Parameter"]
+        if parameter == "Seller EBIT Multiple":
+            st.session_state["valuation.seller_ebit_multiple"] = float(row["Value"])
+        elif parameter == "Reference Year":
+            st.session_state["valuation.reference_year"] = int(max(0, min(4, row["Value"])))
+        elif parameter == "Discount Rate (WACC)":
+            st.session_state["valuation.buyer_discount_rate"] = _clamp_pct(row["Value"])
+        elif parameter == "Valuation Start Year":
+            st.session_state["valuation.valuation_start_year"] = int(max(0, min(4, row["Value"])))
+        elif parameter == "Debt at Close":
+            st.session_state["valuation.debt_at_close_eur"] = _non_negative(row["Value"])
+        elif parameter == "Transaction Costs (%)":
+            st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
+
+    _apply_assumptions_state()
+
 def format_currency(value):
     if value is None or pd.isna(value):
         return ""
@@ -2324,14 +2641,14 @@ def run_app():
         st.markdown("<div class=\"nav-divider\"></div>", unsafe_allow_html=True)
         st.markdown("<div class=\"nav-section settings\">⚙ SETTINGS</div>", unsafe_allow_html=True)
         st.markdown("<div class=\"nav-settings-block\">", unsafe_allow_html=True)
-        _nav_item("Assumptions (Advanced)")
+        _nav_item("Assumptions")
         _nav_item("Model Settings")
         st.markdown("</div>", unsafe_allow_html=True)
 
         page = st.session_state["current_page"]
         assumptions_state = st.session_state["assumptions"]
 
-        if page == "Assumptions (Advanced)":
+        if page == "Assumptions":
             st.markdown("### Assumptions")
             st.session_state.setdefault(
                 "assumptions.sidebar_section", "Advanced"
@@ -2488,15 +2805,16 @@ def run_app():
             assumptions_state["equity"] = edited_equity.to_dict("records")
             _apply_assumptions_state()
 
-    if page == "Assumptions (Advanced)":
-        st.header("Assumptions (Advanced)")
-        st.write("Master input sheet – all model assumptions in one place")
-        section = st.session_state.get(
-            "assumptions.sidebar_section", "Advanced"
-        )
+    if page == "Assumptions":
+        section = st.session_state.get("assumptions.sidebar_section", "Advanced")
+        if section == "General":
+            render_general_assumptions(input_model)
+            return
         if section == "Revenue Model":
             render_revenue_model_assumptions(input_model)
             return
+        render_advanced_assumptions(input_model)
+        return
 
         scenario_options = ["Base", "Best", "Worst"]
         scenario_default = base_model.scenario_selection[
@@ -3122,8 +3440,8 @@ def run_app():
                 ],
                 "kpis": ["Sponsor IRR", "Investor IRR"],
             },
-            "Assumptions (Advanced)": {
-                "title": "Assumptions (Advanced)",
+            "Assumptions": {
+                "title": "Assumptions",
                 "sections": [
                     "Revenue Drivers",
                     "Revenue Guarantees",
