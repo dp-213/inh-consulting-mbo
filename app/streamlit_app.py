@@ -39,45 +39,25 @@ def render_revenue_model_assumptions(input_model):
     st.header("Revenue Model")
     st.write("Detailed revenue planning (5-year view).")
 
-    revenue_model = input_model.revenue_model
-    year_labels = [f"Year {i}" for i in range(5)]
+    assumptions_state = st.session_state["assumptions"]
+    revenue_state = assumptions_state["revenue_model"]
+    scenario = st.session_state.get("assumptions.scenario", "Base")
 
     st.markdown("### Group Revenue Guarantee (Floor)")
-    reference_df = pd.DataFrame(
-        [
-            {
-                "Parameter": "Reference Revenue (EUR)",
-                "Value": st.session_state.get(
-                    "revenue_model.reference_revenue_eur",
-                    revenue_model["reference_revenue_eur"].value,
-                ),
-            }
-        ]
-    )
+    reference_df = pd.DataFrame(revenue_state["reference"])
     reference_edit = st.data_editor(
         reference_df,
         hide_index=True,
-        key="revenue_model.reference_revenue",
+        key="revenue_model.reference",
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
+            "Description": st.column_config.TextColumn(disabled=True),
         },
         use_container_width=True,
     )
-    reference_revenue = float(reference_edit.loc[0, "Value"])
-    st.session_state["revenue_model.reference_revenue_eur"] = reference_revenue
+    revenue_state["reference"] = reference_edit.to_dict("records")
 
-    guarantee_rows = []
-    for year_index in range(5):
-        guarantee_rows.append(
-            {
-                "Year": f"Year {year_index}",
-                "Guarantee %": st.session_state.get(
-                    f"revenue_model.guarantee_pct_year_{year_index}",
-                    revenue_model[f"guarantee_pct_year_{year_index}"].value,
-                ),
-            }
-        )
-    guarantee_df = pd.DataFrame(guarantee_rows)
+    guarantee_df = pd.DataFrame(revenue_state["guarantees"])
     guarantee_edit = st.data_editor(
         guarantee_df,
         hide_index=True,
@@ -87,43 +67,10 @@ def render_revenue_model_assumptions(input_model):
         },
         use_container_width=True,
     )
-    for year_index in range(5):
-        st.session_state[
-            f"revenue_model.guarantee_pct_year_{year_index}"
-        ] = float(guarantee_edit.loc[year_index, "Guarantee %"])
-
-    guaranteed_revenue_by_year = []
-    for year_index in range(5):
-        guarantee_pct = st.session_state[
-            f"revenue_model.guarantee_pct_year_{year_index}"
-        ]
-        guaranteed_revenue_by_year.append(
-            guarantee_pct * reference_revenue
-        )
-    guaranteed_df = pd.DataFrame(
-        {
-            "Year": year_labels,
-            "Guaranteed Revenue (EUR)": guaranteed_revenue_by_year,
-        }
-    )
-    guaranteed_df["Guaranteed Revenue (EUR)"] = guaranteed_df[
-        "Guaranteed Revenue (EUR)"
-    ].apply(format_currency)
-    st.dataframe(guaranteed_df, use_container_width=True)
+    revenue_state["guarantees"] = guarantee_edit.to_dict("records")
 
     st.markdown("### In-Group Revenue (Upside)")
-    in_group_rows = []
-    for year_index in range(5):
-        in_group_rows.append(
-            {
-                "Year": f"Year {year_index}",
-                "In-Group Revenue (EUR)": st.session_state.get(
-                    f"revenue_model.in_group_revenue_year_{year_index}",
-                    revenue_model[f"in_group_revenue_year_{year_index}"].value,
-                ),
-            }
-        )
-    in_group_df = pd.DataFrame(in_group_rows)
+    in_group_df = pd.DataFrame(revenue_state["in_group"])
     in_group_edit = st.data_editor(
         in_group_df,
         hide_index=True,
@@ -131,26 +78,10 @@ def render_revenue_model_assumptions(input_model):
         column_config={"Year": st.column_config.TextColumn(disabled=True)},
         use_container_width=True,
     )
-    for year_index in range(5):
-        st.session_state[
-            f"revenue_model.in_group_revenue_year_{year_index}"
-        ] = float(in_group_edit.loc[year_index, "In-Group Revenue (EUR)"])
+    revenue_state["in_group"] = in_group_edit.to_dict("records")
 
     st.markdown("### External Revenue")
-    external_rows = []
-    for year_index in range(5):
-        external_rows.append(
-            {
-                "Year": f"Year {year_index}",
-                "External Revenue (EUR)": st.session_state.get(
-                    f"revenue_model.external_revenue_year_{year_index}",
-                    revenue_model[
-                        f"external_revenue_year_{year_index}"
-                    ].value,
-                ),
-            }
-        )
-    external_df = pd.DataFrame(external_rows)
+    external_df = pd.DataFrame(revenue_state["external"])
     external_edit = st.data_editor(
         external_df,
         hide_index=True,
@@ -158,49 +89,48 @@ def render_revenue_model_assumptions(input_model):
         column_config={"Year": st.column_config.TextColumn(disabled=True)},
         use_container_width=True,
     )
-    for year_index in range(5):
-        st.session_state[
-            f"revenue_model.external_revenue_year_{year_index}"
-        ] = float(
-            external_edit.loc[year_index, "External Revenue (EUR)"]
-        )
+    revenue_state["external"] = external_edit.to_dict("records")
 
     st.markdown("### Revenue Bridge")
+    reference_value = _non_negative(revenue_state["reference"][0].get(scenario, 0.0))
     bridge_rows = []
     for year_index in range(5):
-        guarantee_pct = st.session_state[
-            f"revenue_model.guarantee_pct_year_{year_index}"
-        ]
-        in_group = st.session_state[
-            f"revenue_model.in_group_revenue_year_{year_index}"
-        ]
-        external = st.session_state[
-            f"revenue_model.external_revenue_year_{year_index}"
-        ]
-        modeled_revenue = in_group + external
-        guaranteed_revenue = min(
-            modeled_revenue, guarantee_pct * reference_revenue
+        guarantee_pct = _clamp_pct(
+            revenue_state["guarantees"][year_index].get(scenario, 0.0)
         )
-        final_revenue = max(guaranteed_revenue, modeled_revenue)
+        in_group = _non_negative(
+            revenue_state["in_group"][year_index].get(scenario, 0.0)
+        )
+        external = _non_negative(
+            revenue_state["external"][year_index].get(scenario, 0.0)
+        )
+        guaranteed_floor = reference_value * guarantee_pct
+        modeled_total = in_group + external
+        final_total = max(guaranteed_floor, modeled_total)
+        share_guaranteed = (
+            guaranteed_floor / final_total if final_total else 0.0
+        )
         bridge_rows.append(
             {
                 "Year": f"Year {year_index}",
-                "Guaranteed Revenue": guaranteed_revenue,
-                "In-Group Revenue": in_group,
-                "External Revenue": external,
-                "Modeled Revenue": modeled_revenue,
-                "Final Revenue": final_revenue,
+                "Guaranteed Floor": guaranteed_floor,
+                "In-Group": in_group,
+                "External": external,
+                "Modeled Total": modeled_total,
+                "Final Revenue": final_total,
+                "Guaranteed Share %": share_guaranteed,
             }
         )
     bridge_df = pd.DataFrame(bridge_rows)
     for col in [
-        "Guaranteed Revenue",
-        "In-Group Revenue",
-        "External Revenue",
-        "Modeled Revenue",
+        "Guaranteed Floor",
+        "In-Group",
+        "External",
+        "Modeled Total",
         "Final Revenue",
     ]:
         bridge_df[col] = bridge_df[col].apply(format_currency)
+    bridge_df["Guaranteed Share %"] = bridge_df["Guaranteed Share %"].apply(format_pct)
     st.dataframe(bridge_df, use_container_width=True)
 
 
@@ -208,363 +138,120 @@ def render_cost_model_assumptions(input_model):
     st.header("Cost Model")
     st.write("Detailed annual cost planning (5-year view).")
 
-    cost_model = input_model.cost_model
-    year_labels = [f"Year {i}" for i in range(5)]
-    revenue_by_year = getattr(input_model, "revenue_by_year", None)
-    if not isinstance(revenue_by_year, list) or len(revenue_by_year) != 5:
-        revenue_by_year = [0.0] * 5
+    assumptions_state = st.session_state["assumptions"]
+    cost_state = assumptions_state["cost_model"]
+    scenario = st.session_state.get("assumptions.scenario", "Base")
 
-    st.markdown("### Consultant Costs (Revenue-linked)")
-    consultant_rows = []
-    for year_index in range(5):
-        consultant_rows.append(
-            {
-                "Year": f"Year {year_index}",
-                "Consultant FTE": st.session_state.get(
-                    f"cost_model.consultant_fte_year_{year_index}",
-                    cost_model[f"consultant_fte_year_{year_index}"].value,
-                ),
-                "Avg Base Cost (EUR)": st.session_state.get(
-                    f"cost_model.consultant_base_cost_eur_year_{year_index}",
-                    cost_model[
-                        f"consultant_base_cost_eur_year_{year_index}"
-                    ].value,
-                ),
-                "Bonus %": st.session_state.get(
-                    f"cost_model.consultant_bonus_pct_year_{year_index}",
-                    cost_model[
-                        f"consultant_bonus_pct_year_{year_index}"
-                    ].value,
-                ),
-                "Payroll Burden %": st.session_state.get(
-                    f"cost_model.consultant_payroll_pct_year_{year_index}",
-                    cost_model[
-                        f"consultant_payroll_pct_year_{year_index}"
-                    ].value,
-                ),
-                "Loaded Cost per FTE (EUR)": 0.0,
-                "Total Consultant Cost (EUR)": 0.0,
-            }
-        )
-    consultant_df = pd.DataFrame(consultant_rows)
-    consultant_df["Loaded Cost per FTE (EUR)"] = (
-        consultant_df["Avg Base Cost (EUR)"]
-        * (1 + consultant_df["Bonus %"] + consultant_df["Payroll Burden %"])
-    )
-    consultant_df["Total Consultant Cost (EUR)"] = (
-        consultant_df["Consultant FTE"]
-        * consultant_df["Loaded Cost per FTE (EUR)"]
-    )
-    consultant_edit = st.data_editor(
-        consultant_df,
+    st.markdown("### Personnel Costs")
+    personnel_df = pd.DataFrame(cost_state["personnel"])
+    personnel_edit = st.data_editor(
+        personnel_df,
         hide_index=True,
-        key="cost_model.consultant_costs",
-        column_config={
-            "Year": st.column_config.TextColumn(disabled=True),
-            "Loaded Cost per FTE (EUR)": st.column_config.NumberColumn(
-                disabled=True
-            ),
-            "Total Consultant Cost (EUR)": st.column_config.NumberColumn(
-                disabled=True
-            ),
-        },
+        key="cost_model.personnel",
+        column_config={"Year": st.column_config.TextColumn(disabled=True)},
         use_container_width=True,
     )
-    for year_index in range(5):
-        st.session_state[
-            f"cost_model.consultant_fte_year_{year_index}"
-        ] = float(consultant_edit.loc[year_index, "Consultant FTE"])
-        st.session_state[
-            f"cost_model.consultant_base_cost_eur_year_{year_index}"
-        ] = float(consultant_edit.loc[year_index, "Avg Base Cost (EUR)"])
-        st.session_state[
-            f"cost_model.consultant_bonus_pct_year_{year_index}"
-        ] = float(consultant_edit.loc[year_index, "Bonus %"])
-        st.session_state[
-            f"cost_model.consultant_payroll_pct_year_{year_index}"
-        ] = float(consultant_edit.loc[year_index, "Payroll Burden %"])
-
-    st.markdown("### Backoffice Costs")
-    backoffice_rows = []
-    for year_index in range(5):
-        backoffice_rows.append(
-            {
-                "Year": f"Year {year_index}",
-                "Backoffice FTE": st.session_state.get(
-                    f"cost_model.backoffice_fte_year_{year_index}",
-                    cost_model[f"backoffice_fte_year_{year_index}"].value,
-                ),
-                "Avg Salary (EUR)": st.session_state.get(
-                    f"cost_model.backoffice_base_cost_eur_year_{year_index}",
-                    cost_model[
-                        f"backoffice_base_cost_eur_year_{year_index}"
-                    ].value,
-                ),
-                "Payroll Burden %": st.session_state.get(
-                    f"cost_model.backoffice_payroll_pct_year_{year_index}",
-                    cost_model[
-                        f"backoffice_payroll_pct_year_{year_index}"
-                    ].value,
-                ),
-                "Loaded Cost per FTE (EUR)": 0.0,
-                "Total Backoffice Cost (EUR)": 0.0,
-            }
-        )
-    backoffice_df = pd.DataFrame(backoffice_rows)
-    backoffice_df["Loaded Cost per FTE (EUR)"] = (
-        backoffice_df["Avg Salary (EUR)"]
-        * (1 + backoffice_df["Payroll Burden %"])
-    )
-    backoffice_df["Total Backoffice Cost (EUR)"] = (
-        backoffice_df["Backoffice FTE"]
-        * backoffice_df["Loaded Cost per FTE (EUR)"]
-    )
-    backoffice_edit = st.data_editor(
-        backoffice_df,
-        hide_index=True,
-        key="cost_model.backoffice_costs",
-        column_config={
-            "Year": st.column_config.TextColumn(disabled=True),
-            "Loaded Cost per FTE (EUR)": st.column_config.NumberColumn(
-                disabled=True
-            ),
-            "Total Backoffice Cost (EUR)": st.column_config.NumberColumn(
-                disabled=True
-            ),
-        },
-        use_container_width=True,
-    )
-    for year_index in range(5):
-        st.session_state[
-            f"cost_model.backoffice_fte_year_{year_index}"
-        ] = float(backoffice_edit.loc[year_index, "Backoffice FTE"])
-        st.session_state[
-            f"cost_model.backoffice_base_cost_eur_year_{year_index}"
-        ] = float(backoffice_edit.loc[year_index, "Avg Salary (EUR)"])
-        st.session_state[
-            f"cost_model.backoffice_payroll_pct_year_{year_index}"
-        ] = float(backoffice_edit.loc[year_index, "Payroll Burden %"])
+    cost_state["personnel"] = personnel_edit.to_dict("records")
 
     st.markdown("### Fixed Overhead (Absolute Values)")
-    fixed_rows = []
-    for year_index in range(5):
-        fixed_rows.append(
-            {
-                "Year": f"Year {year_index}",
-                "Advisory (EUR)": st.session_state.get(
-                    f"cost_model.fixed_overhead_advisory_year_{year_index}",
-                    cost_model[
-                        f"fixed_overhead_advisory_year_{year_index}"
-                    ].value,
-                ),
-                "Legal (EUR)": st.session_state.get(
-                    f"cost_model.fixed_overhead_legal_year_{year_index}",
-                    cost_model[
-                        f"fixed_overhead_legal_year_{year_index}"
-                    ].value,
-                ),
-                "IT & Software (EUR)": st.session_state.get(
-                    f"cost_model.fixed_overhead_it_year_{year_index}",
-                    cost_model[
-                        f"fixed_overhead_it_year_{year_index}"
-                    ].value,
-                ),
-                "Office Rent (EUR)": st.session_state.get(
-                    f"cost_model.fixed_overhead_office_year_{year_index}",
-                    cost_model[
-                        f"fixed_overhead_office_year_{year_index}"
-                    ].value,
-                ),
-                "Services (EUR)": st.session_state.get(
-                    f"cost_model.fixed_overhead_services_year_{year_index}",
-                    cost_model[
-                        f"fixed_overhead_services_year_{year_index}"
-                    ].value,
-                ),
-                "Total Fixed Overhead (EUR)": 0.0,
-            }
-        )
-    fixed_df = pd.DataFrame(fixed_rows)
-    fixed_df["Total Fixed Overhead (EUR)"] = (
-        fixed_df["Advisory (EUR)"]
-        + fixed_df["Legal (EUR)"]
-        + fixed_df["IT & Software (EUR)"]
-        + fixed_df["Office Rent (EUR)"]
-        + fixed_df["Services (EUR)"]
-    )
+    fixed_df = pd.DataFrame(cost_state["fixed_overhead"])
     fixed_edit = st.data_editor(
         fixed_df,
         hide_index=True,
         key="cost_model.fixed_overhead",
-        column_config={
-            "Year": st.column_config.TextColumn(disabled=True),
-            "Total Fixed Overhead (EUR)": st.column_config.NumberColumn(
-                disabled=True
-            ),
-        },
+        column_config={"Year": st.column_config.TextColumn(disabled=True)},
         use_container_width=True,
     )
-    for year_index in range(5):
-        st.session_state[
-            f"cost_model.fixed_overhead_advisory_year_{year_index}"
-        ] = float(fixed_edit.loc[year_index, "Advisory (EUR)"])
-        st.session_state[
-            f"cost_model.fixed_overhead_legal_year_{year_index}"
-        ] = float(fixed_edit.loc[year_index, "Legal (EUR)"])
-        st.session_state[
-            f"cost_model.fixed_overhead_it_year_{year_index}"
-        ] = float(fixed_edit.loc[year_index, "IT & Software (EUR)"])
-        st.session_state[
-            f"cost_model.fixed_overhead_office_year_{year_index}"
-        ] = float(fixed_edit.loc[year_index, "Office Rent (EUR)"])
-        st.session_state[
-            f"cost_model.fixed_overhead_services_year_{year_index}"
-        ] = float(fixed_edit.loc[year_index, "Services (EUR)"])
+    cost_state["fixed_overhead"] = fixed_edit.to_dict("records")
 
     st.markdown("### Variable Costs")
-    variable_rows = []
-    for year_index in range(5):
-        variable_rows.append(
-            {
-                "Year": f"Year {year_index}",
-                "Training %": st.session_state.get(
-                    f"cost_model.variable_training_pct_year_{year_index}",
-                    cost_model[
-                        f"variable_training_pct_year_{year_index}"
-                    ].value,
-                ),
-                "Training (EUR)": st.session_state.get(
-                    f"cost_model.variable_training_eur_year_{year_index}",
-                    cost_model[
-                        f"variable_training_eur_year_{year_index}"
-                    ].value,
-                ),
-                "Travel %": st.session_state.get(
-                    f"cost_model.variable_travel_pct_year_{year_index}",
-                    cost_model[
-                        f"variable_travel_pct_year_{year_index}"
-                    ].value,
-                ),
-                "Travel (EUR)": st.session_state.get(
-                    f"cost_model.variable_travel_eur_year_{year_index}",
-                    cost_model[
-                        f"variable_travel_eur_year_{year_index}"
-                    ].value,
-                ),
-                "Communication %": st.session_state.get(
-                    f"cost_model.variable_communication_pct_year_{year_index}",
-                    cost_model[
-                        f"variable_communication_pct_year_{year_index}"
-                    ].value,
-                ),
-                "Communication (EUR)": st.session_state.get(
-                    f"cost_model.variable_communication_eur_year_{year_index}",
-                    cost_model[
-                        f"variable_communication_eur_year_{year_index}"
-                    ].value,
-                ),
-                "Total Variable Costs (EUR)": 0.0,
-            }
-        )
-    variable_df = pd.DataFrame(variable_rows)
-    variable_totals = []
-    for year_index in range(5):
-        revenue = revenue_by_year[year_index]
-        training_value = (
-            variable_df.loc[year_index, "Training (EUR)"]
-            if variable_df.loc[year_index, "Training (EUR)"] > 0
-            else revenue * variable_df.loc[year_index, "Training %"]
-        )
-        travel_value = (
-            variable_df.loc[year_index, "Travel (EUR)"]
-            if variable_df.loc[year_index, "Travel (EUR)"] > 0
-            else revenue * variable_df.loc[year_index, "Travel %"]
-        )
-        communication_value = (
-            variable_df.loc[year_index, "Communication (EUR)"]
-            if variable_df.loc[year_index, "Communication (EUR)"] > 0
-            else revenue * variable_df.loc[year_index, "Communication %"]
-        )
-        total_variable = training_value + travel_value + communication_value
-        variable_totals.append(total_variable)
-    variable_df["Total Variable Costs (EUR)"] = variable_totals
+    variable_df = pd.DataFrame(cost_state["variable_costs"])
     variable_edit = st.data_editor(
         variable_df,
         hide_index=True,
         key="cost_model.variable_costs",
         column_config={
             "Year": st.column_config.TextColumn(disabled=True),
-            "Total Variable Costs (EUR)": st.column_config.NumberColumn(
-                disabled=True
+            "Training Type": st.column_config.SelectboxColumn(
+                options=["EUR", "%"]
+            ),
+            "Travel Type": st.column_config.SelectboxColumn(
+                options=["EUR", "%"]
+            ),
+            "Communication Type": st.column_config.SelectboxColumn(
+                options=["EUR", "%"]
             ),
         },
         use_container_width=True,
     )
-    for year_index in range(5):
-        st.session_state[
-            f"cost_model.variable_training_pct_year_{year_index}"
-        ] = float(variable_edit.loc[year_index, "Training %"])
-        st.session_state[
-            f"cost_model.variable_training_eur_year_{year_index}"
-        ] = float(variable_edit.loc[year_index, "Training (EUR)"])
-        st.session_state[
-            f"cost_model.variable_travel_pct_year_{year_index}"
-        ] = float(variable_edit.loc[year_index, "Travel %"])
-        st.session_state[
-            f"cost_model.variable_travel_eur_year_{year_index}"
-        ] = float(variable_edit.loc[year_index, "Travel (EUR)"])
-        st.session_state[
-            f"cost_model.variable_communication_pct_year_{year_index}"
-        ] = float(variable_edit.loc[year_index, "Communication %"])
-        st.session_state[
-            f"cost_model.variable_communication_eur_year_{year_index}"
-        ] = float(variable_edit.loc[year_index, "Communication (EUR)"])
+    cost_state["variable_costs"] = variable_edit.to_dict("records")
 
     st.markdown("### Cost Summary (Read-only)")
+    revenue_final_by_year, _ = _build_revenue_model_outputs(
+        assumptions_state, scenario
+    )
     summary_rows = []
     for year_index in range(5):
-        consultant_total = float(
-            consultant_df.loc[year_index, "Total Consultant Cost (EUR)"]
+        personnel_row = cost_state["personnel"][year_index]
+        fixed_row = cost_state["fixed_overhead"][year_index]
+        variable_row = cost_state["variable_costs"][year_index]
+
+        consultant_total = (
+            _non_negative(personnel_row["Consultant FTE"])
+            * _non_negative(personnel_row["Consultant Loaded Cost (EUR)"])
         )
-        management_cost = st.session_state.get(
-            "personnel_costs.management_md_cost_eur", 0.0
+        backoffice_total = (
+            _non_negative(personnel_row["Backoffice FTE"])
+            * _non_negative(personnel_row["Backoffice Loaded Cost (EUR)"])
         )
-        management_growth = st.session_state.get(
-            "personnel_costs.management_md_growth_pct", 0.0
+        management_total = _non_negative(
+            personnel_row["Management Cost (EUR)"]
         )
-        management_total = management_cost * (
-            (1 + management_growth) ** year_index
+        personnel_total = consultant_total + backoffice_total + management_total
+
+        fixed_total = sum(
+            _non_negative(fixed_row[col])
+            for col in [
+                "Advisory",
+                "Legal",
+                "IT & Software",
+                "Office Rent",
+                "Services",
+                "Other Services",
+            ]
         )
-        backoffice_total = float(
-            backoffice_df.loc[year_index, "Total Backoffice Cost (EUR)"]
-        )
-        fixed_total = float(
-            fixed_df.loc[year_index, "Total Fixed Overhead (EUR)"]
-        )
-        variable_total = float(variable_df.loc[year_index, "Total Variable Costs (EUR)"])
-        total_operating = (
-            consultant_total
-            + management_total
-            + backoffice_total
-            + fixed_total
-            + variable_total
-        )
+
+        revenue = revenue_final_by_year[year_index]
+        variable_total = 0.0
+        for prefix in ["Training", "Travel", "Communication"]:
+            cost_type = variable_row[f"{prefix} Type"]
+            value = _non_negative(variable_row[f"{prefix} Value"])
+            if cost_type == "%":
+                variable_total += revenue * value
+            else:
+                variable_total += value
+
+        total_operating = personnel_total + fixed_total + variable_total
         summary_rows.append(
             {
                 "Year": f"Year {year_index}",
-                "Consultant Costs": consultant_total + management_total,
-                "Backoffice Costs": backoffice_total,
-                "Fixed Overhead": fixed_total,
-                "Variable Costs": variable_total,
+                "Consultant": consultant_total,
+                "Backoffice": backoffice_total,
+                "Management": management_total,
+                "Total Personnel": personnel_total,
+                "Fixed OH": fixed_total,
+                "Variable": variable_total,
                 "Total Operating Costs": total_operating,
             }
         )
     summary_df = pd.DataFrame(summary_rows)
     for col in [
-        "Consultant Costs",
-        "Backoffice Costs",
-        "Fixed Overhead",
-        "Variable Costs",
+        "Consultant",
+        "Backoffice",
+        "Management",
+        "Total Personnel",
+        "Fixed OH",
+        "Variable",
         "Total Operating Costs",
     ]:
         summary_df[col] = summary_df[col].apply(format_currency)
@@ -572,8 +259,9 @@ def render_cost_model_assumptions(input_model):
 
 
 def render_general_assumptions(input_model):
-    # Currently uses the full advanced sheet for simplicity.
-    render_advanced_assumptions(input_model)
+    st.header("Assumptions")
+    st.write("Master input sheet – all model assumptions in one place")
+    st.info("Scenario selection controls which Revenue Model inputs are active.")
 
 
 def render_advanced_assumptions(input_model):
@@ -590,175 +278,7 @@ def render_advanced_assumptions(input_model):
     st.header("Assumptions")
     st.write("Master input sheet – all model assumptions in one place")
 
-    scenario_options = ["Base", "Best", "Worst"]
-    scenario_default = input_model.scenario_selection[
-        "selected_scenario"
-    ].value
-    scenario_index = (
-        scenario_options.index(scenario_default)
-        if scenario_default in scenario_options
-        else 0
-    )
-    info_cols = st.columns([1, 1])
-    selected_scenario = info_cols[0].selectbox(
-        "Scenario",
-        scenario_options,
-        index=scenario_index,
-        key="assumptions.scenario",
-    )
-    auto_sync = info_cols[1].toggle(
-        "Auto-apply scenario values",
-        value=st.session_state.get("assumptions.auto_sync", True),
-        key="assumptions.auto_sync",
-    )
-    st.info("Changes here affect all pages instantly.")
-    st.session_state["scenario_selection.selected_scenario"] = (
-        selected_scenario
-    )
-    scenario_key = selected_scenario.lower()
-
-    if auto_sync:
-        util_value = st.session_state.get(
-            f"scenario_parameters.utilization_rate.{scenario_key}",
-            input_model.scenario_parameters["utilization_rate"][
-                scenario_key
-            ].value,
-        )
-        st.session_state["utilization_by_year"] = [util_value] * 5
-        for i in range(5):
-            st.session_state[f"utilization_by_year.{i}"] = util_value
-
     assumptions_state = st.session_state["assumptions"]
-    revenue_df = pd.DataFrame(assumptions_state["revenue_drivers"])
-    active_label = selected_scenario
-    base_label = "Base (Active)" if active_label == "Base" else "Base"
-    best_label = "Best (Active)" if active_label == "Best" else "Best"
-    worst_label = "Worst (Active)" if active_label == "Worst" else "Worst"
-    revenue_df = revenue_df.rename(
-        columns={"Base": base_label, "Best": best_label, "Worst": worst_label}
-    )
-    st.markdown("### Revenue Drivers")
-    revenue_edit = st.data_editor(
-        revenue_df,
-        hide_index=True,
-        key="assumptions.revenue_drivers",
-        column_config={
-            "Parameter": st.column_config.TextColumn(disabled=True),
-            "Unit": st.column_config.TextColumn(disabled=True),
-            "Description": st.column_config.TextColumn(disabled=True),
-            base_label: st.column_config.NumberColumn(
-                disabled=auto_sync and active_label != "Base"
-            ),
-            best_label: st.column_config.NumberColumn(
-                disabled=auto_sync and active_label != "Best"
-            ),
-            worst_label: st.column_config.NumberColumn(
-                disabled=auto_sync and active_label != "Worst"
-            ),
-        },
-        use_container_width=True,
-    )
-    revenue_edit = revenue_edit.rename(
-        columns={base_label: "Base", best_label: "Best", worst_label: "Worst"}
-    )
-    assumptions_state["revenue_drivers"] = revenue_edit.to_dict("records")
-    for _, row in revenue_edit.iterrows():
-        param = row["Parameter"]
-        if param == "Utilization (%)":
-            st.session_state["scenario_parameters.utilization_rate.base"] = _local_clamp_pct(row["Base"])
-            st.session_state["scenario_parameters.utilization_rate.best"] = _local_clamp_pct(row["Best"])
-            st.session_state["scenario_parameters.utilization_rate.worst"] = _local_clamp_pct(row["Worst"])
-        elif param == "Day Rate (EUR)":
-            st.session_state["scenario_parameters.day_rate_eur.base"] = _local_non_negative(row["Base"])
-            st.session_state["scenario_parameters.day_rate_eur.best"] = _local_non_negative(row["Best"])
-            st.session_state["scenario_parameters.day_rate_eur.worst"] = _local_non_negative(row["Worst"])
-        elif param == "Consulting FTE":
-            st.session_state["operating_assumptions.consulting_fte_start"] = _local_non_negative(row["Base"])
-        elif param == "Workdays per Year":
-            st.session_state["operating_assumptions.work_days_per_year"] = _local_non_negative(row["Base"])
-        elif param == "Day Rate Growth (% p.a.)":
-            st.session_state["operating_assumptions.day_rate_growth_pct"] = _local_clamp_pct(row["Base"])
-
-    st.markdown("### Revenue Guarantees")
-    guarantee_df = pd.DataFrame(assumptions_state["revenue_guarantees"])
-    guarantee_edit = st.data_editor(
-        guarantee_df,
-        hide_index=True,
-        key="assumptions.revenue_guarantees",
-        column_config={
-            "Year": st.column_config.TextColumn(disabled=True),
-            "Description": st.column_config.TextColumn(disabled=True),
-        },
-        use_container_width=True,
-    )
-    assumptions_state["revenue_guarantees"] = guarantee_edit.to_dict("records")
-    guarantee_map = {
-        "Year 1": "operating_assumptions.revenue_guarantee_pct_year_1",
-        "Year 2": "operating_assumptions.revenue_guarantee_pct_year_2",
-        "Year 3": "operating_assumptions.revenue_guarantee_pct_year_3",
-    }
-    for _, row in guarantee_edit.iterrows():
-        key = guarantee_map.get(row["Year"])
-        if key:
-            st.session_state[key] = _local_clamp_pct(row["Guarantee %"])
-
-    st.markdown("### Personnel Costs")
-    personnel_df = pd.DataFrame(assumptions_state["personnel_costs"])
-    personnel_edit = st.data_editor(
-        personnel_df,
-        hide_index=True,
-        key="assumptions.personnel_costs",
-        column_config={
-            "Role": st.column_config.TextColumn(disabled=True),
-            "Cost Type": st.column_config.TextColumn(disabled=True),
-            "Notes": st.column_config.TextColumn(disabled=True),
-        },
-        use_container_width=True,
-    )
-    assumptions_state["personnel_costs"] = personnel_edit.to_dict("records")
-    for _, row in personnel_edit.iterrows():
-        role = row["Role"]
-        if role == "Consultant Base Salary":
-            st.session_state[
-                "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year"
-            ] = _local_non_negative(row["Base Value (EUR)"])
-            st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _local_clamp_pct(row["Growth (%)"])
-        elif role == "Consultant Variable (% Revenue)":
-            st.session_state["personnel_cost_assumptions.bonus_pct_of_base"] = _local_clamp_pct(row["Base Value (EUR)"])
-        elif role == "Backoffice Cost per FTE":
-            st.session_state[
-                "operating_assumptions.avg_backoffice_salary_eur_per_year"
-            ] = _local_non_negative(row["Base Value (EUR)"])
-            st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _local_clamp_pct(row["Growth (%)"])
-        elif role == "Management / MD Cost":
-            st.session_state["personnel_costs.management_md_cost_eur"] = _local_non_negative(row["Base Value (EUR)"])
-            st.session_state["personnel_costs.management_md_growth_pct"] = _local_clamp_pct(row["Growth (%)"])
-
-    st.markdown("### Operating Expenses (Opex)")
-    opex_df = pd.DataFrame(assumptions_state["opex"])
-    opex_edit = st.data_editor(
-        opex_df,
-        hide_index=True,
-        key="assumptions.opex",
-        column_config={
-            "Category": st.column_config.TextColumn(disabled=True),
-            "Cost Type": st.column_config.TextColumn(disabled=True),
-            "Unit": st.column_config.TextColumn(disabled=True),
-            "Notes": st.column_config.TextColumn(disabled=True),
-        },
-        use_container_width=True,
-    )
-    assumptions_state["opex"] = opex_edit.to_dict("records")
-    for _, row in opex_edit.iterrows():
-        category = row["Category"]
-        if category == "External Consulting":
-            st.session_state["overhead_and_variable_costs.legal_audit_eur_per_year"] = _local_non_negative(row["Value"])
-        elif category == "IT":
-            st.session_state["overhead_and_variable_costs.it_and_software_eur_per_year"] = _local_non_negative(row["Value"])
-        elif category == "Office":
-            st.session_state["overhead_and_variable_costs.rent_eur_per_year"] = _local_non_negative(row["Value"])
-        elif category == "Other Services":
-            st.session_state["overhead_and_variable_costs.other_overhead_eur_per_year"] = _local_non_negative(row["Value"])
 
     st.markdown("### Financing Assumptions")
     financing_df = pd.DataFrame(assumptions_state["financing"])
@@ -896,6 +416,97 @@ def render_advanced_assumptions(input_model):
             st.session_state["valuation.transaction_cost_pct"] = _local_clamp_pct(row["Value"])
 
     _apply_assumptions_state()
+
+def _build_revenue_model_outputs(assumptions_state, scenario):
+    revenue_state = assumptions_state["revenue_model"]
+    reference_value = _non_negative(revenue_state["reference"][0].get(scenario, 0.0))
+    revenue_final_by_year = []
+    components_by_year = []
+    for year_index in range(5):
+        guarantee_pct = _clamp_pct(
+            revenue_state["guarantees"][year_index].get(scenario, 0.0)
+        )
+        in_group = _non_negative(
+            revenue_state["in_group"][year_index].get(scenario, 0.0)
+        )
+        external = _non_negative(
+            revenue_state["external"][year_index].get(scenario, 0.0)
+        )
+        guaranteed_floor = reference_value * guarantee_pct
+        modeled_total = in_group + external
+        final_total = max(guaranteed_floor, modeled_total)
+        share_guaranteed = (
+            guaranteed_floor / final_total if final_total else 0.0
+        )
+        revenue_final_by_year.append(final_total)
+        components_by_year.append(
+            {
+                "guaranteed_floor": guaranteed_floor,
+                "modeled_in_group": in_group,
+                "modeled_external": external,
+                "modeled_total": modeled_total,
+                "final_total": final_total,
+                "share_guaranteed": share_guaranteed,
+            }
+        )
+    return revenue_final_by_year, components_by_year
+
+
+def _build_cost_model_outputs(assumptions_state, revenue_final_by_year):
+    cost_state = assumptions_state["cost_model"]
+    cost_totals_by_year = []
+    for year_index in range(5):
+        personnel_row = cost_state["personnel"][year_index]
+        fixed_row = cost_state["fixed_overhead"][year_index]
+        variable_row = cost_state["variable_costs"][year_index]
+
+        consultant_total = (
+            _non_negative(personnel_row["Consultant FTE"])
+            * _non_negative(personnel_row["Consultant Loaded Cost (EUR)"])
+        )
+        backoffice_total = (
+            _non_negative(personnel_row["Backoffice FTE"])
+            * _non_negative(personnel_row["Backoffice Loaded Cost (EUR)"])
+        )
+        management_total = _non_negative(
+            personnel_row["Management Cost (EUR)"]
+        )
+        personnel_total = consultant_total + backoffice_total + management_total
+
+        fixed_total = sum(
+            _non_negative(fixed_row[col])
+            for col in [
+                "Advisory",
+                "Legal",
+                "IT & Software",
+                "Office Rent",
+                "Services",
+                "Other Services",
+            ]
+        )
+
+        revenue = revenue_final_by_year[year_index]
+        variable_total = 0.0
+        for prefix in ["Training", "Travel", "Communication"]:
+            cost_type = variable_row[f"{prefix} Type"]
+            value = _non_negative(variable_row[f"{prefix} Value"])
+            if cost_type == "%":
+                variable_total += revenue * value
+            else:
+                variable_total += value
+
+        overhead_total = fixed_total + variable_total
+        cost_totals_by_year.append(
+            {
+                "consultant_costs": consultant_total,
+                "backoffice_costs": backoffice_total,
+                "management_costs": management_total,
+                "personnel_costs": personnel_total,
+                "overhead_and_variable_costs": overhead_total,
+                "total_operating_costs": personnel_total + overhead_total,
+            }
+        )
+    return cost_totals_by_year
 
 def format_currency(value):
     if value is None or pd.isna(value):
@@ -1296,7 +907,6 @@ def _render_pnl_html(pnl_statement, section_rows, bold_rows):
                     "EBIT Margin",
                     "Personnel Cost Ratio",
                     "Guaranteed Revenue %",
-                    "Non-Guaranteed Revenue %",
                     "Net Margin",
                     "Opex Ratio",
                 }:
@@ -1696,8 +1306,6 @@ def _build_pnl_excel(input_model):
 
         line_items = [
             "Revenue",
-            "Guaranteed Revenue",
-            "Non-Guaranteed Revenue",
             "Total Revenue",
             "Personnel Costs",
             "Consultant Compensation",
@@ -1738,10 +1346,6 @@ def _build_pnl_excel(input_model):
                 guarantee_pct = assumption_cells["Guarantee % Year 3"]
 
             total_revenue = f"={fte}*{workdays}*{utilization}*{day_rate}"
-            # Guarantees classify revenue only; total revenue stays operational.
-            guaranteed = f"=MIN({col}5,{guarantee_pct}*{reference_volume_cell})"
-            non_guaranteed = f"={col}5-{col}3"
-
             consultant_cost = (
                 f"={fte}*{assumption_cells['Consultant Base Cost (EUR)']}*"
                 f"(1+{assumption_cells['Bonus %']}+{assumption_cells['Payroll Burden %']})*"
@@ -1754,41 +1358,39 @@ def _build_pnl_excel(input_model):
                 f"(1+{assumption_cells['Wage Inflation %']})^{year_index}"
             )
             management_cost = "=0"
-            total_personnel = f"={col}7+{col}8+{col}9"
+            total_personnel = f"={col}5+{col}6+{col}7"
 
             external_advisors = f"={assumption_cells['External Advisors (EUR)']}*(1+{assumption_cells['Overhead Inflation %']})^{year_index}"
             it_cost = f"={assumption_cells['IT (EUR)']}*(1+{assumption_cells['Overhead Inflation %']})^{year_index}"
             office_cost = f"={assumption_cells['Office (EUR)']}*(1+{assumption_cells['Overhead Inflation %']})^{year_index}"
             other_services = f"=({assumption_cells['Insurance (EUR)']}+{assumption_cells['Other Services (EUR)']})*(1+{assumption_cells['Overhead Inflation %']})^{year_index}"
-            total_opex = f"={col}12+{col}13+{col}14+{col}15"
+            total_opex = f"={col}10+{col}11+{col}12+{col}13"
 
-            ebitda = f"={col}5-{col}10-{col}16"
+            ebitda = f"={col}3-{col}8-{col}14"
             depreciation = f"={assumption_cells['Depreciation (EUR)']}"
-            ebit = f"={col}17-{col}18"
+            ebit = f"={col}15-{col}16"
             interest = f"={assumption_cells['Debt Amount (EUR)']}*{assumption_cells['Interest Rate %']}"
-            ebt = f"={col}19-{col}20"
-            taxes = f"=MAX({col}21,0)*{assumption_cells['Tax Rate %']}"
-            net_income = f"={col}21-{col}22"
+            ebt = f"={col}17-{col}18"
+            taxes = f"=MAX({col}19,0)*{assumption_cells['Tax Rate %']}"
+            net_income = f"={col}19-{col}20"
 
-            ws_pnl[f"{col}3"] = guaranteed
-            ws_pnl[f"{col}4"] = non_guaranteed
-            ws_pnl[f"{col}5"] = total_revenue
-            ws_pnl[f"{col}7"] = consultant_cost
-            ws_pnl[f"{col}8"] = backoffice_cost
-            ws_pnl[f"{col}9"] = management_cost
-            ws_pnl[f"{col}10"] = total_personnel
-            ws_pnl[f"{col}12"] = external_advisors
-            ws_pnl[f"{col}13"] = it_cost
-            ws_pnl[f"{col}14"] = office_cost
-            ws_pnl[f"{col}15"] = other_services
-            ws_pnl[f"{col}16"] = total_opex
-            ws_pnl[f"{col}17"] = ebitda
-            ws_pnl[f"{col}18"] = depreciation
-            ws_pnl[f"{col}19"] = ebit
-            ws_pnl[f"{col}20"] = interest
-            ws_pnl[f"{col}21"] = ebt
-            ws_pnl[f"{col}22"] = taxes
-            ws_pnl[f"{col}23"] = net_income
+            ws_pnl[f"{col}3"] = total_revenue
+            ws_pnl[f"{col}5"] = consultant_cost
+            ws_pnl[f"{col}6"] = backoffice_cost
+            ws_pnl[f"{col}7"] = management_cost
+            ws_pnl[f"{col}8"] = total_personnel
+            ws_pnl[f"{col}10"] = external_advisors
+            ws_pnl[f"{col}11"] = it_cost
+            ws_pnl[f"{col}12"] = office_cost
+            ws_pnl[f"{col}13"] = other_services
+            ws_pnl[f"{col}14"] = total_opex
+            ws_pnl[f"{col}15"] = ebitda
+            ws_pnl[f"{col}16"] = depreciation
+            ws_pnl[f"{col}17"] = ebit
+            ws_pnl[f"{col}18"] = interest
+            ws_pnl[f"{col}19"] = ebt
+            ws_pnl[f"{col}20"] = taxes
+            ws_pnl[f"{col}21"] = net_income
 
         ws_kpi["A1"] = "KPI"
         for idx, header in enumerate(year_headers, start=2):
@@ -1801,7 +1403,6 @@ def _build_pnl_excel(input_model):
             "Personnel Cost Ratio",
             "Opex Ratio",
             "Net Margin",
-            "Guaranteed Revenue %",
         ]
         for row_idx, kpi in enumerate(kpis, start=2):
             ws_kpi.cell(row=row_idx, column=1, value=kpi)
@@ -1809,13 +1410,12 @@ def _build_pnl_excel(input_model):
         for year_index in range(5):
             col = year_col(2 + year_index)
             fte = f"({assumption_cells['Consulting FTE']}*(1+{assumption_cells['FTE Growth %']})^{year_index})"
-            ws_kpi[f"{col}2"] = f"='P&L'!{col}5/{fte}"
-            ws_kpi[f"{col}3"] = f"='P&L'!{col}17/'P&L'!{col}5"
-            ws_kpi[f"{col}4"] = f"='P&L'!{col}19/'P&L'!{col}5"
-            ws_kpi[f"{col}5"] = f"='P&L'!{col}10/'P&L'!{col}5"
-            ws_kpi[f"{col}6"] = f"='P&L'!{col}16/'P&L'!{col}5"
-            ws_kpi[f"{col}7"] = f"='P&L'!{col}23/'P&L'!{col}5"
-            ws_kpi[f"{col}8"] = f"='P&L'!{col}3/'P&L'!{col}5"
+            ws_kpi[f"{col}2"] = f"='P&L'!{col}3/{fte}"
+            ws_kpi[f"{col}3"] = f"='P&L'!{col}15/'P&L'!{col}3"
+            ws_kpi[f"{col}4"] = f"='P&L'!{col}17/'P&L'!{col}3"
+            ws_kpi[f"{col}5"] = f"='P&L'!{col}8/'P&L'!{col}3"
+            ws_kpi[f"{col}6"] = f"='P&L'!{col}14/'P&L'!{col}3"
+            ws_kpi[f"{col}7"] = f"='P&L'!{col}21/'P&L'!{col}3"
 
         ws_cashflow["A1"] = "Cashflow Assumptions"
         cashflow_assumption_rows = [
@@ -2614,7 +2214,6 @@ def _build_pnl_excel(input_model):
 
 def run_app():
     st.title("Financial Model")
-    st.warning("DEBUG: ACTIVE ENTRY-POINT")
     st.markdown(
         """
         <style>
@@ -2697,54 +2296,123 @@ def run_app():
         return max(0.0, float(value))
 
     def _seed_assumptions_state():
+        default_reference = base_model.revenue_model["reference_revenue_eur"].value
+        revenue_reference_rows = [
+            {
+                "Parameter": "Reference Revenue (EUR)",
+                "Base": default_reference,
+                "Best": default_reference,
+                "Worst": default_reference,
+                "Description": "Reference revenue used for the guarantee floor.",
+            }
+        ]
+        revenue_guarantees = []
+        revenue_in_group = []
+        revenue_external = []
+        for year_index in range(5):
+            year_label = f"Year {year_index}"
+            guarantee_value = base_model.revenue_model[
+                f"guarantee_pct_year_{year_index}"
+            ].value
+            in_group_value = base_model.revenue_model[
+                f"in_group_revenue_year_{year_index}"
+            ].value
+            external_value = base_model.revenue_model[
+                f"external_revenue_year_{year_index}"
+            ].value
+            revenue_guarantees.append(
+                {
+                    "Year": year_label,
+                    "Base": guarantee_value,
+                    "Best": guarantee_value,
+                    "Worst": guarantee_value,
+                }
+            )
+            revenue_in_group.append(
+                {
+                    "Year": year_label,
+                    "Base": in_group_value,
+                    "Best": in_group_value,
+                    "Worst": in_group_value,
+                }
+            )
+            revenue_external.append(
+                {
+                    "Year": year_label,
+                    "Base": external_value,
+                    "Best": external_value,
+                    "Worst": external_value,
+                }
+            )
+
+        cost_personnel_rows = []
+        cost_fixed_rows = []
+        cost_variable_rows = []
+        for year_index in range(5):
+            year_label = f"Year {year_index}"
+            cost_personnel_rows.append(
+                {
+                    "Year": year_label,
+                    "Consultant FTE": base_model.cost_model[
+                        f"consultant_fte_year_{year_index}"
+                    ].value,
+                    "Consultant Loaded Cost (EUR)": base_model.cost_model[
+                        f"consultant_base_cost_eur_year_{year_index}"
+                    ].value,
+                    "Backoffice FTE": base_model.cost_model[
+                        f"backoffice_fte_year_{year_index}"
+                    ].value,
+                    "Backoffice Loaded Cost (EUR)": base_model.cost_model[
+                        f"backoffice_base_cost_eur_year_{year_index}"
+                    ].value,
+                    "Management Cost (EUR)": 1200000,
+                }
+            )
+            cost_fixed_rows.append(
+                {
+                    "Year": year_label,
+                    "Advisory": base_model.cost_model[
+                        f"fixed_overhead_advisory_year_{year_index}"
+                    ].value,
+                    "Legal": base_model.cost_model[
+                        f"fixed_overhead_legal_year_{year_index}"
+                    ].value,
+                    "IT & Software": base_model.cost_model[
+                        f"fixed_overhead_it_year_{year_index}"
+                    ].value,
+                    "Office Rent": base_model.cost_model[
+                        f"fixed_overhead_office_year_{year_index}"
+                    ].value,
+                    "Services": base_model.cost_model[
+                        f"fixed_overhead_services_year_{year_index}"
+                    ].value,
+                    "Other Services": 0.0,
+                }
+            )
+            cost_variable_rows.append(
+                {
+                    "Year": year_label,
+                    "Training Type": "EUR",
+                    "Training Value": 0.0,
+                    "Travel Type": "EUR",
+                    "Travel Value": 0.0,
+                    "Communication Type": "EUR",
+                    "Communication Value": 0.0,
+                }
+            )
+
         return {
-            "revenue_drivers": [
-                {
-                    "Parameter": "Consulting FTE",
-                    "Unit": "FTE",
-                    "Base": base_model.operating_assumptions["consulting_fte_start"].value,
-                    "Best": base_model.operating_assumptions["consulting_fte_start"].value,
-                    "Worst": base_model.operating_assumptions["consulting_fte_start"].value,
-                    "Description": "Starting consulting headcount.",
-                },
-                {
-                    "Parameter": "Workdays per Year",
-                    "Unit": "Days",
-                    "Base": base_model.operating_assumptions["work_days_per_year"].value,
-                    "Best": base_model.operating_assumptions["work_days_per_year"].value,
-                    "Worst": base_model.operating_assumptions["work_days_per_year"].value,
-                    "Description": "Standard workdays per consultant.",
-                },
-                {
-                    "Parameter": "Utilization (%)",
-                    "Unit": "%",
-                    "Base": base_model.scenario_parameters["utilization_rate"]["base"].value,
-                    "Best": base_model.scenario_parameters["utilization_rate"]["best"].value,
-                    "Worst": base_model.scenario_parameters["utilization_rate"]["worst"].value,
-                    "Description": "Billable utilization rate.",
-                },
-                {
-                    "Parameter": "Day Rate (EUR)",
-                    "Unit": "EUR",
-                    "Base": base_model.scenario_parameters["day_rate_eur"]["base"].value,
-                    "Best": base_model.scenario_parameters["day_rate_eur"]["best"].value,
-                    "Worst": base_model.scenario_parameters["day_rate_eur"]["worst"].value,
-                    "Description": "Base daily billing rate.",
-                },
-                {
-                    "Parameter": "Day Rate Growth (% p.a.)",
-                    "Unit": "%",
-                    "Base": base_model.operating_assumptions["day_rate_growth_pct"].value,
-                    "Best": base_model.operating_assumptions["day_rate_growth_pct"].value,
-                    "Worst": base_model.operating_assumptions["day_rate_growth_pct"].value,
-                    "Description": "Annual pricing growth.",
-                },
-            ],
-            "revenue_guarantees": [
-                {"Year": "Year 1", "Guarantee %": base_model.operating_assumptions["revenue_guarantee_pct_year_1"].value, "Description": "Guaranteed share of revenue in Year 1."},
-                {"Year": "Year 2", "Guarantee %": base_model.operating_assumptions["revenue_guarantee_pct_year_2"].value, "Description": "Guaranteed share of revenue in Year 2."},
-                {"Year": "Year 3", "Guarantee %": base_model.operating_assumptions["revenue_guarantee_pct_year_3"].value, "Description": "Guaranteed share of revenue in Year 3."},
-            ],
+            "revenue_model": {
+                "reference": revenue_reference_rows,
+                "guarantees": revenue_guarantees,
+                "in_group": revenue_in_group,
+                "external": revenue_external,
+            },
+            "cost_model": {
+                "personnel": cost_personnel_rows,
+                "fixed_overhead": cost_fixed_rows,
+                "variable_costs": cost_variable_rows,
+            },
             "personnel_costs": [
                 {"Role": "Consultant Base Salary", "Cost Type": "Fixed", "Base Value (EUR)": base_model.personnel_cost_assumptions["avg_consultant_base_cost_eur_per_year"].value, "Growth (%)": base_model.personnel_cost_assumptions["wage_inflation_pct"].value, "Notes": "Base salary per consultant."},
                 {"Role": "Consultant Variable (% Revenue)", "Cost Type": "Percent of Base", "Base Value (EUR)": base_model.personnel_cost_assumptions["bonus_pct_of_base"].value, "Growth (%)": "", "Notes": "Bonus as % of base salary."},
@@ -2797,32 +2465,95 @@ def run_app():
 
     def _apply_assumptions_state():
         state = st.session_state["assumptions"]
-        for row in state["revenue_drivers"]:
-            param = row["Parameter"]
-            if param == "Utilization (%)":
-                st.session_state["scenario_parameters.utilization_rate.base"] = _clamp_pct(row["Base"])
-                st.session_state["scenario_parameters.utilization_rate.best"] = _clamp_pct(row["Best"])
-                st.session_state["scenario_parameters.utilization_rate.worst"] = _clamp_pct(row["Worst"])
-            elif param == "Day Rate (EUR)":
-                st.session_state["scenario_parameters.day_rate_eur.base"] = _non_negative(row["Base"])
-                st.session_state["scenario_parameters.day_rate_eur.best"] = _non_negative(row["Best"])
-                st.session_state["scenario_parameters.day_rate_eur.worst"] = _non_negative(row["Worst"])
-            elif param == "Consulting FTE":
-                st.session_state["operating_assumptions.consulting_fte_start"] = _non_negative(row["Base"])
-            elif param == "Workdays per Year":
-                st.session_state["operating_assumptions.work_days_per_year"] = _non_negative(row["Base"])
-            elif param == "Day Rate Growth (% p.a.)":
-                st.session_state["operating_assumptions.day_rate_growth_pct"] = _clamp_pct(row["Base"])
+        active_scenario = st.session_state.get("assumptions.scenario", "Base")
+        scenario_col = active_scenario
 
-        guarantee_map = {
-            "Year 1": "operating_assumptions.revenue_guarantee_pct_year_1",
-            "Year 2": "operating_assumptions.revenue_guarantee_pct_year_2",
-            "Year 3": "operating_assumptions.revenue_guarantee_pct_year_3",
-        }
-        for row in state["revenue_guarantees"]:
-            key = guarantee_map.get(row["Year"])
-            if key:
-                st.session_state[key] = _clamp_pct(row["Guarantee %"])
+        revenue_state = state.get("revenue_model", {})
+        if revenue_state:
+            reference_row = revenue_state["reference"][0]
+            st.session_state["revenue_model.reference_revenue_eur"] = _non_negative(
+                reference_row.get(scenario_col, 0.0)
+            )
+            for row in revenue_state["guarantees"]:
+                year_index = int(row["Year"].split()[-1])
+                st.session_state[
+                    f"revenue_model.guarantee_pct_year_{year_index}"
+                ] = _clamp_pct(row.get(scenario_col, 0.0))
+            for row in revenue_state["in_group"]:
+                year_index = int(row["Year"].split()[-1])
+                st.session_state[
+                    f"revenue_model.in_group_revenue_year_{year_index}"
+                ] = _non_negative(row.get(scenario_col, 0.0))
+            for row in revenue_state["external"]:
+                year_index = int(row["Year"].split()[-1])
+                st.session_state[
+                    f"revenue_model.external_revenue_year_{year_index}"
+                ] = _non_negative(row.get(scenario_col, 0.0))
+
+        cost_state = state.get("cost_model", {})
+        for row in cost_state.get("personnel", []):
+            year_index = int(row["Year"].split()[-1])
+            st.session_state[
+                f"cost_model.consultant_fte_year_{year_index}"
+            ] = _non_negative(row["Consultant FTE"])
+            st.session_state[
+                f"cost_model.consultant_base_cost_eur_year_{year_index}"
+            ] = _non_negative(row["Consultant Loaded Cost (EUR)"])
+            st.session_state[
+                f"cost_model.backoffice_fte_year_{year_index}"
+            ] = _non_negative(row["Backoffice FTE"])
+            st.session_state[
+                f"cost_model.backoffice_base_cost_eur_year_{year_index}"
+            ] = _non_negative(row["Backoffice Loaded Cost (EUR)"])
+            st.session_state[
+                f"cost_model.management_cost_eur_year_{year_index}"
+            ] = _non_negative(row["Management Cost (EUR)"])
+
+        for row in cost_state.get("fixed_overhead", []):
+            year_index = int(row["Year"].split()[-1])
+            st.session_state[
+                f"cost_model.fixed_overhead_advisory_year_{year_index}"
+            ] = _non_negative(row["Advisory"])
+            st.session_state[
+                f"cost_model.fixed_overhead_legal_year_{year_index}"
+            ] = _non_negative(row["Legal"])
+            st.session_state[
+                f"cost_model.fixed_overhead_it_year_{year_index}"
+            ] = _non_negative(row["IT & Software"])
+            st.session_state[
+                f"cost_model.fixed_overhead_office_year_{year_index}"
+            ] = _non_negative(row["Office Rent"])
+            st.session_state[
+                f"cost_model.fixed_overhead_services_year_{year_index}"
+            ] = _non_negative(row["Services"])
+            st.session_state[
+                f"cost_model.fixed_overhead_other_year_{year_index}"
+            ] = _non_negative(row["Other Services"])
+
+        for row in cost_state.get("variable_costs", []):
+            year_index = int(row["Year"].split()[-1])
+            training_value = _non_negative(row["Training Value"])
+            travel_value = _non_negative(row["Travel Value"])
+            communication_value = _non_negative(row["Communication Value"])
+
+            st.session_state[
+                f"cost_model.variable_training_pct_year_{year_index}"
+            ] = training_value if row["Training Type"] == "%" else 0.0
+            st.session_state[
+                f"cost_model.variable_training_eur_year_{year_index}"
+            ] = training_value if row["Training Type"] == "EUR" else 0.0
+            st.session_state[
+                f"cost_model.variable_travel_pct_year_{year_index}"
+            ] = travel_value if row["Travel Type"] == "%" else 0.0
+            st.session_state[
+                f"cost_model.variable_travel_eur_year_{year_index}"
+            ] = travel_value if row["Travel Type"] == "EUR" else 0.0
+            st.session_state[
+                f"cost_model.variable_communication_pct_year_{year_index}"
+            ] = communication_value if row["Communication Type"] == "%" else 0.0
+            st.session_state[
+                f"cost_model.variable_communication_eur_year_{year_index}"
+            ] = communication_value if row["Communication Type"] == "EUR" else 0.0
 
         for row in state["personnel_costs"]:
             role = row["Role"]
@@ -2971,121 +2702,33 @@ def run_app():
             f"equity.{key}", default_value
         )
 
-    revenue_model = getattr(input_model, "revenue_model", {})
-    reference_revenue = revenue_model.get("reference_revenue_eur").value
-    revenue_by_year = []
-    for year_index in range(5):
-        guarantee_pct = revenue_model.get(
-            f"guarantee_pct_year_{year_index}"
-        ).value
-        in_group = revenue_model.get(
-            f"in_group_revenue_year_{year_index}"
-        ).value
-        external = revenue_model.get(
-            f"external_revenue_year_{year_index}"
-        ).value
-        modeled_revenue = in_group + external
-        guaranteed = min(
-            modeled_revenue, guarantee_pct * reference_revenue
-        )
-        final_revenue = max(guaranteed, modeled_revenue)
-        revenue_by_year.append(final_revenue)
-    input_model.revenue_by_year = revenue_by_year
-
-    cost_model = getattr(input_model, "cost_model", {})
-    wage_inflation = input_model.personnel_cost_assumptions[
-        "wage_inflation_pct"
-    ].value
-    bonus_pct_default = input_model.personnel_cost_assumptions[
-        "bonus_pct_of_base"
-    ].value
-    payroll_pct_default = input_model.personnel_cost_assumptions[
-        "payroll_burden_pct_of_comp"
-    ].value
-    management_cost = input_model.management_md_cost_eur_per_year
-    management_growth = input_model.management_md_cost_growth_pct
-    cost_model_totals = []
-    for year_index in range(5):
-        revenue = revenue_by_year[year_index]
-        consultant_fte = cost_model.get(
-            f"consultant_fte_year_{year_index}"
-        ).value
-        consultant_base = cost_model.get(
-            f"consultant_base_cost_eur_year_{year_index}"
-        ).value * ((1 + wage_inflation) ** year_index)
-        consultant_bonus = cost_model.get(
-            f"consultant_bonus_pct_year_{year_index}"
-        ).value if cost_model else bonus_pct_default
-        consultant_payroll = cost_model.get(
-            f"consultant_payroll_pct_year_{year_index}"
-        ).value if cost_model else payroll_pct_default
-        consultant_loaded = consultant_base * (
-            1 + consultant_bonus + consultant_payroll
-        )
-        consultant_total = consultant_fte * consultant_loaded
-
-        backoffice_fte = cost_model.get(
-            f"backoffice_fte_year_{year_index}"
-        ).value
-        backoffice_base = cost_model.get(
-            f"backoffice_base_cost_eur_year_{year_index}"
-        ).value * ((1 + wage_inflation) ** year_index)
-        backoffice_payroll = cost_model.get(
-            f"backoffice_payroll_pct_year_{year_index}"
-        ).value if cost_model else payroll_pct_default
-        backoffice_loaded = backoffice_base * (1 + backoffice_payroll)
-        backoffice_total = backoffice_fte * backoffice_loaded
-
-        managing_directors_cost = management_cost * (
-            (1 + management_growth) ** year_index
-        )
-
-        fixed_overhead = (
-            cost_model.get(f"fixed_overhead_advisory_year_{year_index}").value
-            + cost_model.get(f"fixed_overhead_legal_year_{year_index}").value
-            + cost_model.get(f"fixed_overhead_it_year_{year_index}").value
-            + cost_model.get(f"fixed_overhead_office_year_{year_index}").value
-            + cost_model.get(f"fixed_overhead_services_year_{year_index}").value
-        )
-
-        def _variable_cost(prefix):
-            pct = cost_model.get(
-                f"variable_{prefix}_pct_year_{year_index}"
-            ).value
-            eur = cost_model.get(
-                f"variable_{prefix}_eur_year_{year_index}"
-            ).value
-            return eur if eur > 0 else revenue * pct
-
-        variable_total = (
-            _variable_cost("training")
-            + _variable_cost("travel")
-            + _variable_cost("communication")
-        )
-        personnel_total = (
-            consultant_total + backoffice_total + managing_directors_cost
-        )
-        overhead_total = fixed_overhead + variable_total
-        cost_model_totals.append(
-            {
-                "consultant_costs": consultant_total,
-                "backoffice_costs": backoffice_total,
-                "management_costs": managing_directors_cost,
-                "personnel_costs": personnel_total,
-                "overhead_and_variable_costs": overhead_total,
-                "total_operating_costs": personnel_total + overhead_total,
-            }
-        )
+    revenue_final_by_year, revenue_components_by_year = _build_revenue_model_outputs(
+        st.session_state["assumptions"], selected_scenario
+    )
+    cost_model_totals = _build_cost_model_outputs(
+        st.session_state["assumptions"], revenue_final_by_year
+    )
+    input_model.revenue_final_by_year = revenue_final_by_year
+    input_model.revenue_components_by_year = revenue_components_by_year
     input_model.cost_model_totals_by_year = cost_model_totals
 
-    pnl_base = calculate_pnl(input_model)
+    pnl_base = calculate_pnl(
+        input_model,
+        revenue_final_by_year=revenue_final_by_year,
+        cost_totals_by_year=cost_model_totals,
+    )
     debt_schedule = calculate_debt_schedule(input_model)
     cashflow_result = calculate_cashflow(input_model, pnl_base, debt_schedule)
     depreciation_by_year = {
         row["year"]: row.get("depreciation", 0.0)
         for row in cashflow_result
     }
-    pnl_list = calculate_pnl(input_model, depreciation_by_year)
+    pnl_list = calculate_pnl(
+        input_model,
+        depreciation_by_year,
+        revenue_final_by_year=revenue_final_by_year,
+        cost_totals_by_year=cost_model_totals,
+    )
     pnl_result = {f"Year {row['year']}": row for row in pnl_list}
     debt_schedule = calculate_debt_schedule(input_model, cashflow_result)
     balance_sheet = calculate_balance_sheet(
@@ -3178,55 +2821,25 @@ def run_app():
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        def _nav_item(label):
-            if st.session_state["current_page"] == label:
-                st.markdown(
-                    f"<div class=\"nav-item active\">{label}</div>",
-                    unsafe_allow_html=True,
-                )
-            else:
-                if st.button(
-                    label,
-                    key=f"nav_{label}",
-                    use_container_width=True,
-                ):
-                    st.session_state["current_page"] = label
-
-        st.markdown("<div class=\"nav-section\">OVERVIEW</div>", unsafe_allow_html=True)
-        _nav_item("Overview")
-
-        st.markdown("<div class=\"nav-section\">OPERATING MODEL</div>", unsafe_allow_html=True)
-        _nav_item("Operating Model (P&L)")
-        _nav_item("Cashflow & Liquidity")
-        _nav_item("Balance Sheet")
-
-        st.markdown("<div class=\"nav-section\">FINANCING</div>", unsafe_allow_html=True)
-        _nav_item("Financing & Debt")
-        _nav_item("Equity Case")
-
-        st.markdown("<div class=\"nav-section\">VALUATION</div>", unsafe_allow_html=True)
-        _nav_item("Valuation & Purchase Price")
-
-        st.markdown("<div class=\"nav-divider\"></div>", unsafe_allow_html=True)
-        st.markdown("<div class=\"nav-section settings\">⚙ SETTINGS</div>", unsafe_allow_html=True)
-        st.markdown("<div class=\"nav-settings-block\">", unsafe_allow_html=True)
-        _nav_item("Assumptions")
-        _nav_item("Model Settings")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        page = st.session_state["current_page"]
+        nav_options = [
+            "Overview",
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "Financing & Debt",
+            "Equity Case",
+            "Valuation & Purchase Price",
+            "Assumptions",
+            "Model Settings",
+        ]
+        page = st.sidebar.radio(
+            "Navigation",
+            nav_options,
+            key="nav.page",
+            label_visibility="collapsed",
+        )
+        st.session_state["current_page"] = page
         assumptions_state = st.session_state["assumptions"]
-
-        if page == "Assumptions":
-            st.markdown("### Assumptions")
-            st.session_state.setdefault(
-                "assumptions.sidebar_section", "Advanced"
-            )
-            st.selectbox(
-                "Section",
-                ["General", "Advanced", "Revenue Model", "Cost Model"],
-                key="assumptions.sidebar_section",
-            )
 
         def _sidebar_editor(title, key, df, column_config):
             st.markdown(f"### {title}")
@@ -3238,66 +2851,6 @@ def run_app():
                 use_container_width=True,
             )
             return edited
-
-        if page == "Operating Model (P&L)":
-            revenue_df = pd.DataFrame(assumptions_state["revenue_drivers"])
-            auto_sync = st.session_state.get("assumptions.auto_sync", True)
-            base_label = (
-                "Base (Active)" if selected_scenario == "Base" else "Base"
-            )
-            best_label = (
-                "Best (Active)" if selected_scenario == "Best" else "Best"
-            )
-            worst_label = (
-                "Worst (Active)" if selected_scenario == "Worst" else "Worst"
-            )
-            revenue_df = revenue_df.rename(
-                columns={
-                    "Base": base_label,
-                    "Best": best_label,
-                    "Worst": worst_label,
-                }
-            )
-            edited_revenue = _sidebar_editor(
-                "Revenue Drivers",
-                "sidebar.revenue_drivers",
-                revenue_df,
-                {
-                    "Parameter": st.column_config.TextColumn(disabled=True),
-                    "Unit": st.column_config.TextColumn(disabled=True),
-                    "Description": st.column_config.TextColumn(disabled=True),
-                    base_label: st.column_config.NumberColumn(
-                        disabled=auto_sync and selected_scenario != "Base"
-                    ),
-                    best_label: st.column_config.NumberColumn(
-                        disabled=auto_sync and selected_scenario != "Best"
-                    ),
-                    worst_label: st.column_config.NumberColumn(
-                        disabled=auto_sync and selected_scenario != "Worst"
-                    ),
-                },
-            )
-            edited_revenue = edited_revenue.rename(
-                columns={
-                    base_label: "Base",
-                    best_label: "Best",
-                    worst_label: "Worst",
-                }
-            )
-            assumptions_state["revenue_drivers"] = edited_revenue.to_dict("records")
-
-            guarantees_df = pd.DataFrame(assumptions_state["revenue_guarantees"])
-            edited_guarantees = _sidebar_editor(
-                "Revenue Guarantees",
-                "sidebar.revenue_guarantees",
-                guarantees_df,
-                {
-                    "Year": st.column_config.TextColumn(disabled=True),
-                    "Description": st.column_config.TextColumn(disabled=True),
-                },
-            )
-            assumptions_state["revenue_guarantees"] = edited_guarantees.to_dict("records")
-            _apply_assumptions_state()
 
         if page == "Cashflow & Liquidity":
             cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
@@ -3375,15 +2928,52 @@ def run_app():
             _apply_assumptions_state()
 
     if page == "Assumptions":
-        section = st.session_state.get("assumptions.sidebar_section", "Advanced")
+        st.header("Assumptions")
+        st.write("Master input sheet – all model assumptions in one place")
+
+        scenario_options = ["Base", "Best", "Worst"]
+        scenario_default = st.session_state.get(
+            "assumptions.scenario",
+            input_model.scenario_selection["selected_scenario"].value,
+        )
+        scenario_index = (
+            scenario_options.index(scenario_default)
+            if scenario_default in scenario_options
+            else 0
+        )
+        scenario_cols = st.columns([1, 1])
+        selected_scenario = scenario_cols[0].selectbox(
+            "Scenario",
+            scenario_options,
+            index=scenario_index,
+            key="assumptions.scenario",
+        )
+        scenario_cols[1].toggle(
+            "Auto-apply scenario values",
+            value=st.session_state.get("assumptions.auto_sync", True),
+            key="assumptions.auto_sync",
+        )
+        st.info("Changes here affect all pages instantly.")
+        st.session_state["scenario_selection.selected_scenario"] = selected_scenario
+
+        st.session_state.setdefault("assumptions.section", "General")
+        section = st.radio(
+            "Assumptions Section",
+            ["General", "Revenue Model", "Cost Model", "Advanced"],
+            horizontal=True,
+            key="assumptions.section",
+            label_visibility="collapsed",
+        )
         if section == "General":
             render_general_assumptions(input_model)
             return
         if section == "Revenue Model":
             render_revenue_model_assumptions(input_model)
+            _apply_assumptions_state()
             return
         if section == "Cost Model":
             render_cost_model_assumptions(input_model)
+            _apply_assumptions_state()
             return
         render_advanced_assumptions(input_model)
         return
@@ -4094,92 +3684,44 @@ def run_app():
                 }
             line_items[name][year_label] = value
 
-        reference_volume = 20_000_000
-        reference_revenue = input_model.revenue_model[
-            "reference_revenue_eur"
-        ].value
         for year_index in year_indexes:
-            consultants_fte = fte_field.value * (
-                (1 + fte_growth_field.value) ** year_index
-            )
-            billable_days = work_days_field.value
-            utilization = utilization_by_year[year_index]
-            day_rate = day_rate_field.value * (
-                (1 + day_rate_growth_field.value) ** year_index
-            )
+            year_label = f"Year {year_index}"
+            total_revenue = revenue_final_by_year[year_index]
+            year_costs = cost_model_totals[year_index]
+            consultant_comp = year_costs["consultant_costs"]
+            backoffice_comp = year_costs["backoffice_costs"]
+            management_comp = year_costs["management_costs"]
+            total_personnel = year_costs["personnel_costs"]
 
-            guarantee_pct = input_model.revenue_model[
-                f"guarantee_pct_year_{year_index}"
-            ].value
-
-            if (
-                isinstance(input_model.revenue_by_year, list)
-                and len(input_model.revenue_by_year) > year_index
-            ):
-                total_revenue = input_model.revenue_by_year[year_index]
-            else:
-                total_revenue = (
-                    consultants_fte * billable_days * utilization * day_rate
-                )
-
-            # Guarantees classify revenue only; total revenue stays operational.
-            guaranteed_revenue = min(
-                total_revenue, guarantee_pct * reference_revenue
-            )
-            non_guaranteed_revenue = total_revenue - guaranteed_revenue
-
-            # Consultant all-in cost per FTE drives compensation directly.
-            consultant_cost_per_fte = consultant_base_cost
-            consultant_cost_per_fte *= (1 + wage_inflation) ** year_index
-            consultant_comp = consultant_cost_per_fte * consultants_fte
-
-            backoffice_fte = backoffice_fte_start * (
-                (1 + backoffice_growth) ** year_index
-            )
-            # Backoffice all-in cost per FTE drives compensation directly.
-            backoffice_cost_per_fte = backoffice_salary
-            backoffice_cost_per_fte *= (1 + wage_inflation) ** year_index
-            backoffice_comp = backoffice_cost_per_fte * backoffice_fte
-
-            # Management / MD cost comes from assumptions with growth.
-            management_comp = management_cost * (
-                (1 + management_growth) ** year_index
-            )
-
-            external_advisors = input_model.overhead_and_variable_costs[
-                "legal_audit_eur_per_year"
-            ].value * ((1 + overhead_inflation) ** year_index)
-            it_cost = input_model.overhead_and_variable_costs[
-                "it_and_software_eur_per_year"
-            ].value * ((1 + overhead_inflation) ** year_index)
-            office_cost = input_model.overhead_and_variable_costs[
-                "rent_eur_per_year"
-            ].value * ((1 + overhead_inflation) ** year_index)
+            cost_state = st.session_state["assumptions"]["cost_model"]
+            fixed_row = cost_state["fixed_overhead"][year_index]
+            variable_row = cost_state["variable_costs"][year_index]
+            external_advisors = _non_negative(fixed_row["Advisory"])
+            it_cost = _non_negative(fixed_row["IT & Software"])
+            office_cost = _non_negative(fixed_row["Office Rent"])
             other_services = (
-                input_model.overhead_and_variable_costs[
-                    "insurance_eur_per_year"
-                ].value
-                + input_model.overhead_and_variable_costs[
-                    "other_overhead_eur_per_year"
-                ].value
-            ) * ((1 + overhead_inflation) ** year_index)
-
-            total_personnel = consultant_comp + backoffice_comp + management_comp
-            total_operating = (
-                external_advisors + it_cost + office_cost + other_services
+                _non_negative(fixed_row["Legal"])
+                + _non_negative(fixed_row["Services"])
+                + _non_negative(fixed_row["Other Services"])
             )
-            ebitda = total_revenue - total_personnel - total_operating
-            ebit = ebitda - depreciation
+            variable_total = 0.0
+            for prefix in ["Training", "Travel", "Communication"]:
+                cost_type = variable_row[f"{prefix} Type"]
+                value = _non_negative(variable_row[f"{prefix} Value"])
+                if cost_type == "%":
+                    variable_total += total_revenue * value
+                else:
+                    variable_total += value
+            other_services += variable_total
+
+            total_operating = year_costs["overhead_and_variable_costs"]
+            ebitda = pnl_table.iloc[year_index]["ebitda"]
+            ebit = pnl_table.iloc[year_index]["ebit"]
             interest = interest_by_year.get(year_index, 0)
             ebt = ebit - interest
             taxes = pnl_table.iloc[year_index]["taxes"]
             net_income = pnl_table.iloc[year_index]["net_income"]
 
-            year_label = f"Year {year_index}"
-            _set_line_value("Guaranteed Revenue", year_label, guaranteed_revenue)
-            _set_line_value(
-                "Non-Guaranteed Revenue", year_label, non_guaranteed_revenue
-            )
             _set_line_value("Total Revenue", year_label, total_revenue)
             _set_line_value(
                 "Consultant Compensation", year_label, consultant_comp
@@ -4212,20 +3754,20 @@ def run_app():
             _set_line_value("Taxes", year_label, taxes)
             _set_line_value("Net Income (Jahresueberschuss)", year_label, net_income)
 
+            consultant_fte_kpi = _non_negative(
+                cost_state["personnel"][year_index]["Consultant FTE"]
+            )
             revenue_per_consultant = (
-                total_revenue / consultants_fte if consultants_fte else 0
+                total_revenue / consultant_fte_kpi if consultant_fte_kpi else 0
             )
             ebitda_margin = ebitda / total_revenue if total_revenue else 0
             ebit_margin = ebit / total_revenue if total_revenue else 0
             personnel_cost_ratio = (
                 total_personnel / total_revenue if total_revenue else 0
             )
-            guaranteed_pct = (
-                guaranteed_revenue / total_revenue if total_revenue else 0
-            )
-            non_guaranteed_pct = (
-                non_guaranteed_revenue / total_revenue if total_revenue else 0
-            )
+            guaranteed_pct = revenue_components_by_year[year_index][
+                "share_guaranteed"
+            ]
             net_margin = net_income / total_revenue if total_revenue else 0
             opex_ratio = total_operating / total_revenue if total_revenue else 0
 
@@ -4238,16 +3780,11 @@ def run_app():
             _set_line_value("EBIT Margin", year_label, ebit_margin)
             _set_line_value("Personnel Cost Ratio", year_label, personnel_cost_ratio)
             _set_line_value("Guaranteed Revenue %", year_label, guaranteed_pct)
-            _set_line_value(
-                "Non-Guaranteed Revenue %", year_label, non_guaranteed_pct
-            )
             _set_line_value("Net Margin", year_label, net_margin)
             _set_line_value("Opex Ratio", year_label, opex_ratio)
 
         row_order = [
             "Revenue",
-            "Guaranteed Revenue",
-            "Non-Guaranteed Revenue",
             "Total Revenue",
             "Personnel Costs",
             "Consultant Compensation",
@@ -4273,7 +3810,6 @@ def run_app():
             "EBIT Margin",
             "Personnel Cost Ratio",
             "Guaranteed Revenue %",
-            "Non-Guaranteed Revenue %",
             "Net Margin",
             "Opex Ratio",
         ]
@@ -4365,135 +3901,29 @@ def run_app():
                     return None
 
             year_labels = [f"Year {year_index}" for year_index in year_indexes]
-            utilization_by_year = getattr(
-                input_model, "utilization_by_year", [utilization_field.value] * 5
-            )
 
             st.markdown("### Revenue Logic")
             st.write(
-                "Revenue is built from delivery capacity and pricing. Day rate "
-                "grows by the annual day-rate growth assumption. Utilization is "
-                "set per year and guarantees create a floor for revenue in years 1–3."
+                "Revenue is sourced from the Revenue Model. Guaranteed floors are "
+                "compared to modeled in-group and external revenue to determine the "
+                "final revenue used in the P&L."
             )
-
-            st.caption(
-                f"Day Rate_y = {_format_int_expl(day_rate_field.value)} EUR "
-                f"× (1 + {_format_pct_expl(day_rate_growth_field.value)})^y"
-            )
-
-            driver_metrics = {
-                "Consulting FTE": {},
-                "Workdays per Year": {},
-                "Utilization %": {},
-                "Day Rate (EUR)": {},
-                "Guarantee %": {},
+            revenue_metrics = {
+                "Guaranteed Floor": {},
+                "Modeled Revenue": {},
+                "Final Revenue": {},
             }
-            revenue_metrics = {}
-            missing_revenue_inputs = [
-                name
-                for name, value in [
-                    ("Consulting FTE", fte_field.value),
-                    ("FTE Growth %", fte_growth_field.value),
-                    ("Workdays per Year", work_days_field.value),
-                    ("Day Rate (EUR)", day_rate_field.value),
-                    ("Day Rate Growth %", day_rate_growth_field.value),
-                    ("Utilization (per year)", utilization_by_year),
-                ]
-                if value is None
-            ]
-
             for year_index, year_label in enumerate(year_labels):
-                consultants_fte = _safe_calc(
-                    [fte_field.value, fte_growth_field.value],
-                    lambda fte, growth: fte * ((1 + growth) ** year_index),
-                )
-                day_rate_year = _safe_calc(
-                    [day_rate_field.value, day_rate_growth_field.value],
-                    lambda rate, growth: rate * ((1 + growth) ** year_index),
-                )
-                utilization = (
-                    utilization_by_year[year_index]
-                    if isinstance(utilization_by_year, list)
-                    else None
-                )
-                guarantee_pct = 0
-                if year_index == 0:
-                    guarantee_pct = guarantee_y1_field.value
-                elif year_index == 1:
-                    guarantee_pct = guarantee_y2_field.value
-                elif year_index == 2:
-                    guarantee_pct = guarantee_y3_field.value
-
-                theoretical_revenue = _safe_calc(
-                    [
-                        consultants_fte,
-                        work_days_field.value,
-                        utilization,
-                        day_rate_year,
-                    ],
-                    lambda fte, days, util, rate: fte * days * util * rate,
-                )
-                guaranteed_revenue = _safe_calc(
-                    [
-                        consultants_fte,
-                        work_days_field.value,
-                        day_rate_year,
-                        guarantee_pct,
-                    ],
-                    lambda fte, days, rate, guarantee: fte * days * rate * guarantee,
-                )
-                non_guaranteed_revenue = _safe_calc(
-                    [
-                        consultants_fte,
-                        work_days_field.value,
-                        day_rate_year,
-                        utilization,
-                        guarantee_pct,
-                    ],
-                    lambda fte, days, rate, util, guarantee: fte
-                    * days
-                    * rate
-                    * max(util - guarantee, 0),
-                )
-
-                driver_metrics["Consulting FTE"][year_label] = consultants_fte
-                driver_metrics["Workdays per Year"][year_label] = (
-                    work_days_field.value
-                )
-                driver_metrics["Utilization %"][year_label] = utilization
-                driver_metrics["Day Rate (EUR)"][year_label] = day_rate_year
-                driver_metrics["Guarantee %"][year_label] = guarantee_pct
-
-                for metric, value in (
-                    ("Theoretical Revenue", theoretical_revenue),
-                    ("Guaranteed Revenue", guaranteed_revenue),
-                    ("Non-Guaranteed Revenue", non_guaranteed_revenue),
-                ):
-                    if metric not in revenue_metrics:
-                        revenue_metrics[metric] = {
-                            year: None for year in year_labels
-                        }
-                    revenue_metrics[metric][year_label] = value
-
-            driver_table = pd.DataFrame.from_dict(
-                driver_metrics, orient="index"
-            )
-            driver_table = driver_table[year_labels]
-            for metric in driver_table.index:
-                if metric in {"Utilization %", "Guarantee %"}:
-                    driver_table.loc[metric] = driver_table.loc[metric].apply(
-                        _format_pct_expl
-                    )
-                elif metric in {"Consulting FTE", "Workdays per Year", "Day Rate (EUR)"}:
-                    driver_table.loc[metric] = driver_table.loc[metric].apply(
-                        _format_int_expl
-                    )
-                else:
-                    driver_table.loc[metric] = driver_table.loc[metric].apply(
-                        _format_currency_expl
-                    )
-            st.dataframe(driver_table, use_container_width=True)
-
+                components = revenue_components_by_year[year_index]
+                revenue_metrics["Guaranteed Floor"][year_label] = components[
+                    "guaranteed_floor"
+                ]
+                revenue_metrics["Modeled Revenue"][year_label] = components[
+                    "modeled_total"
+                ]
+                revenue_metrics["Final Revenue"][year_label] = components[
+                    "final_total"
+                ]
             revenue_table = pd.DataFrame.from_dict(
                 revenue_metrics, orient="index"
             )
@@ -4501,23 +3931,6 @@ def run_app():
                 _format_currency_expl
             )
             st.dataframe(revenue_table, use_container_width=True)
-            st.caption(
-                "Formula: FTE × Workdays × Utilization_y × DayRate_y, where "
-                "DayRate_y = DayRate × (1 + Day Rate Growth)^y."
-            )
-            if missing_revenue_inputs:
-                st.caption(
-                    f"Missing inputs: {', '.join(missing_revenue_inputs)}."
-                )
-            year0_revenue = line_items.get("Total Revenue", {}).get("Year 0")
-            if year0_revenue is not None:
-                target_revenue = 20_000_000
-                delta = year0_revenue - target_revenue
-                status = "OK" if abs(delta) <= 10_000 else "Check"
-                st.caption(
-                    f"Debug: Year 0 Total Revenue = {_format_currency_expl(year0_revenue)} "
-                    f"(target 20.00 m EUR, {status})."
-                )
 
             st.markdown("### Personnel Costs Logic")
             st.write(
@@ -4767,7 +4180,6 @@ def run_app():
                 "EBIT Margin": {},
                 "Personnel Cost Ratio": {},
                 "Guaranteed Revenue %": {},
-                "Non-Guaranteed Revenue %": {},
                 "Net Margin": {},
                 "Opex Ratio": {},
             }
@@ -4787,9 +4199,6 @@ def run_app():
                 kpi_metrics["Guaranteed Revenue %"][year_label] = line_items[
                     "Guaranteed Revenue %"
                 ][year_label]
-                kpi_metrics["Non-Guaranteed Revenue %"][year_label] = line_items[
-                    "Non-Guaranteed Revenue %"
-                ][year_label]
                 kpi_metrics["Net Margin"][year_label] = line_items[
                     "Net Margin"
                 ][year_label]
@@ -4804,7 +4213,6 @@ def run_app():
                 "EBIT Margin",
                 "Personnel Cost Ratio",
                 "Guaranteed Revenue %",
-                "Non-Guaranteed Revenue %",
                 "Net Margin",
                 "Opex Ratio",
             }

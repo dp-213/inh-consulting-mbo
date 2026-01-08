@@ -12,39 +12,35 @@ def run_model():
 
     # Build revenue by year from the revenue model inputs.
     revenue_model = getattr(input_model, "revenue_model", {})
-    reference_revenue = revenue_model.get(
-        "reference_revenue_eur"
-    ).value
-    revenue_by_year = []
+    reference_revenue = revenue_model.get("reference_revenue_eur").value
+    revenue_final_by_year = []
+    revenue_components_by_year = []
     for year_index in range(5):
-        guarantee_pct = revenue_model.get(
-            f"guarantee_pct_year_{year_index}"
-        ).value
-        in_group = revenue_model.get(
-            f"in_group_revenue_year_{year_index}"
-        ).value
-        external = revenue_model.get(
-            f"external_revenue_year_{year_index}"
-        ).value
+        guarantee_pct = revenue_model.get(f"guarantee_pct_year_{year_index}").value
+        in_group = revenue_model.get(f"in_group_revenue_year_{year_index}").value
+        external = revenue_model.get(f"external_revenue_year_{year_index}").value
         modeled_revenue = in_group + external
-        guaranteed = min(
-            modeled_revenue, guarantee_pct * reference_revenue
+        guaranteed_floor = guarantee_pct * reference_revenue
+        final_revenue = max(guaranteed_floor, modeled_revenue)
+        share_guaranteed = (
+            guaranteed_floor / final_revenue if final_revenue else 0.0
         )
-        final_revenue = max(guaranteed, modeled_revenue)
-        revenue_by_year.append(final_revenue)
-    input_model.revenue_by_year = revenue_by_year
+        revenue_final_by_year.append(final_revenue)
+        revenue_components_by_year.append(
+            {
+                "guaranteed_floor": guaranteed_floor,
+                "modeled_in_group": in_group,
+                "modeled_external": external,
+                "modeled_total": modeled_revenue,
+                "final_total": final_revenue,
+                "share_guaranteed": share_guaranteed,
+            }
+        )
+    input_model.revenue_final_by_year = revenue_final_by_year
+    input_model.revenue_components_by_year = revenue_components_by_year
 
     # Build cost model totals (authoritative cost inputs).
     cost_model = getattr(input_model, "cost_model", {})
-    wage_inflation = input_model.personnel_cost_assumptions[
-        "wage_inflation_pct"
-    ].value
-    bonus_pct_default = input_model.personnel_cost_assumptions[
-        "bonus_pct_of_base"
-    ].value
-    payroll_pct_default = input_model.personnel_cost_assumptions[
-        "payroll_burden_pct_of_comp"
-    ].value
     management_cost = getattr(
         input_model, "management_md_cost_eur_per_year", 0.0
     )
@@ -53,34 +49,17 @@ def run_model():
     )
     cost_model_totals = []
     for year_index in range(5):
-        revenue = revenue_by_year[year_index]
-        consultant_fte = cost_model.get(
-            f"consultant_fte_year_{year_index}"
-        ).value
-        consultant_base = cost_model.get(
+        revenue = revenue_final_by_year[year_index]
+        consultant_fte = cost_model.get(f"consultant_fte_year_{year_index}").value
+        consultant_loaded = cost_model.get(
             f"consultant_base_cost_eur_year_{year_index}"
-        ).value * ((1 + wage_inflation) ** year_index)
-        consultant_bonus = cost_model.get(
-            f"consultant_bonus_pct_year_{year_index}"
-        ).value if cost_model else bonus_pct_default
-        consultant_payroll = cost_model.get(
-            f"consultant_payroll_pct_year_{year_index}"
-        ).value if cost_model else payroll_pct_default
-        consultant_loaded = consultant_base * (
-            1 + consultant_bonus + consultant_payroll
-        )
+        ).value
         consultant_total = consultant_fte * consultant_loaded
 
-        backoffice_fte = cost_model.get(
-            f"backoffice_fte_year_{year_index}"
-        ).value
-        backoffice_base = cost_model.get(
+        backoffice_fte = cost_model.get(f"backoffice_fte_year_{year_index}").value
+        backoffice_loaded = cost_model.get(
             f"backoffice_base_cost_eur_year_{year_index}"
-        ).value * ((1 + wage_inflation) ** year_index)
-        backoffice_payroll = cost_model.get(
-            f"backoffice_payroll_pct_year_{year_index}"
-        ).value if cost_model else payroll_pct_default
-        backoffice_loaded = backoffice_base * (1 + backoffice_payroll)
+        ).value
         backoffice_total = backoffice_fte * backoffice_loaded
 
         managing_directors_cost = management_cost * (
@@ -120,13 +99,22 @@ def run_model():
     input_model.cost_model_totals_by_year = cost_model_totals
 
     # Run the integrated model in the required order.
-    pnl_base = calculate_pnl(input_model)
+    pnl_base = calculate_pnl(
+        input_model,
+        revenue_final_by_year=revenue_final_by_year,
+        cost_totals_by_year=cost_model_totals,
+    )
     debt_schedule = calculate_debt_schedule(input_model)
     cashflow_result = calculate_cashflow(input_model, pnl_base, debt_schedule)
     depreciation_by_year = {
         row["year"]: row.get("depreciation", 0.0) for row in cashflow_result
     }
-    pnl_result = calculate_pnl(input_model, depreciation_by_year)
+    pnl_result = calculate_pnl(
+        input_model,
+        depreciation_by_year,
+        revenue_final_by_year=revenue_final_by_year,
+        cost_totals_by_year=cost_model_totals,
+    )
     debt_schedule = calculate_debt_schedule(input_model, cashflow_result)
     balance_sheet = calculate_balance_sheet(
         input_model, cashflow_result, debt_schedule, pnl_result
