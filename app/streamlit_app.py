@@ -676,30 +676,30 @@ def _render_custom_table_html(
     year_width = (100 - line_item_width) / max(len(year_labels), 1)
     css = f"""
     <style>
-      .custom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .custom-table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
       .custom-table col.line-item {{ width: {line_item_width}%; }}
       .custom-table col.year {{ width: {year_width:.2f}%; }}
-      .custom-table th, .custom-table td {
+      .custom-table th, .custom-table td {{
         padding: 2px 6px;
         white-space: nowrap;
         line-height: 1.0;
         border: 0;
         font-size: 0.9rem;
-      }
-      .custom-table th { text-align: right; font-weight: 600; }
-      .custom-table th:first-child { text-align: left; }
-      .custom-table td { text-align: right; }
-      .custom-table td:first-child { text-align: left; }
-      .custom-table .section-row td {
+      }}
+      .custom-table th {{ text-align: right; font-weight: 600; }}
+      .custom-table th:first-child {{ text-align: left; }}
+      .custom-table td {{ text-align: right; }}
+      .custom-table td:first-child {{ text-align: left; }}
+      .custom-table .section-row td {{
         font-weight: 700;
         background: #f9fafb;
-      }
-      .custom-table .total-row td {
+      }}
+      .custom-table .total-row td {{
         font-weight: 700;
         background: #f3f4f6;
         border-top: 1px solid #c7c7c7;
-      }
-      .custom-table td.negative { color: #b45309; }
+      }}
+      .custom-table td.negative {{ color: #b45309; }}
     </style>
     """
     colgroup = "<colgroup><col class=\"line-item\"/>"
