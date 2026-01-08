@@ -17,8 +17,10 @@ def calculate_cashflow(input_model, pnl_result):
         "equity_contribution_eur"
     ].value
 
-    capex = input_model.operations["capex"]
-    working_capital_change = input_model.operations["working_capital_change"]
+    # Map operating inputs to Excel-equivalent capex and working capital fields.
+    capex = input_model.capex_and_working_capital["capex_eur_per_year"].value
+    # No explicit working capital change input in v1; keep as zero for now.
+    working_capital_change = 0.0
 
     cashflow = []
     cash_balance = 0.0
