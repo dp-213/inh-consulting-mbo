@@ -1544,22 +1544,78 @@ def run_app():
         st.session_state["defaults_initialized"] = True
 
     # Navigation for question-driven layout.
+    st.session_state.setdefault("nav_page", "Overview")
     with st.sidebar:
-        st.markdown("## Navigation")
-        page = st.radio(
-            "Go to",
-            [
-                "Overview",
-                "Operating Model (P&L)",
-                "Cashflow & Liquidity",
-                "Balance Sheet",
-                "Financing & Debt",
-                "Valuation & Purchase Price",
-                "Equity Case",
-                "Assumptions (Advanced)",
-            ],
-            key="nav_page",
-        )
+        nav_css = """
+        <style>
+          .nav-section {
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-top: 0.9rem;
+            margin-bottom: 0.35rem;
+          }
+          .nav-item {
+            padding: 0.45rem 0.6rem;
+            border-radius: 6px;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+            color: #111827;
+          }
+          .nav-item.active {
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+          }
+          div[data-testid="stSidebar"] button {
+            width: 100%;
+            justify-content: flex-start;
+            border-radius: 6px;
+            padding: 0.45rem 0.6rem;
+          }
+          div[data-testid="stSidebar"] button:hover {
+            background: #f3f4f6;
+            border-color: #e5e7eb;
+          }
+        </style>
+        """
+        st.markdown(nav_css, unsafe_allow_html=True)
+
+        def _nav_item(label):
+            if st.session_state["nav_page"] == label:
+                st.markdown(
+                    f"<div class=\"nav-item active\">{label}</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                if st.button(
+                    label,
+                    key=f"nav_{label}",
+                    use_container_width=True,
+                ):
+                    st.session_state["nav_page"] = label
+
+        st.markdown("<div class=\"nav-section\">OVERVIEW</div>", unsafe_allow_html=True)
+        _nav_item("Overview")
+
+        st.markdown("<div class=\"nav-section\">OPERATING MODEL</div>", unsafe_allow_html=True)
+        _nav_item("Operating Model (P&L)")
+        _nav_item("Cashflow & Liquidity")
+        _nav_item("Balance Sheet")
+
+        st.markdown("<div class=\"nav-section\">FINANCING</div>", unsafe_allow_html=True)
+        _nav_item("Financing & Debt")
+
+        st.markdown("<div class=\"nav-section\">VALUATION</div>", unsafe_allow_html=True)
+        _nav_item("Valuation & Purchase Price")
+
+        st.markdown("<div class=\"nav-section\">EQUITY</div>", unsafe_allow_html=True)
+        _nav_item("Equity Case")
+
+        st.markdown("<div class=\"nav-section\">SETTINGS</div>", unsafe_allow_html=True)
+        _nav_item("Assumptions (Advanced)")
+
+        page = st.session_state["nav_page"]
         if page == "Operating Model (P&L)":
             st.markdown("## Quick Assumptions")
             st.session_state["edit_pnl_assumptions"] = True
