@@ -157,11 +157,13 @@ def run_app():
             "Go to",
             [
                 "Overview",
+                "Value & Purchase Price",
                 "Operating Model",
                 "Financing & Bankability",
-                "Equity & Value",
-                "Assumptions (Advanced)",
+                "Equity Case",
+                "Assumptions (Expert Mode)",
             ],
+            key="nav_page",
         )
 
     # Build input model and collect editable values from the assumptions page.
@@ -172,8 +174,8 @@ def run_app():
         base_model.scenario_selection["selected_scenario"].value,
     )
 
-    if page == "Assumptions (Advanced)":
-        st.header("Assumptions (Advanced)")
+    if page == "Assumptions (Expert Mode)":
+        st.header("Assumptions (Expert Mode)")
         st.write(
             "Review and adjust all input assumptions from the Excel sheet."
         )
@@ -294,6 +296,38 @@ def run_app():
         st.markdown("### Equity Case")
         st.write("IRR and equity cashflows summarize investor outcomes.")
 
+    if page == "Value & Purchase Price":
+        st.header("Value & Purchase Price")
+        st.write(
+            "Valuation perspective, purchase price context, and high-level "
+            "deal view."
+        )
+        summary = {
+            "initial_equity": investment_result["initial_equity"],
+            "exit_value": investment_result["exit_value"],
+            "irr": investment_result["irr"],
+        }
+        summary_table = pd.DataFrame([summary])
+        summary_display = summary_table.copy()
+        summary_display.rename(
+            columns={
+                "initial_equity": "Eigenkapital (Start, EUR)",
+                "exit_value": "Exit Value (EUR)",
+                "irr": "IRR (%)",
+            },
+            inplace=True,
+        )
+        summary_format_map = {
+            "Eigenkapital (Start, EUR)": format_currency,
+            "Exit Value (EUR)": format_currency,
+            "IRR (%)": format_pct,
+        }
+        summary_totals = ["Eigenkapital (Start, EUR)", "Exit Value (EUR)"]
+        summary_styled = _style_totals(
+            summary_display, summary_totals
+        ).format(summary_format_map)
+        st.dataframe(summary_styled, use_container_width=True)
+
     if page == "Operating Model":
         st.header("Operating Model")
         st.write(
@@ -410,8 +444,8 @@ def run_app():
         )
         st.dataframe(debt_styled, use_container_width=True)
 
-    if page == "Equity & Value":
-        st.header("Equity & Value")
+    if page == "Equity Case":
+        st.header("Equity Case")
         st.write(
             "Investor returns and exit value based on current assumptions."
         )
