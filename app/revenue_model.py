@@ -26,6 +26,26 @@ def _percent_from_display(value):
     return float(value) / 100
 
 
+def _format_number_display(value, decimals=0):
+    if value is None or pd.isna(value):
+        return ""
+    try:
+        number = float(str(value).replace(",", ""))
+    except ValueError:
+        return value
+    if decimals == 0:
+        return f"{number:,.0f}"
+    return f"{number:,.{decimals}f}"
+
+
+def _parse_number_display(value):
+    if value is None or pd.isna(value) or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return float(str(value).replace(",", ""))
+
+
 def format_currency(value):
     if value is None or pd.isna(value):
         return ""
@@ -116,9 +136,11 @@ def render_revenue_model_assumptions(input_model):
     for idx, col in enumerate(year_columns):
         driver_table[col] = [
             (
-                _percent_to_display(driver_values[param][idx])
+                _format_number_display(
+                    _percent_to_display(driver_values[param][idx]), 1
+                )
                 if param in {"Utilization %", "Day Rate Growth (% p.a.)", "Revenue Growth (% p.a.)"}
-                else driver_values[param][idx]
+                else _format_number_display(driver_values[param][idx], 0)
             )
             for param, _ in driver_rows
         ]
@@ -130,28 +152,34 @@ def render_revenue_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )
     for year_index in range(5):
         revenue_state["consulting_fte"][scenario][year_index] = _non_negative(
-            driver_edit.loc[0, year_columns[year_index]]
+            _parse_number_display(driver_edit.loc[0, year_columns[year_index]])
         )
         revenue_state["workdays_per_year"][scenario][year_index] = _non_negative(
-            driver_edit.loc[1, year_columns[year_index]]
+            _parse_number_display(driver_edit.loc[1, year_columns[year_index]])
         )
         revenue_state["utilization_rate"][scenario][year_index] = _clamp_pct(
-            _percent_from_display(driver_edit.loc[2, year_columns[year_index]])
+            _percent_from_display(
+                _parse_number_display(driver_edit.loc[2, year_columns[year_index]])
+            )
         )
         revenue_state["day_rate_eur"][scenario][year_index] = _non_negative(
-            driver_edit.loc[3, year_columns[year_index]]
+            _parse_number_display(driver_edit.loc[3, year_columns[year_index]])
         )
         revenue_state["day_rate_growth_pct"][scenario][year_index] = _clamp_pct(
-            _percent_from_display(driver_edit.loc[4, year_columns[year_index]])
+            _percent_from_display(
+                _parse_number_display(driver_edit.loc[4, year_columns[year_index]])
+            )
         )
         revenue_state["revenue_growth_pct"][scenario][year_index] = _clamp_pct(
-            _percent_from_display(driver_edit.loc[5, year_columns[year_index]])
+            _percent_from_display(
+                _parse_number_display(driver_edit.loc[5, year_columns[year_index]])
+            )
         )
 
     st.markdown("### Group Revenue Guarantee (Floor)")
@@ -160,7 +188,11 @@ def render_revenue_model_assumptions(input_model):
             "Parameter": ["Reference Revenue"],
             "Unit": ["EUR"],
             **{
-                col: [revenue_state["reference_revenue_eur"][scenario]]
+                col: [
+                    _format_number_display(
+                        revenue_state["reference_revenue_eur"][scenario], 0
+                    )
+                ]
                 for col in year_columns
             },
         }
@@ -172,12 +204,12 @@ def render_revenue_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.0f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )
     revenue_state["reference_revenue_eur"][scenario] = _non_negative(
-        reference_edit.loc[0, "Year 0"]
+        _parse_number_display(reference_edit.loc[0, "Year 0"])
     )
 
     guarantee_df = pd.DataFrame(
@@ -186,8 +218,11 @@ def render_revenue_model_assumptions(input_model):
             "Unit": ["%"],
             **{
                 col: [
-                    _percent_to_display(
-                        revenue_state["guarantee_pct_by_year"][scenario][idx]
+                    _format_number_display(
+                        _percent_to_display(
+                            revenue_state["guarantee_pct_by_year"][scenario][idx]
+                        ),
+                        1,
                     )
                 ]
                 for idx, col in enumerate(year_columns)
@@ -201,13 +236,17 @@ def render_revenue_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )
     for year_index in range(5):
         revenue_state["guarantee_pct_by_year"][scenario][year_index] = _clamp_pct(
-            _percent_from_display(guarantee_edit.loc[0, year_columns[year_index]])
+            _percent_from_display(
+                _parse_number_display(
+                    guarantee_edit.loc[0, year_columns[year_index]]
+                )
+            )
         )
 
     st.markdown("### Revenue Bridge / Summary")
@@ -245,7 +284,11 @@ def render_revenue_model_assumptions(input_model):
     }
     for year_index, col in enumerate(year_columns):
         bridge_table[col] = [
-            bridge_rows[row_key][year_index] for row_key in bridge_rows
+            _format_number_display(
+                bridge_rows[row_key][year_index],
+                1 if row_key == "Guaranteed %" else 0,
+            )
+            for row_key in bridge_rows
         ]
     bridge_df = pd.DataFrame(bridge_table)
     st.data_editor(
@@ -256,7 +299,7 @@ def render_revenue_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )

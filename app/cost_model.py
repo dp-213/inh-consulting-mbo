@@ -20,6 +20,26 @@ def _percent_from_display(value):
     return float(value) / 100
 
 
+def _format_number_display(value, decimals=0):
+    if value is None or pd.isna(value):
+        return ""
+    try:
+        number = float(str(value).replace(",", ""))
+    except ValueError:
+        return value
+    if decimals == 0:
+        return f"{number:,.0f}"
+    return f"{number:,.{decimals}f}"
+
+
+def _parse_number_display(value):
+    if value is None or pd.isna(value) or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return float(str(value).replace(",", ""))
+
+
 def format_currency(value):
     if value is None or pd.isna(value):
         return ""
@@ -105,7 +125,10 @@ def render_cost_model_assumptions(input_model):
             "Unit": ["", "%"],
             "Value": [
                 bool(cost_state["inflation"].get("apply", False)),
-                _percent_to_display(cost_state["inflation"].get("rate_pct", 0.0)),
+                _format_number_display(
+                    _percent_to_display(cost_state["inflation"].get("rate_pct", 0.0)),
+                    1,
+                ),
             ],
         }
     )
@@ -116,13 +139,13 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.NumberColumn(format=",.2f"),
+            "Value": st.column_config.TextColumn(),
         },
         use_container_width=True,
     )
     cost_state["inflation"]["apply"] = bool(inflation_edit.loc[0, "Value"])
     cost_state["inflation"]["rate_pct"] = _percent_from_display(
-        _non_negative(inflation_edit.loc[1, "Value"])
+        _non_negative(_parse_number_display(inflation_edit.loc[1, "Value"]))
     )
 
     st.markdown("### Consultant Costs")
@@ -132,8 +155,13 @@ def render_cost_model_assumptions(input_model):
     }
     for year_index, col in enumerate(year_columns):
         consultant_table[col] = [
-            cost_state["personnel"][year_index]["Consultant FTE"],
-            cost_state["personnel"][year_index]["Consultant Loaded Cost (EUR)"],
+            _format_number_display(
+                cost_state["personnel"][year_index]["Consultant FTE"], 0
+            ),
+            _format_number_display(
+                cost_state["personnel"][year_index]["Consultant Loaded Cost (EUR)"],
+                0,
+            ),
         ]
     consultant_df = pd.DataFrame(consultant_table)
     consultant_edit = st.data_editor(
@@ -143,16 +171,16 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )
     for year_index in range(5):
         cost_state["personnel"][year_index]["Consultant FTE"] = _non_negative(
-            consultant_edit.loc[0, year_columns[year_index]]
+            _parse_number_display(consultant_edit.loc[0, year_columns[year_index]])
         )
         cost_state["personnel"][year_index]["Consultant Loaded Cost (EUR)"] = _non_negative(
-            consultant_edit.loc[1, year_columns[year_index]]
+            _parse_number_display(consultant_edit.loc[1, year_columns[year_index]])
         )
 
     st.markdown("### Backoffice Costs")
@@ -162,8 +190,13 @@ def render_cost_model_assumptions(input_model):
     }
     for year_index, col in enumerate(year_columns):
         backoffice_table[col] = [
-            cost_state["personnel"][year_index]["Backoffice FTE"],
-            cost_state["personnel"][year_index]["Backoffice Loaded Cost (EUR)"],
+            _format_number_display(
+                cost_state["personnel"][year_index]["Backoffice FTE"], 0
+            ),
+            _format_number_display(
+                cost_state["personnel"][year_index]["Backoffice Loaded Cost (EUR)"],
+                0,
+            ),
         ]
     backoffice_df = pd.DataFrame(backoffice_table)
     backoffice_edit = st.data_editor(
@@ -173,16 +206,16 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )
     for year_index in range(5):
         cost_state["personnel"][year_index]["Backoffice FTE"] = _non_negative(
-            backoffice_edit.loc[0, year_columns[year_index]]
+            _parse_number_display(backoffice_edit.loc[0, year_columns[year_index]])
         )
         cost_state["personnel"][year_index]["Backoffice Loaded Cost (EUR)"] = _non_negative(
-            backoffice_edit.loc[1, year_columns[year_index]]
+            _parse_number_display(backoffice_edit.loc[1, year_columns[year_index]])
         )
 
     st.markdown("### Management")
@@ -192,7 +225,9 @@ def render_cost_model_assumptions(input_model):
     }
     for year_index, col in enumerate(year_columns):
         management_table[col] = [
-            cost_state["personnel"][year_index]["Management Cost (EUR)"]
+            _format_number_display(
+                cost_state["personnel"][year_index]["Management Cost (EUR)"], 0
+            )
         ]
     management_df = pd.DataFrame(management_table)
     management_edit = st.data_editor(
@@ -202,13 +237,13 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )
     for year_index in range(5):
         cost_state["personnel"][year_index]["Management Cost (EUR)"] = _non_negative(
-            management_edit.loc[0, year_columns[year_index]]
+            _parse_number_display(management_edit.loc[0, year_columns[year_index]])
         )
 
     st.markdown("### Fixed Overhead")
@@ -225,12 +260,24 @@ def render_cost_model_assumptions(input_model):
     }
     for year_index, col in enumerate(year_columns):
         fixed_table[col] = [
-            cost_state["fixed_overhead"][year_index]["Advisory"],
-            cost_state["fixed_overhead"][year_index]["Legal"],
-            cost_state["fixed_overhead"][year_index]["IT & Software"],
-            cost_state["fixed_overhead"][year_index]["Office Rent"],
-            cost_state["fixed_overhead"][year_index]["Services"],
-            cost_state["fixed_overhead"][year_index]["Other Services"],
+            _format_number_display(
+                cost_state["fixed_overhead"][year_index]["Advisory"], 0
+            ),
+            _format_number_display(
+                cost_state["fixed_overhead"][year_index]["Legal"], 0
+            ),
+            _format_number_display(
+                cost_state["fixed_overhead"][year_index]["IT & Software"], 0
+            ),
+            _format_number_display(
+                cost_state["fixed_overhead"][year_index]["Office Rent"], 0
+            ),
+            _format_number_display(
+                cost_state["fixed_overhead"][year_index]["Services"], 0
+            ),
+            _format_number_display(
+                cost_state["fixed_overhead"][year_index]["Other Services"], 0
+            ),
         ]
     fixed_df = pd.DataFrame(fixed_table)
     fixed_edit = st.data_editor(
@@ -240,28 +287,28 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )
     for year_index in range(5):
         cost_state["fixed_overhead"][year_index]["Advisory"] = _non_negative(
-            fixed_edit.loc[0, year_columns[year_index]]
+            _parse_number_display(fixed_edit.loc[0, year_columns[year_index]])
         )
         cost_state["fixed_overhead"][year_index]["Legal"] = _non_negative(
-            fixed_edit.loc[1, year_columns[year_index]]
+            _parse_number_display(fixed_edit.loc[1, year_columns[year_index]])
         )
         cost_state["fixed_overhead"][year_index]["IT & Software"] = _non_negative(
-            fixed_edit.loc[2, year_columns[year_index]]
+            _parse_number_display(fixed_edit.loc[2, year_columns[year_index]])
         )
         cost_state["fixed_overhead"][year_index]["Office Rent"] = _non_negative(
-            fixed_edit.loc[3, year_columns[year_index]]
+            _parse_number_display(fixed_edit.loc[3, year_columns[year_index]])
         )
         cost_state["fixed_overhead"][year_index]["Services"] = _non_negative(
-            fixed_edit.loc[4, year_columns[year_index]]
+            _parse_number_display(fixed_edit.loc[4, year_columns[year_index]])
         )
         cost_state["fixed_overhead"][year_index]["Other Services"] = _non_negative(
-            fixed_edit.loc[5, year_columns[year_index]]
+            _parse_number_display(fixed_edit.loc[5, year_columns[year_index]])
         )
 
     st.markdown("### Variable Costs")
@@ -274,21 +321,36 @@ def render_cost_model_assumptions(input_model):
             cost_state["variable_costs"][year_index]["Communication Type"],
         ]
         value_table[col] = [
-            _percent_to_display(
-                cost_state["variable_costs"][year_index]["Training Value"]
+            _format_number_display(
+                _percent_to_display(
+                    cost_state["variable_costs"][year_index]["Training Value"]
+                ),
+                1,
             )
             if cost_state["variable_costs"][year_index]["Training Type"] == "%"
-            else cost_state["variable_costs"][year_index]["Training Value"],
-            _percent_to_display(
-                cost_state["variable_costs"][year_index]["Travel Value"]
+            else _format_number_display(
+                cost_state["variable_costs"][year_index]["Training Value"], 0
+            ),
+            _format_number_display(
+                _percent_to_display(
+                    cost_state["variable_costs"][year_index]["Travel Value"]
+                ),
+                1,
             )
             if cost_state["variable_costs"][year_index]["Travel Type"] == "%"
-            else cost_state["variable_costs"][year_index]["Travel Value"],
-            _percent_to_display(
-                cost_state["variable_costs"][year_index]["Communication Value"]
+            else _format_number_display(
+                cost_state["variable_costs"][year_index]["Travel Value"], 0
+            ),
+            _format_number_display(
+                _percent_to_display(
+                    cost_state["variable_costs"][year_index]["Communication Value"]
+                ),
+                1,
             )
             if cost_state["variable_costs"][year_index]["Communication Type"] == "%"
-            else cost_state["variable_costs"][year_index]["Communication Value"],
+            else _format_number_display(
+                cost_state["variable_costs"][year_index]["Communication Value"], 0
+            ),
         ]
     type_df = pd.DataFrame(type_table)
     value_df = pd.DataFrame(value_table)
@@ -314,7 +376,7 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )
@@ -329,13 +391,13 @@ def render_cost_model_assumptions(input_model):
             2, year_columns[year_index]
         ]
         training_value = _non_negative(
-            value_edit.loc[0, year_columns[year_index]]
+            _parse_number_display(value_edit.loc[0, year_columns[year_index]])
         )
         travel_value = _non_negative(
-            value_edit.loc[1, year_columns[year_index]]
+            _parse_number_display(value_edit.loc[1, year_columns[year_index]])
         )
         communication_value = _non_negative(
-            value_edit.loc[2, year_columns[year_index]]
+            _parse_number_display(value_edit.loc[2, year_columns[year_index]])
         )
         if cost_state["variable_costs"][year_index]["Training Type"] == "%":
             training_value = _percent_from_display(training_value)
@@ -409,7 +471,8 @@ def render_cost_model_assumptions(input_model):
     }
     for year_index, col in enumerate(year_columns):
         summary_table[col] = [
-            summary_rows[row_key][year_index] for row_key in summary_rows
+            _format_number_display(summary_rows[row_key][year_index], 0)
+            for row_key in summary_rows
         ]
     summary_df = pd.DataFrame(summary_table)
     st.data_editor(
@@ -420,7 +483,7 @@ def render_cost_model_assumptions(input_model):
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.NumberColumn(format=",.2f") for col in year_columns},
+            **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
     )

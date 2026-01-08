@@ -55,13 +55,35 @@ def _percent_from_display(value):
     return float(value) / 100
 
 
+def _format_number_display(value, decimals=0):
+    if value is None or pd.isna(value):
+        return ""
+    try:
+        number = float(str(value).replace(",", ""))
+    except ValueError:
+        return value
+    if decimals == 0:
+        return f"{number:,.0f}"
+    return f"{number:,.{decimals}f}"
+
+
+def _parse_number_display(value):
+    if value is None or pd.isna(value) or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return float(str(value).replace(",", ""))
+
+
 def _apply_unit_display(df, value_col="Value", unit_col="Unit"):
     display_df = df.copy()
     if value_col in display_df.columns and unit_col in display_df.columns:
         display_df[value_col] = display_df.apply(
-            lambda row: _percent_to_display(row[value_col])
+            lambda row: _format_number_display(
+                _percent_to_display(row[value_col]), 1
+            )
             if row[unit_col] == "%"
-            else row[value_col],
+            else _format_number_display(row[value_col], 0),
             axis=1,
         )
     return display_df
@@ -71,9 +93,9 @@ def _restore_unit_values(df, value_col="Value", unit_col="Unit"):
     restored_df = df.copy()
     if value_col in restored_df.columns and unit_col in restored_df.columns:
         restored_df[value_col] = restored_df.apply(
-            lambda row: _percent_from_display(row[value_col])
+            lambda row: _percent_from_display(_parse_number_display(row[value_col]))
             if row[unit_col] == "%"
-            else row[value_col],
+            else _parse_number_display(row[value_col]),
             axis=1,
         )
     return restored_df
@@ -241,7 +263,7 @@ def render_advanced_assumptions(input_model):
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.NumberColumn(format=",.2f"),
+            "Value": st.column_config.TextColumn(),
         },
         use_container_width=True,
     )
@@ -269,7 +291,7 @@ def render_advanced_assumptions(input_model):
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.NumberColumn(format=",.2f"),
+            "Value": st.column_config.TextColumn(),
         },
         use_container_width=True,
     )
@@ -303,7 +325,7 @@ def render_advanced_assumptions(input_model):
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.NumberColumn(format=",.2f"),
+            "Value": st.column_config.TextColumn(),
         },
         use_container_width=True,
     )
@@ -333,7 +355,7 @@ def render_advanced_assumptions(input_model):
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.NumberColumn(format=",.2f"),
+            "Value": st.column_config.TextColumn(),
         },
         use_container_width=True,
     )
@@ -359,7 +381,7 @@ def render_advanced_assumptions(input_model):
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
             "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.NumberColumn(format=",.2f"),
+            "Value": st.column_config.TextColumn(),
         },
         use_container_width=True,
     )
@@ -2676,7 +2698,7 @@ def run_app():
     )
 
     # Navigation for question-driven layout.
-    st.session_state.setdefault("page", "Overview")
+    st.session_state.setdefault("page", "Operating Model (P&L)")
     with st.sidebar:
         nav_css = """
         <style>
@@ -2712,11 +2734,10 @@ def run_app():
             font-weight: 600;
           }
           div[data-testid="stRadio"] label:nth-child(1)::before,
-          div[data-testid="stRadio"] label:nth-child(2)::before,
-          div[data-testid="stRadio"] label:nth-child(5)::before,
-          div[data-testid="stRadio"] label:nth-child(8)::before,
-          div[data-testid="stRadio"] label:nth-child(10)::before,
-          div[data-testid="stRadio"] label:nth-child(11)::before {
+          div[data-testid="stRadio"] label:nth-child(4)::before,
+          div[data-testid="stRadio"] label:nth-child(7)::before,
+          div[data-testid="stRadio"] label:nth-child(9)::before,
+          div[data-testid="stRadio"] label:nth-child(10)::before {
             display: block;
             font-size: 0.7rem;
             letter-spacing: 0.12em;
@@ -2725,22 +2746,19 @@ def run_app():
             margin: 0.9rem 0 0.35rem;
           }
           div[data-testid="stRadio"] label:nth-child(1)::before {
-            content: "OVERVIEW";
+            content: "OPERATING MODEL";
             margin-top: 0;
           }
-          div[data-testid="stRadio"] label:nth-child(2)::before {
-            content: "OPERATING MODEL";
-          }
-          div[data-testid="stRadio"] label:nth-child(5)::before {
+          div[data-testid="stRadio"] label:nth-child(4)::before {
             content: "PLANNING";
           }
-          div[data-testid="stRadio"] label:nth-child(8)::before {
+          div[data-testid="stRadio"] label:nth-child(7)::before {
             content: "FINANCING";
           }
-          div[data-testid="stRadio"] label:nth-child(10)::before {
+          div[data-testid="stRadio"] label:nth-child(9)::before {
             content: "VALUATION";
           }
-          div[data-testid="stRadio"] label:nth-child(11)::before {
+          div[data-testid="stRadio"] label:nth-child(10)::before {
             content: "SETTINGS";
           }
         </style>
@@ -2762,7 +2780,6 @@ def run_app():
         st.markdown(editor_css, unsafe_allow_html=True)
 
         nav_options = [
-            "Overview",
             "Operating Model (P&L)",
             "Cashflow & Liquidity",
             "Balance Sheet",
@@ -2790,9 +2807,7 @@ def run_app():
             config = dict(column_config)
             for col in display_df.columns:
                 if col not in config:
-                    config[col] = st.column_config.NumberColumn(
-                        format=",.2f"
-                    )
+                    config[col] = st.column_config.TextColumn()
             edited = st.data_editor(
                 display_df,
                 hide_index=True,
