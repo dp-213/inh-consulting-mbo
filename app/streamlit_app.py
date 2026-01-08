@@ -72,7 +72,10 @@ def _parse_number_display(value):
         return None
     if isinstance(value, (int, float)):
         return float(value)
-    return float(str(value).replace(",", ""))
+    try:
+        return float(str(value).replace(",", ""))
+    except ValueError:
+        return value
 
 
 def _apply_unit_display(df, value_col="Value", unit_col="Unit"):
@@ -94,7 +97,7 @@ def _restore_unit_values(df, value_col="Value", unit_col="Unit"):
     if value_col in restored_df.columns and unit_col in restored_df.columns:
         restored_df[value_col] = restored_df.apply(
             lambda row: _percent_from_display(_parse_number_display(row[value_col]))
-            if row[unit_col] == "%"
+            if row[unit_col] == "%" and isinstance(_parse_number_display(row[value_col]), (int, float))
             else _parse_number_display(row[value_col]),
             axis=1,
         )
