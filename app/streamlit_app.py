@@ -2583,10 +2583,10 @@ def run_app():
         st.markdown("**MBO Financial Model**")
         st.markdown("OVERVIEW")
         st.markdown("OPERATING MODEL")
-        st.markdown("Assumptions")
+        st.markdown("PLANNING")
         st.markdown("FINANCING")
         st.markdown("VALUATION")
-        st.markdown("SETTINGS")
+        st.markdown("<div style=\"font-size:0.75rem;color:#6b7280;\">SETTINGS</div>", unsafe_allow_html=True)
 
         nav_options = [
             "Overview",
@@ -2595,7 +2595,7 @@ def run_app():
             "Balance Sheet",
             "Revenue Model",
             "Cost Model",
-            "Other Assumptions",
+            "Advanced Assumptions",
             "Financing & Debt",
             "Equity Case",
             "Valuation & Purchase Price",
@@ -2705,8 +2705,8 @@ def run_app():
         _apply_assumptions_state()
         return
 
-    if page == "Other Assumptions":
-        st.header("Other Assumptions")
+    if page == "Advanced Assumptions":
+        st.header("Advanced Assumptions")
         st.write("Master input sheet – all remaining assumptions.")
 
         scenario_options = ["Base", "Best", "Worst"]

@@ -186,7 +186,7 @@ def render_revenue_model_assumptions(input_model):
             guarantee_edit.loc[0, year_columns[year_index]]
         )
 
-    st.markdown("### Revenue Bridge")
+    st.markdown("### Revenue Bridge / Summary")
     bridge_rows = []
     for year_index in range(5):
         reference_value = revenue_state["reference_revenue_eur"][scenario]
@@ -214,6 +214,14 @@ def render_revenue_model_assumptions(input_model):
             }
         )
     bridge_df = pd.DataFrame(bridge_rows)
+    bridge_units = {
+        "Capacity Revenue": "EUR",
+        "Growth Adj.": "EUR",
+        "Guaranteed Floor": "EUR",
+        "Final Revenue": "EUR",
+        "Guaranteed %": "%",
+    }
+    bridge_df.insert(1, "Unit", ["EUR"] * len(bridge_df))
     for col in [
         "Capacity Revenue",
         "Growth Adj.",

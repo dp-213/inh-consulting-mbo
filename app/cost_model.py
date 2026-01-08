@@ -87,19 +87,29 @@ def render_cost_model_assumptions(input_model):
     year_columns = [f"Year {i}" for i in range(5)]
 
     st.markdown("### Inflation")
-    inflation_cols = st.columns([1, 1])
-    cost_state["inflation"]["apply"] = inflation_cols[0].toggle(
-        "Apply inflation to costs",
-        value=bool(cost_state["inflation"].get("apply", False)),
+    inflation_df = pd.DataFrame(
+        {
+            "Parameter": ["Apply Inflation", "Inflation Rate (% p.a.)"],
+            "Unit": ["", "%"],
+            "Value": [
+                bool(cost_state["inflation"].get("apply", False)),
+                float(cost_state["inflation"].get("rate_pct", 0.0)),
+            ],
+        }
     )
-    cost_state["inflation"]["rate_pct"] = inflation_cols[1].number_input(
-        "Inflation Rate (% p.a.)",
-        min_value=0.0,
-        max_value=0.2,
-        step=0.005,
-        value=float(cost_state["inflation"].get("rate_pct", 0.0)),
-        format="%.3f",
+    inflation_edit = st.data_editor(
+        inflation_df,
+        hide_index=True,
+        key="cost_model.inflation",
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+            "Unit": st.column_config.TextColumn(disabled=True),
+            "Value": st.column_config.NumberColumn(),
+        },
+        use_container_width=True,
     )
+    cost_state["inflation"]["apply"] = bool(inflation_edit.loc[0, "Value"])
+    cost_state["inflation"]["rate_pct"] = _non_negative(inflation_edit.loc[1, "Value"])
 
     st.markdown("### Consultant Costs")
     consultant_table = {
