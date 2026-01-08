@@ -199,6 +199,373 @@ def render_revenue_model_assumptions(input_model):
     st.dataframe(bridge_df, use_container_width=True)
 
 
+def render_cost_model_assumptions(input_model):
+    st.header("Cost Model")
+    st.write("Detailed annual cost planning (5-year view).")
+
+    cost_model = input_model.cost_model
+    year_labels = [f"Year {i}" for i in range(5)]
+    revenue_by_year = getattr(input_model, "revenue_by_year", None)
+    if not isinstance(revenue_by_year, list) or len(revenue_by_year) != 5:
+        revenue_by_year = [0.0] * 5
+
+    st.markdown("### Consultant Costs (Revenue-linked)")
+    consultant_rows = []
+    for year_index in range(5):
+        consultant_rows.append(
+            {
+                "Year": f"Year {year_index}",
+                "Consultant FTE": st.session_state.get(
+                    f"cost_model.consultant_fte_year_{year_index}",
+                    cost_model[f"consultant_fte_year_{year_index}"].value,
+                ),
+                "Avg Base Cost (EUR)": st.session_state.get(
+                    f"cost_model.consultant_base_cost_eur_year_{year_index}",
+                    cost_model[
+                        f"consultant_base_cost_eur_year_{year_index}"
+                    ].value,
+                ),
+                "Bonus %": st.session_state.get(
+                    f"cost_model.consultant_bonus_pct_year_{year_index}",
+                    cost_model[
+                        f"consultant_bonus_pct_year_{year_index}"
+                    ].value,
+                ),
+                "Payroll Burden %": st.session_state.get(
+                    f"cost_model.consultant_payroll_pct_year_{year_index}",
+                    cost_model[
+                        f"consultant_payroll_pct_year_{year_index}"
+                    ].value,
+                ),
+                "Loaded Cost per FTE (EUR)": 0.0,
+                "Total Consultant Cost (EUR)": 0.0,
+            }
+        )
+    consultant_df = pd.DataFrame(consultant_rows)
+    consultant_df["Loaded Cost per FTE (EUR)"] = (
+        consultant_df["Avg Base Cost (EUR)"]
+        * (1 + consultant_df["Bonus %"] + consultant_df["Payroll Burden %"])
+    )
+    consultant_df["Total Consultant Cost (EUR)"] = (
+        consultant_df["Consultant FTE"]
+        * consultant_df["Loaded Cost per FTE (EUR)"]
+    )
+    consultant_edit = st.data_editor(
+        consultant_df,
+        hide_index=True,
+        key="cost_model.consultant_costs",
+        column_config={
+            "Year": st.column_config.TextColumn(disabled=True),
+            "Loaded Cost per FTE (EUR)": st.column_config.NumberColumn(
+                disabled=True
+            ),
+            "Total Consultant Cost (EUR)": st.column_config.NumberColumn(
+                disabled=True
+            ),
+        },
+        use_container_width=True,
+    )
+    for year_index in range(5):
+        st.session_state[
+            f"cost_model.consultant_fte_year_{year_index}"
+        ] = float(consultant_edit.loc[year_index, "Consultant FTE"])
+        st.session_state[
+            f"cost_model.consultant_base_cost_eur_year_{year_index}"
+        ] = float(consultant_edit.loc[year_index, "Avg Base Cost (EUR)"])
+        st.session_state[
+            f"cost_model.consultant_bonus_pct_year_{year_index}"
+        ] = float(consultant_edit.loc[year_index, "Bonus %"])
+        st.session_state[
+            f"cost_model.consultant_payroll_pct_year_{year_index}"
+        ] = float(consultant_edit.loc[year_index, "Payroll Burden %"])
+
+    st.markdown("### Backoffice Costs")
+    backoffice_rows = []
+    for year_index in range(5):
+        backoffice_rows.append(
+            {
+                "Year": f"Year {year_index}",
+                "Backoffice FTE": st.session_state.get(
+                    f"cost_model.backoffice_fte_year_{year_index}",
+                    cost_model[f"backoffice_fte_year_{year_index}"].value,
+                ),
+                "Avg Salary (EUR)": st.session_state.get(
+                    f"cost_model.backoffice_base_cost_eur_year_{year_index}",
+                    cost_model[
+                        f"backoffice_base_cost_eur_year_{year_index}"
+                    ].value,
+                ),
+                "Payroll Burden %": st.session_state.get(
+                    f"cost_model.backoffice_payroll_pct_year_{year_index}",
+                    cost_model[
+                        f"backoffice_payroll_pct_year_{year_index}"
+                    ].value,
+                ),
+                "Loaded Cost per FTE (EUR)": 0.0,
+                "Total Backoffice Cost (EUR)": 0.0,
+            }
+        )
+    backoffice_df = pd.DataFrame(backoffice_rows)
+    backoffice_df["Loaded Cost per FTE (EUR)"] = (
+        backoffice_df["Avg Salary (EUR)"]
+        * (1 + backoffice_df["Payroll Burden %"])
+    )
+    backoffice_df["Total Backoffice Cost (EUR)"] = (
+        backoffice_df["Backoffice FTE"]
+        * backoffice_df["Loaded Cost per FTE (EUR)"]
+    )
+    backoffice_edit = st.data_editor(
+        backoffice_df,
+        hide_index=True,
+        key="cost_model.backoffice_costs",
+        column_config={
+            "Year": st.column_config.TextColumn(disabled=True),
+            "Loaded Cost per FTE (EUR)": st.column_config.NumberColumn(
+                disabled=True
+            ),
+            "Total Backoffice Cost (EUR)": st.column_config.NumberColumn(
+                disabled=True
+            ),
+        },
+        use_container_width=True,
+    )
+    for year_index in range(5):
+        st.session_state[
+            f"cost_model.backoffice_fte_year_{year_index}"
+        ] = float(backoffice_edit.loc[year_index, "Backoffice FTE"])
+        st.session_state[
+            f"cost_model.backoffice_base_cost_eur_year_{year_index}"
+        ] = float(backoffice_edit.loc[year_index, "Avg Salary (EUR)"])
+        st.session_state[
+            f"cost_model.backoffice_payroll_pct_year_{year_index}"
+        ] = float(backoffice_edit.loc[year_index, "Payroll Burden %"])
+
+    st.markdown("### Fixed Overhead (Absolute Values)")
+    fixed_rows = []
+    for year_index in range(5):
+        fixed_rows.append(
+            {
+                "Year": f"Year {year_index}",
+                "Advisory (EUR)": st.session_state.get(
+                    f"cost_model.fixed_overhead_advisory_year_{year_index}",
+                    cost_model[
+                        f"fixed_overhead_advisory_year_{year_index}"
+                    ].value,
+                ),
+                "Legal (EUR)": st.session_state.get(
+                    f"cost_model.fixed_overhead_legal_year_{year_index}",
+                    cost_model[
+                        f"fixed_overhead_legal_year_{year_index}"
+                    ].value,
+                ),
+                "IT & Software (EUR)": st.session_state.get(
+                    f"cost_model.fixed_overhead_it_year_{year_index}",
+                    cost_model[
+                        f"fixed_overhead_it_year_{year_index}"
+                    ].value,
+                ),
+                "Office Rent (EUR)": st.session_state.get(
+                    f"cost_model.fixed_overhead_office_year_{year_index}",
+                    cost_model[
+                        f"fixed_overhead_office_year_{year_index}"
+                    ].value,
+                ),
+                "Services (EUR)": st.session_state.get(
+                    f"cost_model.fixed_overhead_services_year_{year_index}",
+                    cost_model[
+                        f"fixed_overhead_services_year_{year_index}"
+                    ].value,
+                ),
+                "Total Fixed Overhead (EUR)": 0.0,
+            }
+        )
+    fixed_df = pd.DataFrame(fixed_rows)
+    fixed_df["Total Fixed Overhead (EUR)"] = (
+        fixed_df["Advisory (EUR)"]
+        + fixed_df["Legal (EUR)"]
+        + fixed_df["IT & Software (EUR)"]
+        + fixed_df["Office Rent (EUR)"]
+        + fixed_df["Services (EUR)"]
+    )
+    fixed_edit = st.data_editor(
+        fixed_df,
+        hide_index=True,
+        key="cost_model.fixed_overhead",
+        column_config={
+            "Year": st.column_config.TextColumn(disabled=True),
+            "Total Fixed Overhead (EUR)": st.column_config.NumberColumn(
+                disabled=True
+            ),
+        },
+        use_container_width=True,
+    )
+    for year_index in range(5):
+        st.session_state[
+            f"cost_model.fixed_overhead_advisory_year_{year_index}"
+        ] = float(fixed_edit.loc[year_index, "Advisory (EUR)"])
+        st.session_state[
+            f"cost_model.fixed_overhead_legal_year_{year_index}"
+        ] = float(fixed_edit.loc[year_index, "Legal (EUR)"])
+        st.session_state[
+            f"cost_model.fixed_overhead_it_year_{year_index}"
+        ] = float(fixed_edit.loc[year_index, "IT & Software (EUR)"])
+        st.session_state[
+            f"cost_model.fixed_overhead_office_year_{year_index}"
+        ] = float(fixed_edit.loc[year_index, "Office Rent (EUR)"])
+        st.session_state[
+            f"cost_model.fixed_overhead_services_year_{year_index}"
+        ] = float(fixed_edit.loc[year_index, "Services (EUR)"])
+
+    st.markdown("### Variable Costs")
+    variable_rows = []
+    for year_index in range(5):
+        variable_rows.append(
+            {
+                "Year": f"Year {year_index}",
+                "Training %": st.session_state.get(
+                    f"cost_model.variable_training_pct_year_{year_index}",
+                    cost_model[
+                        f"variable_training_pct_year_{year_index}"
+                    ].value,
+                ),
+                "Training (EUR)": st.session_state.get(
+                    f"cost_model.variable_training_eur_year_{year_index}",
+                    cost_model[
+                        f"variable_training_eur_year_{year_index}"
+                    ].value,
+                ),
+                "Travel %": st.session_state.get(
+                    f"cost_model.variable_travel_pct_year_{year_index}",
+                    cost_model[
+                        f"variable_travel_pct_year_{year_index}"
+                    ].value,
+                ),
+                "Travel (EUR)": st.session_state.get(
+                    f"cost_model.variable_travel_eur_year_{year_index}",
+                    cost_model[
+                        f"variable_travel_eur_year_{year_index}"
+                    ].value,
+                ),
+                "Communication %": st.session_state.get(
+                    f"cost_model.variable_communication_pct_year_{year_index}",
+                    cost_model[
+                        f"variable_communication_pct_year_{year_index}"
+                    ].value,
+                ),
+                "Communication (EUR)": st.session_state.get(
+                    f"cost_model.variable_communication_eur_year_{year_index}",
+                    cost_model[
+                        f"variable_communication_eur_year_{year_index}"
+                    ].value,
+                ),
+                "Total Variable Costs (EUR)": 0.0,
+            }
+        )
+    variable_df = pd.DataFrame(variable_rows)
+    variable_totals = []
+    for year_index in range(5):
+        revenue = revenue_by_year[year_index]
+        training_value = (
+            variable_df.loc[year_index, "Training (EUR)"]
+            if variable_df.loc[year_index, "Training (EUR)"] > 0
+            else revenue * variable_df.loc[year_index, "Training %"]
+        )
+        travel_value = (
+            variable_df.loc[year_index, "Travel (EUR)"]
+            if variable_df.loc[year_index, "Travel (EUR)"] > 0
+            else revenue * variable_df.loc[year_index, "Travel %"]
+        )
+        communication_value = (
+            variable_df.loc[year_index, "Communication (EUR)"]
+            if variable_df.loc[year_index, "Communication (EUR)"] > 0
+            else revenue * variable_df.loc[year_index, "Communication %"]
+        )
+        total_variable = training_value + travel_value + communication_value
+        variable_totals.append(total_variable)
+    variable_df["Total Variable Costs (EUR)"] = variable_totals
+    variable_edit = st.data_editor(
+        variable_df,
+        hide_index=True,
+        key="cost_model.variable_costs",
+        column_config={
+            "Year": st.column_config.TextColumn(disabled=True),
+            "Total Variable Costs (EUR)": st.column_config.NumberColumn(
+                disabled=True
+            ),
+        },
+        use_container_width=True,
+    )
+    for year_index in range(5):
+        st.session_state[
+            f"cost_model.variable_training_pct_year_{year_index}"
+        ] = float(variable_edit.loc[year_index, "Training %"])
+        st.session_state[
+            f"cost_model.variable_training_eur_year_{year_index}"
+        ] = float(variable_edit.loc[year_index, "Training (EUR)"])
+        st.session_state[
+            f"cost_model.variable_travel_pct_year_{year_index}"
+        ] = float(variable_edit.loc[year_index, "Travel %"])
+        st.session_state[
+            f"cost_model.variable_travel_eur_year_{year_index}"
+        ] = float(variable_edit.loc[year_index, "Travel (EUR)"])
+        st.session_state[
+            f"cost_model.variable_communication_pct_year_{year_index}"
+        ] = float(variable_edit.loc[year_index, "Communication %"])
+        st.session_state[
+            f"cost_model.variable_communication_eur_year_{year_index}"
+        ] = float(variable_edit.loc[year_index, "Communication (EUR)"])
+
+    st.markdown("### Cost Summary (Read-only)")
+    summary_rows = []
+    for year_index in range(5):
+        consultant_total = float(
+            consultant_df.loc[year_index, "Total Consultant Cost (EUR)"]
+        )
+        management_cost = st.session_state.get(
+            "personnel_costs.management_md_cost_eur", 0.0
+        )
+        management_growth = st.session_state.get(
+            "personnel_costs.management_md_growth_pct", 0.0
+        )
+        management_total = management_cost * (
+            (1 + management_growth) ** year_index
+        )
+        backoffice_total = float(
+            backoffice_df.loc[year_index, "Total Backoffice Cost (EUR)"]
+        )
+        fixed_total = float(
+            fixed_df.loc[year_index, "Total Fixed Overhead (EUR)"]
+        )
+        variable_total = float(variable_df.loc[year_index, "Total Variable Costs (EUR)"])
+        total_operating = (
+            consultant_total
+            + management_total
+            + backoffice_total
+            + fixed_total
+            + variable_total
+        )
+        summary_rows.append(
+            {
+                "Year": f"Year {year_index}",
+                "Consultant Costs": consultant_total + management_total,
+                "Backoffice Costs": backoffice_total,
+                "Fixed Overhead": fixed_total,
+                "Variable Costs": variable_total,
+                "Total Operating Costs": total_operating,
+            }
+        )
+    summary_df = pd.DataFrame(summary_rows)
+    for col in [
+        "Consultant Costs",
+        "Backoffice Costs",
+        "Fixed Overhead",
+        "Variable Costs",
+        "Total Operating Costs",
+    ]:
+        summary_df[col] = summary_df[col].apply(format_currency)
+    st.dataframe(summary_df, use_container_width=True)
+
+
 def render_general_assumptions(input_model):
     # Currently uses the full advanced sheet for simplicity.
     render_advanced_assumptions(input_model)
@@ -2655,7 +3022,7 @@ def run_app():
             )
             st.selectbox(
                 "Section",
-                ["General", "Advanced", "Revenue Model"],
+                ["General", "Advanced", "Revenue Model", "Cost Model"],
                 key="assumptions.sidebar_section",
             )
 
@@ -2813,981 +3180,11 @@ def run_app():
         if section == "Revenue Model":
             render_revenue_model_assumptions(input_model)
             return
+        if section == "Cost Model":
+            render_cost_model_assumptions(input_model)
+            return
         render_advanced_assumptions(input_model)
         return
-
-        scenario_options = ["Base", "Best", "Worst"]
-        scenario_default = base_model.scenario_selection[
-            "selected_scenario"
-        ].value
-        scenario_index = (
-            scenario_options.index(scenario_default)
-            if scenario_default in scenario_options
-            else 0
-        )
-        info_cols = st.columns([1, 1])
-        selected_scenario = info_cols[0].selectbox(
-            "Scenario",
-            scenario_options,
-            index=scenario_index,
-            key="assumptions.scenario",
-        )
-        auto_sync = info_cols[1].toggle(
-            "Auto-apply scenario values",
-            value=st.session_state.get("assumptions.auto_sync", True),
-            key="assumptions.auto_sync",
-        )
-        st.info("Changes here affect all pages instantly.")
-        st.session_state["scenario_selection.selected_scenario"] = (
-            selected_scenario
-        )
-        scenario_key = selected_scenario.lower()
-
-        if auto_sync:
-            util_value = st.session_state.get(
-                f"scenario_parameters.utilization_rate.{scenario_key}",
-                base_model.scenario_parameters["utilization_rate"][
-                    scenario_key
-                ].value,
-            )
-            st.session_state["utilization_by_year"] = [util_value] * 5
-            for i in range(5):
-                st.session_state[f"utilization_by_year.{i}"] = util_value
-
-        assumptions_state = st.session_state["assumptions"]
-        revenue_df = pd.DataFrame(assumptions_state["revenue_drivers"])
-        active_label = selected_scenario
-        base_label = "Base (Active)" if active_label == "Base" else "Base"
-        best_label = "Best (Active)" if active_label == "Best" else "Best"
-        worst_label = "Worst (Active)" if active_label == "Worst" else "Worst"
-        revenue_df = revenue_df.rename(
-            columns={"Base": base_label, "Best": best_label, "Worst": worst_label}
-        )
-        st.markdown("### Revenue Drivers")
-        revenue_edit = st.data_editor(
-            revenue_df,
-            hide_index=True,
-            key="assumptions.revenue_drivers",
-            column_config={
-                "Parameter": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Description": st.column_config.TextColumn(disabled=True),
-                base_label: st.column_config.NumberColumn(
-                    disabled=auto_sync and active_label != "Base"
-                ),
-                best_label: st.column_config.NumberColumn(
-                    disabled=auto_sync and active_label != "Best"
-                ),
-                worst_label: st.column_config.NumberColumn(
-                    disabled=auto_sync and active_label != "Worst"
-                ),
-            },
-            use_container_width=True,
-        )
-        revenue_edit = revenue_edit.rename(
-            columns={base_label: "Base", best_label: "Best", worst_label: "Worst"}
-        )
-        assumptions_state["revenue_drivers"] = revenue_edit.to_dict("records")
-        for _, row in revenue_edit.iterrows():
-            param = row["Parameter"]
-            if param == "Utilization (%)":
-                st.session_state["scenario_parameters.utilization_rate.base"] = _clamp_pct(row["Base"])
-                st.session_state["scenario_parameters.utilization_rate.best"] = _clamp_pct(row["Best"])
-                st.session_state["scenario_parameters.utilization_rate.worst"] = _clamp_pct(row["Worst"])
-            elif param == "Day Rate (EUR)":
-                st.session_state["scenario_parameters.day_rate_eur.base"] = _non_negative(row["Base"])
-                st.session_state["scenario_parameters.day_rate_eur.best"] = _non_negative(row["Best"])
-                st.session_state["scenario_parameters.day_rate_eur.worst"] = _non_negative(row["Worst"])
-            elif param == "Consulting FTE":
-                st.session_state["operating_assumptions.consulting_fte_start"] = _non_negative(row["Base"])
-            elif param == "Workdays per Year":
-                st.session_state["operating_assumptions.work_days_per_year"] = _non_negative(row["Base"])
-            elif param == "Day Rate Growth (% p.a.)":
-                st.session_state["operating_assumptions.day_rate_growth_pct"] = _clamp_pct(row["Base"])
-
-        st.markdown("### Revenue Guarantees")
-        guarantee_df = pd.DataFrame(assumptions_state["revenue_guarantees"])
-        guarantee_edit = st.data_editor(
-            guarantee_df,
-            hide_index=True,
-            key="assumptions.revenue_guarantees",
-            column_config={
-                "Year": st.column_config.TextColumn(disabled=True),
-                "Description": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        assumptions_state["revenue_guarantees"] = guarantee_edit.to_dict("records")
-        guarantee_map = {
-            "Year 1": "operating_assumptions.revenue_guarantee_pct_year_1",
-            "Year 2": "operating_assumptions.revenue_guarantee_pct_year_2",
-            "Year 3": "operating_assumptions.revenue_guarantee_pct_year_3",
-        }
-        for _, row in guarantee_edit.iterrows():
-            key = guarantee_map.get(row["Year"])
-            if key:
-                st.session_state[key] = _clamp_pct(row["Guarantee %"])
-
-        st.markdown("### Personnel Costs")
-        personnel_df = pd.DataFrame(assumptions_state["personnel_costs"])
-        personnel_edit = st.data_editor(
-            personnel_df,
-            hide_index=True,
-            key="assumptions.personnel_costs",
-            column_config={
-                "Role": st.column_config.TextColumn(disabled=True),
-                "Cost Type": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        assumptions_state["personnel_costs"] = personnel_edit.to_dict("records")
-        for _, row in personnel_edit.iterrows():
-            role = row["Role"]
-            if role == "Consultant Base Salary":
-                st.session_state[
-                    "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year"
-                ] = _non_negative(row["Base Value (EUR)"])
-                st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
-            elif role == "Consultant Variable (% Revenue)":
-                st.session_state["personnel_cost_assumptions.bonus_pct_of_base"] = _clamp_pct(row["Base Value (EUR)"])
-            elif role == "Backoffice Cost per FTE":
-                st.session_state[
-                    "operating_assumptions.avg_backoffice_salary_eur_per_year"
-                ] = _non_negative(row["Base Value (EUR)"])
-                st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
-            elif role == "Management / MD Cost":
-                # Wire management fixed cost and growth into session state.
-                st.session_state["personnel_costs.management_md_cost_eur"] = _non_negative(row["Base Value (EUR)"])
-                st.session_state["personnel_costs.management_md_growth_pct"] = _clamp_pct(row["Growth (%)"])
-
-        st.markdown("### Operating Expenses (Opex)")
-        opex_df = pd.DataFrame(assumptions_state["opex"])
-        opex_edit = st.data_editor(
-            opex_df,
-            hide_index=True,
-            key="assumptions.opex",
-            column_config={
-                "Category": st.column_config.TextColumn(disabled=True),
-                "Cost Type": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        assumptions_state["opex"] = opex_edit.to_dict("records")
-        for _, row in opex_edit.iterrows():
-            category = row["Category"]
-            if category == "External Consulting":
-                st.session_state["overhead_and_variable_costs.legal_audit_eur_per_year"] = _non_negative(row["Value"])
-            elif category == "IT":
-                st.session_state["overhead_and_variable_costs.it_and_software_eur_per_year"] = _non_negative(row["Value"])
-            elif category == "Office":
-                st.session_state["overhead_and_variable_costs.rent_eur_per_year"] = _non_negative(row["Value"])
-            elif category == "Other Services":
-                st.session_state["overhead_and_variable_costs.other_overhead_eur_per_year"] = _non_negative(row["Value"])
-
-        st.markdown("### Financing Assumptions")
-        financing_df = pd.DataFrame(assumptions_state["financing"])
-        financing_edit = st.data_editor(
-            financing_df,
-            hide_index=True,
-            key="assumptions.financing",
-            column_config={
-                "Parameter": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        assumptions_state["financing"] = financing_edit.to_dict("records")
-        for _, row in financing_edit.iterrows():
-            parameter = row["Parameter"]
-            if parameter == "Senior Debt Amount":
-                st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = _non_negative(row["Value"])
-            elif parameter == "Interest Rate":
-                st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _clamp_pct(row["Value"])
-            elif parameter == "Amortisation Years":
-                st.session_state["financing.amortization_period_years"] = int(max(1, row["Value"]))
-            elif parameter == "Transaction Fees (%)":
-                st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
-
-        st.markdown("### Equity & Investor Assumptions")
-        equity_df = pd.DataFrame(assumptions_state["equity"])
-        equity_edit = st.data_editor(
-            equity_df,
-            hide_index=True,
-            key="assumptions.equity",
-            column_config={
-                "Parameter": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        assumptions_state["equity"] = equity_edit.to_dict("records")
-        for _, row in equity_edit.iterrows():
-            parameter = row["Parameter"]
-            if parameter == "Sponsor Equity Contribution":
-                st.session_state["equity.sponsor_equity_eur"] = _non_negative(row["Value"])
-            elif parameter == "Investor Equity Contribution":
-                st.session_state["equity.investor_equity_eur"] = _non_negative(row["Value"])
-            elif parameter == "Investor Exit Year":
-                try:
-                    exit_val = int(float(row["Value"]))
-                except (TypeError, ValueError):
-                    exit_val = _default_equity_assumptions(base_model)[
-                        "exit_year"
-                    ]
-                st.session_state["equity.exit_year"] = int(
-                    max(3, min(7, exit_val))
-                )
-            elif parameter == "Exit Multiple (x EBITDA)":
-                st.session_state["equity.exit_multiple"] = float(row["Value"])
-
-        st.markdown("### Cashflow Assumptions")
-        cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
-        cashflow_edit = st.data_editor(
-            cashflow_df,
-            hide_index=True,
-            key="assumptions.cashflow",
-            column_config={
-                "Parameter": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        assumptions_state["cashflow"] = cashflow_edit.to_dict("records")
-        for _, row in cashflow_edit.iterrows():
-            parameter = row["Parameter"]
-            if parameter == "Tax Cash Rate":
-                st.session_state["cashflow.tax_cash_rate_pct"] = _clamp_pct(row["Value"])
-            elif parameter == "Tax Payment Lag":
-                st.session_state["cashflow.tax_payment_lag_years"] = int(max(0, min(1, row["Value"])))
-            elif parameter == "Capex (% of Revenue)":
-                st.session_state["cashflow.capex_pct_revenue"] = _clamp_pct(row["Value"])
-            elif parameter == "Working Capital (% of Revenue)":
-                st.session_state["cashflow.working_capital_pct_revenue"] = _clamp_pct(row["Value"])
-            elif parameter == "Opening Cash Balance":
-                st.session_state["cashflow.opening_cash_balance_eur"] = _non_negative(row["Value"])
-
-        st.markdown("### Balance Sheet Assumptions")
-        balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
-        balance_edit = st.data_editor(
-            balance_df,
-            hide_index=True,
-            key="assumptions.balance_sheet",
-            column_config={
-                "Parameter": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        assumptions_state["balance_sheet"] = balance_edit.to_dict("records")
-        for _, row in balance_edit.iterrows():
-            parameter = row["Parameter"]
-            if parameter == "Opening Equity":
-                st.session_state["balance_sheet.opening_equity_eur"] = _non_negative(row["Value"])
-            elif parameter == "Depreciation Rate":
-                st.session_state["balance_sheet.depreciation_rate_pct"] = _clamp_pct(row["Value"])
-            elif parameter == "Minimum Cash Balance":
-                st.session_state["balance_sheet.minimum_cash_balance_eur"] = _non_negative(row["Value"])
-
-        st.markdown("### Valuation Assumptions")
-        valuation_df = pd.DataFrame(assumptions_state["valuation"])
-        valuation_edit = st.data_editor(
-            valuation_df,
-            hide_index=True,
-            key="assumptions.valuation",
-            column_config={
-                "Parameter": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        assumptions_state["valuation"] = valuation_edit.to_dict("records")
-        for _, row in valuation_edit.iterrows():
-            parameter = row["Parameter"]
-            if parameter == "Seller EBIT Multiple":
-                st.session_state["valuation.seller_ebit_multiple"] = float(row["Value"])
-            elif parameter == "Reference Year":
-                st.session_state["valuation.reference_year"] = int(max(0, min(4, row["Value"])))
-            elif parameter == "Discount Rate (WACC)":
-                st.session_state["valuation.buyer_discount_rate"] = _clamp_pct(row["Value"])
-            elif parameter == "Valuation Start Year":
-                st.session_state["valuation.valuation_start_year"] = int(max(0, min(4, row["Value"])))
-            elif parameter == "Debt at Close":
-                st.session_state["valuation.debt_at_close_eur"] = _non_negative(row["Value"])
-            elif parameter == "Transaction Costs (%)":
-                st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
-
-        _apply_assumptions_state()
-
-    edited_values = {}
-    for section_key, section_data in base_model.__dict__.items():
-        if not isinstance(section_data, dict):
-            continue
-        edited_values[section_key] = _collect_values_from_session(
-            section_data, section_key
-        )
-
-    input_model = create_demo_input_model()
-    if "scenario_selection" in edited_values:
-        edited_values["scenario_selection"]["selected_scenario"] = (
-            st.session_state.get(
-                "scenario_selection.selected_scenario",
-                selected_scenario,
-            )
-        )
-    for section_key, section_values in edited_values.items():
-        _apply_section_values(
-            getattr(input_model, section_key), section_values
-        )
-
-    # Map management cost assumptions into the runtime input model.
-    input_model.management_md_cost_eur_per_year = st.session_state.get(
-        "personnel_costs.management_md_cost_eur", 0.0
-    )
-    input_model.management_md_cost_growth_pct = st.session_state.get(
-        "personnel_costs.management_md_growth_pct", 0.0
-    )
-
-    utilization_by_year = st.session_state.get("utilization_by_year")
-    if not isinstance(utilization_by_year, list) or len(utilization_by_year) != 5:
-        scenario_utilization = input_model.scenario_parameters[
-            "utilization_rate"
-        ][scenario_key].value
-        utilization_by_year = [scenario_utilization] * 5
-        st.session_state["utilization_by_year"] = utilization_by_year
-    input_model.utilization_by_year = utilization_by_year
-
-    # Build revenue by year from the Revenue Model inputs.
-    revenue_model = getattr(input_model, "revenue_model", {})
-    reference_revenue = st.session_state.get(
-        "revenue_model.reference_revenue_eur",
-        revenue_model["reference_revenue_eur"].value,
-    )
-    revenue_by_year = []
-    for year_index in range(5):
-        guarantee_pct = st.session_state.get(
-            f"revenue_model.guarantee_pct_year_{year_index}",
-            revenue_model[f"guarantee_pct_year_{year_index}"].value,
-        )
-        in_group = st.session_state.get(
-            f"revenue_model.in_group_revenue_year_{year_index}",
-            revenue_model[f"in_group_revenue_year_{year_index}"].value,
-        )
-        external = st.session_state.get(
-            f"revenue_model.external_revenue_year_{year_index}",
-            revenue_model[f"external_revenue_year_{year_index}"].value,
-        )
-        modeled_revenue = in_group + external
-        guaranteed_revenue = min(
-            modeled_revenue, guarantee_pct * reference_revenue
-        )
-        final_revenue = max(guaranteed_revenue, modeled_revenue)
-        revenue_by_year.append(final_revenue)
-    input_model.revenue_by_year = revenue_by_year
-
-    cashflow_defaults = _default_cashflow_assumptions()
-    input_model.cashflow_assumptions = {
-        "tax_cash_rate_pct": st.session_state.get(
-            "cashflow.tax_cash_rate_pct",
-            cashflow_defaults["tax_cash_rate_pct"],
-        ),
-        "tax_payment_lag_years": st.session_state.get(
-            "cashflow.tax_payment_lag_years",
-            cashflow_defaults["tax_payment_lag_years"],
-        ),
-        "capex_pct_revenue": st.session_state.get(
-            "cashflow.capex_pct_revenue",
-            cashflow_defaults["capex_pct_revenue"],
-        ),
-        "working_capital_pct_revenue": st.session_state.get(
-            "cashflow.working_capital_pct_revenue",
-            cashflow_defaults["working_capital_pct_revenue"],
-        ),
-        "opening_cash_balance_eur": st.session_state.get(
-            "cashflow.opening_cash_balance_eur",
-            cashflow_defaults["opening_cash_balance_eur"],
-        ),
-    }
-
-    balance_defaults = _default_balance_sheet_assumptions(input_model)
-    input_model.balance_sheet_assumptions = {
-        "opening_equity_eur": st.session_state.get(
-            "balance_sheet.opening_equity_eur",
-            balance_defaults["opening_equity_eur"],
-        ),
-        "depreciation_rate_pct": st.session_state.get(
-            "balance_sheet.depreciation_rate_pct",
-            balance_defaults["depreciation_rate_pct"],
-        ),
-        "minimum_cash_balance_eur": st.session_state.get(
-            "balance_sheet.minimum_cash_balance_eur",
-            balance_defaults["minimum_cash_balance_eur"],
-        ),
-    }
-
-    financing_defaults = _default_financing_assumptions(input_model)
-    input_model.financing_assumptions = {
-        "initial_debt_eur": st.session_state.get(
-            "financing.initial_debt_eur",
-            financing_defaults["initial_debt_eur"],
-        ),
-        "interest_rate_pct": st.session_state.get(
-            "financing.interest_rate_pct",
-            financing_defaults["interest_rate_pct"],
-        ),
-        "amortization_type": "Linear",
-        "amortization_period_years": st.session_state.get(
-            "financing.amortization_period_years",
-            financing_defaults["amortization_period_years"],
-        ),
-        "grace_period_years": 0,
-        "special_repayment_year": None,
-        "special_repayment_amount_eur": 0.0,
-        "minimum_dscr": st.session_state.get(
-            "financing.minimum_dscr",
-            financing_defaults["minimum_dscr"],
-        ),
-        "minimum_cash_balance_eur": financing_defaults[
-            "minimum_cash_balance_eur"
-        ],
-        "maintenance_capex_pct_revenue": st.session_state.get(
-            "financing.maintenance_capex_pct_revenue",
-            financing_defaults["maintenance_capex_pct_revenue"],
-        ),
-    }
-
-    valuation_defaults = _default_valuation_assumptions(input_model)
-    input_model.valuation_runtime = {
-        "seller_ebit_multiple": st.session_state.get(
-            "valuation.seller_ebit_multiple",
-            valuation_defaults["seller_ebit_multiple"],
-        ),
-        "reference_year": st.session_state.get(
-            "valuation.reference_year",
-            valuation_defaults["reference_year"],
-        ),
-        "buyer_discount_rate": st.session_state.get(
-            "valuation.buyer_discount_rate",
-            valuation_defaults["buyer_discount_rate"],
-        ),
-        "valuation_start_year": st.session_state.get(
-            "valuation.valuation_start_year",
-            valuation_defaults["valuation_start_year"],
-        ),
-        "debt_at_close_eur": st.session_state.get(
-            "valuation.debt_at_close_eur",
-            valuation_defaults["debt_at_close_eur"],
-        ),
-        "transaction_cost_pct": st.session_state.get(
-            "valuation.transaction_cost_pct",
-            valuation_defaults["transaction_cost_pct"],
-        ),
-        "include_terminal_value": st.session_state.get(
-            "valuation.include_terminal_value",
-            valuation_defaults["include_terminal_value"],
-        ),
-    }
-    equity_defaults = _default_equity_assumptions(input_model)
-    input_model.equity_assumptions = {
-        "sponsor_equity_eur": st.session_state.get(
-            "equity.sponsor_equity_eur",
-            equity_defaults["sponsor_equity_eur"],
-        ),
-        "investor_equity_eur": st.session_state.get(
-            "equity.investor_equity_eur",
-            equity_defaults["investor_equity_eur"],
-        ),
-        "exit_year": st.session_state.get(
-            "equity.exit_year",
-            equity_defaults["exit_year"],
-        ),
-        "exit_method": st.session_state.get(
-            "equity.exit_method",
-            equity_defaults["exit_method"],
-        ),
-        "exit_multiple": st.session_state.get(
-            "equity.exit_multiple",
-            equity_defaults["exit_multiple"],
-        ),
-    }
-
-    # Run model calculations in the standard order.
-    pnl_list = run_model.calculate_pnl(input_model)
-    debt_schedule = run_model.calculate_debt_schedule(input_model)
-    cashflow_result = run_model.calculate_cashflow(
-        input_model, pnl_list, debt_schedule
-    )
-    depreciation_by_year = {
-        row["year"]: row.get("depreciation", 0.0) for row in cashflow_result
-    }
-    pnl_list = run_model.calculate_pnl(input_model, depreciation_by_year)
-    pnl_result = {f"Year {row['year']}": row for row in pnl_list}
-    debt_schedule = run_model.calculate_debt_schedule(
-        input_model, cashflow_result
-    )
-    balance_sheet = run_model.calculate_balance_sheet(
-        input_model, cashflow_result, debt_schedule, pnl_list
-    )
-    investment_result = run_model.calculate_investment(
-        input_model, cashflow_result, pnl_list, balance_sheet
-    )
-
-    def _format_value(value, formatter):
-        if value is None or (isinstance(value, float) and pd.isna(value)):
-            return "—"
-        return formatter(value)
-
-    def _get_git_commit():
-        try:
-            return (
-                subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
-                .decode("utf-8")
-                .strip()
-            )
-        except Exception:
-            return "unknown"
-
-    def _build_page_structure_snapshot():
-        return {
-            "Overview": {
-                "title": "Overview",
-                "sections": [
-                    "Deal Snapshot",
-                    "Business Performance Summary",
-                    "Financing & Risk Snapshot",
-                    "Equity Story",
-                ],
-                "tables": ["Performance Summary", "Financing Snapshot"],
-                "kpis": [
-                    "Purchase Price",
-                    "Equity Contribution",
-                    "Debt at Close",
-                    "Avg Revenue",
-                    "Avg EBITDA & Margin",
-                    "Avg Free Cash Flow",
-                    "Levered Equity IRR",
-                    "Minimum Cash Balance",
-                ],
-            },
-            "Operating Model (P&L)": {
-                "title": "Operating Model (P&L)",
-                "sections": ["Income Statement", "KPI Summary"],
-                "tables": ["P&L Statement", "KPI Block"],
-                "kpis": ["Revenue per Consultant", "EBITDA Margin", "EBIT Margin"],
-            },
-            "Cashflow & Liquidity": {
-                "title": "Cashflow & Liquidity",
-                "sections": ["Cashflow Statement", "KPI Summary"],
-                "tables": ["Cashflow Statement"],
-                "kpis": [
-                    "Operating Cashflow",
-                    "Free Cashflow",
-                    "Minimum Cash Balance",
-                ],
-            },
-            "Balance Sheet": {
-                "title": "Balance Sheet",
-                "sections": ["Balance Sheet", "KPI Summary"],
-                "tables": ["Balance Sheet"],
-                "kpis": [
-                    "Net Debt",
-                    "Equity Ratio",
-                    "Net Debt / EBITDA",
-                    "Minimum Cash Headroom",
-                ],
-            },
-            "Financing & Debt": {
-                "title": "Financing & Debt",
-                "sections": ["Bank View", "KPI Summary"],
-                "tables": ["Bank View (DSCR)", "Debt Schedule"],
-                "kpis": ["Average DSCR", "Minimum DSCR", "Peak Debt"],
-            },
-            "Valuation & Purchase Price": {
-                "title": "Valuation & Purchase Price",
-                "sections": [
-                    "Seller Valuation",
-                    "Buyer Valuation",
-                    "Purchase Price Bridge",
-                ],
-                "tables": [
-                    "Seller Valuation (Multiple-Based)",
-                    "Buyer Valuation (DCF)",
-                    "Purchase Price Bridge",
-                ],
-                "kpis": ["Implied EV / EBIT", "Buyer IRR"],
-            },
-            "Equity Case": {
-                "title": "Equity Case",
-                "sections": [
-                    "Headline Metrics",
-                    "Sources & Uses",
-                    "Equity Ownership",
-                    "Equity Cashflows",
-                    "Equity KPIs",
-                ],
-                "tables": [
-                    "Sources & Uses",
-                    "Equity Ownership",
-                    "Equity Cashflows",
-                    "Equity KPIs",
-                ],
-                "kpis": ["Sponsor IRR", "Investor IRR"],
-            },
-            "Assumptions": {
-                "title": "Assumptions",
-                "sections": [
-                    "Revenue Drivers",
-                    "Revenue Guarantees",
-                    "Personnel Costs",
-                    "Opex",
-                    "Financing",
-                    "Equity",
-                    "Cashflow",
-                    "Balance Sheet",
-                    "Valuation",
-                ],
-                "tables": [
-                    "Revenue Drivers",
-                    "Revenue Guarantees",
-                    "Personnel Costs",
-                    "Operating Expenses",
-                    "Financing Assumptions",
-                    "Equity Assumptions",
-                    "Cashflow Assumptions",
-                    "Balance Sheet Assumptions",
-                    "Valuation Assumptions",
-                ],
-                "kpis": [],
-            },
-        }
-
-    def _build_model_snapshot_payload():
-        scenario = input_model.scenario_selection["selected_scenario"].value
-        horizon_years = 5
-        assumptions_state = st.session_state.get("assumptions", {})
-        utilization_by_year = st.session_state.get("utilization_by_year")
-
-        pnl_summary = {}
-        for year_label, year_data in pnl_result.items():
-            revenue = year_data.get("revenue", 0.0)
-            ebitda = year_data.get("ebitda", 0.0)
-            ebit = year_data.get("ebit", 0.0)
-            net_income = year_data.get("net_income", 0.0)
-            pnl_summary[year_label] = {
-                "revenue": revenue,
-                "ebitda": ebitda,
-                "ebit": ebit,
-                "net_income": net_income,
-                "ebitda_margin": ebitda / revenue if revenue else 0.0,
-                "ebit_margin": ebit / revenue if revenue else 0.0,
-                "net_margin": net_income / revenue if revenue else 0.0,
-            }
-
-        cashflow_summary = {}
-        min_cash = None
-        for row in cashflow_result:
-            year_label = f"Year {row['year']}"
-            cashflow_summary[year_label] = {
-                "operating_cf": row.get("operating_cf", 0.0),
-                "free_cashflow": row.get("free_cashflow", 0.0),
-                "cash_balance": row.get("cash_balance", 0.0),
-            }
-            cash_balance = row.get("cash_balance", 0.0)
-            min_cash = cash_balance if min_cash is None else min(
-                min_cash, cash_balance
-            )
-
-        balance_summary = {}
-        balance_checks = {}
-        for row in balance_sheet:
-            year_label = f"Year {row['year']}"
-            balance_summary[year_label] = {
-                "cash": row.get("cash", 0.0),
-                "debt": row.get("financial_debt", 0.0),
-                "equity": row.get("equity_end", 0.0),
-                "balance_check": row.get("balance_check", 0.0),
-            }
-            balance_checks[year_label] = row.get("balance_check", 0.0)
-
-        peak_debt = max(
-            (row.get("opening_debt", 0.0) for row in debt_schedule),
-            default=0.0,
-        )
-        avg_dscr = (
-            sum(row.get("dscr", 0.0) for row in debt_schedule) / len(debt_schedule)
-            if debt_schedule
-            else 0.0
-        )
-        covenant_breaches = [
-            f"Year {row['year']}"
-            for row in debt_schedule
-            if row.get("covenant_breach")
-        ]
-
-        valuation_runtime = input_model.valuation_runtime
-        seller_multiple = valuation_runtime["seller_ebit_multiple"]
-        reference_year = valuation_runtime["reference_year"]
-        buyer_discount_rate = valuation_runtime["buyer_discount_rate"]
-        valuation_start_year = valuation_runtime["valuation_start_year"]
-        debt_at_close = valuation_runtime["debt_at_close_eur"]
-        transaction_cost_pct = valuation_runtime["transaction_cost_pct"]
-        include_terminal_value = valuation_runtime["include_terminal_value"]
-
-        pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
-        ebit_ref = pnl_table.loc[f"Year {reference_year}", "ebit"]
-        seller_ev = ebit_ref * seller_multiple
-        net_debt_close = (
-            balance_sheet[0]["financial_debt"] - balance_sheet[0]["cash"]
-            if balance_sheet
-            else 0.0
-        )
-        seller_equity_value = seller_ev - net_debt_close
-
-        free_cashflows = [row.get("free_cashflow", 0.0) for row in cashflow_result]
-        cumulative_pv = 0.0
-        for year_index, fcf in enumerate(free_cashflows):
-            if year_index >= valuation_start_year:
-                exponent = year_index - valuation_start_year + 1
-                discount_factor = (
-                    1 / ((1 + buyer_discount_rate) ** exponent)
-                    if buyer_discount_rate
-                    else 1.0
-                )
-            else:
-                discount_factor = 0.0
-            cumulative_pv += fcf * discount_factor
-        terminal_value = 0.0
-        terminal_pv = 0.0
-        if include_terminal_value and buyer_discount_rate and free_cashflows:
-            terminal_value = free_cashflows[-1] / buyer_discount_rate
-            last_exponent = max(1, len(free_cashflows) - valuation_start_year)
-            terminal_pv = terminal_value / (
-                (1 + buyer_discount_rate) ** last_exponent
-            )
-        enterprise_value_dcf = cumulative_pv + terminal_pv
-        transaction_costs = enterprise_value_dcf * transaction_cost_pct
-        buyer_equity_value = (
-            enterprise_value_dcf - debt_at_close - transaction_costs
-        )
-        valuation_gap = buyer_equity_value - seller_equity_value
-
-        sponsor_irr = st.session_state.get("equity.sponsor_irr")
-        investor_irr = st.session_state.get("equity.investor_irr")
-
-        equity_assumptions = input_model.equity_assumptions
-        sponsor_equity = equity_assumptions["sponsor_equity_eur"]
-        investor_equity = equity_assumptions["investor_equity_eur"]
-        total_equity = sponsor_equity + investor_equity
-        investor_pct = investor_equity / total_equity if total_equity else 0.0
-        exit_year = equity_assumptions["exit_year"]
-        exit_multiple = equity_assumptions["exit_multiple"]
-        exit_year_index = min(max(exit_year, 0), 4)
-        ebitda_exit = pnl_result[f"Year {exit_year_index}"]["ebitda"]
-        net_debt_exit = (
-            balance_sheet[exit_year_index]["financial_debt"]
-            - balance_sheet[exit_year_index]["cash"]
-        )
-        enterprise_value_exit = ebitda_exit * exit_multiple
-        equity_value_exit = enterprise_value_exit - net_debt_exit
-        investor_exit_proceeds = equity_value_exit * investor_pct
-        investor_moic = (
-            investor_exit_proceeds / abs(investor_equity)
-            if investor_equity
-            else 0.0
-        )
-
-        return {
-            "meta": {
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "git_commit": _get_git_commit(),
-                "scenario": scenario,
-                "currency": "EUR",
-                "planning_horizon_years": horizon_years,
-            },
-            "assumptions": {
-                "tables": assumptions_state,
-                "utilization_by_year": utilization_by_year,
-            },
-            "outputs": {
-                "pnl": pnl_summary,
-                "cashflow": {
-                    "by_year": cashflow_summary,
-                    "minimum_cash_balance": min_cash or 0.0,
-                },
-                "balance_sheet": {
-                    "by_year": balance_summary,
-                    "balance_check": balance_checks,
-                },
-                "financing": {
-                    "peak_debt": peak_debt,
-                    "average_dscr": avg_dscr,
-                    "covenant_breaches": covenant_breaches,
-                },
-                "valuation": {
-                    "seller_enterprise_value": seller_ev,
-                    "seller_equity_value": seller_equity_value,
-                    "buyer_enterprise_value": enterprise_value_dcf,
-                    "buyer_equity_value": buyer_equity_value,
-                    "valuation_gap": valuation_gap,
-                },
-                "equity_case": {
-                    "sponsor_irr": sponsor_irr,
-                    "investor_irr": investor_irr,
-                    "investor_moic": investor_moic,
-                },
-            },
-            "page_structure": _build_page_structure_snapshot(),
-            "logic_notes": [
-                "Revenue = FTE × Workdays × Utilization × Day Rate",
-                "Guaranteed Revenue = Revenue × Guarantee %",
-                "EBITDA = Revenue − Personnel Costs − Operating Expenses",
-                "EBIT = EBITDA − Depreciation",
-                "Free Cashflow = Operating CF − Capex",
-                "Operating CF = EBITDA − Taxes Paid − Working Capital Change",
-                "Debt Service = Interest + Scheduled Repayment",
-                "DSCR = CFADS / Debt Service",
-                "Equity Exit Value = Exit Multiple × EBITDA − Net Debt",
-            ],
-        }
-
-    def _build_model_snapshot_zip(snapshot_payload):
-        snapshot_text = json.dumps(snapshot_payload, indent=2)
-        readme_text = (
-            "Model snapshot for GPT analysis.\n\n"
-            "Contents:\n"
-            "- snapshot.json: full model state (assumptions, outputs, layout)\n"
-            "- README.txt: this file\n"
-        )
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("snapshot.json", snapshot_text)
-            zf.writestr("README.txt", readme_text)
-        buffer.seek(0)
-        return buffer
-
-    def _build_model_snapshot_text():
-        scenario = input_model.scenario_selection["selected_scenario"].value
-        scenario_key = scenario.lower()
-        utilization_by_year = getattr(
-            input_model,
-            "utilization_by_year",
-            [
-                input_model.scenario_parameters["utilization_rate"][
-                    scenario_key
-                ].value
-            ]
-            * 5,
-        )
-        day_rate_base = input_model.scenario_parameters["day_rate_eur"][
-            scenario_key
-        ].value
-        day_rate_growth = input_model.operating_assumptions[
-            "day_rate_growth_pct"
-        ].value
-        guarantees = [
-            input_model.operating_assumptions[
-                "revenue_guarantee_pct_year_1"
-            ].value,
-            input_model.operating_assumptions[
-                "revenue_guarantee_pct_year_2"
-            ].value,
-            input_model.operating_assumptions[
-                "revenue_guarantee_pct_year_3"
-            ].value,
-        ]
-        pnl_lines = []
-        fcf_lines = []
-        dscr_lines = []
-        for year_index in range(5):
-            year_label = f"Year {year_index}"
-            pnl_data = pnl_result.get(year_label, {})
-            revenue = pnl_data.get("revenue")
-            ebitda = pnl_data.get("ebitda")
-            net_income = pnl_data.get("net_income")
-            pnl_lines.append(
-                f"{year_label}: Revenue {_format_value(revenue, format_currency)}, "
-                f"EBITDA {_format_value(ebitda, format_currency)}, "
-                f"Net Income {_format_value(net_income, format_currency)}"
-            )
-            fcf_value = cashflow_result[year_index].get("free_cashflow")
-            fcf_lines.append(
-                f"{year_label}: {_format_value(fcf_value, format_currency)}"
-            )
-            dscr_value = debt_schedule[year_index].get("dscr")
-            dscr_lines.append(
-                f"{year_label}: {_format_value(dscr_value, lambda v: f'{v:.2f}x')}"
-            )
-
-        text_lines = [
-            "1) Model Overview",
-            "Model type: Consulting MBO",
-            "Planning horizon: 5 years (Year 0–Year 4)",
-            "Scenarios available: Base, Best, Worst",
-            "",
-            "2) Assumptions",
-            "Revenue drivers:",
-            f"- Consulting FTE: {_format_value(input_model.operating_assumptions['consulting_fte_start'].value, format_int)}",
-            f"- Workdays per Year: {_format_value(input_model.operating_assumptions['work_days_per_year'].value, format_int)}",
-            "- Utilization per year: "
-            + ", ".join(
-                f"Year {idx} {_format_value(value, format_pct)}"
-                for idx, value in enumerate(utilization_by_year)
-            ),
-            f"- Day Rate (Base): {_format_value(day_rate_base, format_int)} EUR",
-            f"- Day Rate Growth: {_format_value(day_rate_growth, format_pct)}",
-            "Revenue guarantees:",
-            f"- Year 1: {_format_value(guarantees[0], format_pct)}",
-            f"- Year 2: {_format_value(guarantees[1], format_pct)}",
-            f"- Year 3: {_format_value(guarantees[2], format_pct)}",
-            "Personnel costs:",
-            f"- Consultant Base Cost: {_format_value(input_model.personnel_cost_assumptions['avg_consultant_base_cost_eur_per_year'].value, format_int)} EUR",
-            f"- Consultant Bonus: {_format_value(input_model.personnel_cost_assumptions['bonus_pct_of_base'].value, format_pct)}",
-            f"- Backoffice Cost per FTE: {_format_value(input_model.operating_assumptions['avg_backoffice_salary_eur_per_year'].value, format_int)} EUR",
-            "Opex:",
-            f"- External Consulting: {_format_value(input_model.overhead_and_variable_costs['legal_audit_eur_per_year'].value, format_currency)}",
-            f"- IT: {_format_value(input_model.overhead_and_variable_costs['it_and_software_eur_per_year'].value, format_currency)}",
-            f"- Office: {_format_value(input_model.overhead_and_variable_costs['rent_eur_per_year'].value, format_currency)}",
-            f"- Other Services: {_format_value(input_model.overhead_and_variable_costs['other_overhead_eur_per_year'].value, format_currency)}",
-            "Financing assumptions:",
-            f"- Purchase Price: {_format_value(input_model.transaction_and_financing['purchase_price_eur'].value, format_currency)}",
-            f"- Debt Amount: {_format_value(input_model.transaction_and_financing['senior_term_loan_start_eur'].value, format_currency)}",
-            f"- Interest Rate: {_format_value(input_model.transaction_and_financing['senior_interest_rate_pct'].value, format_pct)}",
-            f"- Amortisation Years: {_format_value(input_model.financing_assumptions['amortization_period_years'], format_int)}",
-            f"- Transaction Fees (%): {_format_value(st.session_state.get('valuation.transaction_cost_pct', 0.0), format_pct)}",
-            "Equity & investor assumptions:",
-            f"- Sponsor Equity: {_format_value(st.session_state.get('equity.sponsor_equity_eur'), format_currency)}",
-            f"- Investor Equity: {_format_value(st.session_state.get('equity.investor_equity_eur'), format_currency)}",
-            f"- Investor Exit Year: Year {st.session_state.get('equity.exit_year')}",
-            f"- Exit Multiple: {_format_value(st.session_state.get('equity.exit_multiple'), lambda v: f'{v:.2f}x')}",
-            "- Distribution Rule: Pro-rata",
-            "",
-            "3) Calculation Logic (Plain English)",
-            "Revenue build-up: FTE × Workdays × Utilization × Day Rate.",
-            "EBITDA: Revenue minus Personnel Costs and Operating Expenses.",
-            "Cashflow: EBITDA minus Taxes, Working Capital Change, and Capex.",
-            "Debt service: Interest on opening debt plus scheduled repayment.",
-            "Equity cashflows: Investor exits in the exit year; sponsor retains residual equity.",
-            "Exit value: Exit EBITDA × Exit Multiple, less net debt.",
-            "",
-            "4) KPI Definitions",
-            "EBITDA Margin = EBITDA / Revenue",
-            "DSCR = Operating Cashflow / Debt Service",
-            "IRR = Discount rate where NPV of cashflows = 0",
-            "MOIC = Total proceeds / Invested equity",
-            "",
-            "5) Notes",
-            "Distributions: None modeled during the hold period.",
-            "Exit: Investor exits fully at the selected exit year.",
-            "Simplifications: Single debt tranche, no working capital schedule.",
-        ]
-        return "\n".join(text_lines)
 
     if page == "Overview":
         st.header("Overview – Management Deal Assessment")

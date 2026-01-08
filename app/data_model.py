@@ -441,6 +441,173 @@ class InputModel:
             ),
         }
 
+        # Cost model: detailed annual planning inputs (5-year view).
+        self.cost_model = {}
+        for year_index in range(5):
+            year_label = f"Year {year_index}"
+            self.cost_model[f"consultant_fte_year_{year_index}"] = InputField(
+                value=self.operating_assumptions["consulting_fte_start"].value,
+                description=f"Consultant FTE ({year_label})",
+                excel_ref=f"Cost_Model!B{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"consultant_base_cost_eur_year_{year_index}"
+            ] = InputField(
+                value=self.personnel_cost_assumptions[
+                    "avg_consultant_base_cost_eur_per_year"
+                ].value,
+                description=f"Consultant base cost ({year_label}, EUR)",
+                excel_ref=f"Cost_Model!C{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"consultant_bonus_pct_year_{year_index}"
+            ] = InputField(
+                value=self.personnel_cost_assumptions["bonus_pct_of_base"].value,
+                description=f"Consultant bonus % ({year_label})",
+                excel_ref=f"Cost_Model!D{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"consultant_payroll_pct_year_{year_index}"
+            ] = InputField(
+                value=self.personnel_cost_assumptions[
+                    "payroll_burden_pct_of_comp"
+                ].value,
+                description=f"Consultant payroll burden % ({year_label})",
+                excel_ref=f"Cost_Model!E{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[f"backoffice_fte_year_{year_index}"] = InputField(
+                value=self.operating_assumptions["backoffice_fte_start"].value,
+                description=f"Backoffice FTE ({year_label})",
+                excel_ref=f"Cost_Model!F{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"backoffice_base_cost_eur_year_{year_index}"
+            ] = InputField(
+                value=self.operating_assumptions[
+                    "avg_backoffice_salary_eur_per_year"
+                ].value,
+                description=f"Backoffice base cost ({year_label}, EUR)",
+                excel_ref=f"Cost_Model!G{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"backoffice_payroll_pct_year_{year_index}"
+            ] = InputField(
+                value=self.personnel_cost_assumptions[
+                    "payroll_burden_pct_of_comp"
+                ].value,
+                description=f"Backoffice payroll burden % ({year_label})",
+                excel_ref=f"Cost_Model!H{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"fixed_overhead_advisory_year_{year_index}"
+            ] = InputField(
+                value=self.overhead_and_variable_costs[
+                    "legal_audit_eur_per_year"
+                ].value,
+                description=f"Advisory cost ({year_label}, EUR)",
+                excel_ref=f"Cost_Model!I{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"fixed_overhead_legal_year_{year_index}"
+            ] = InputField(
+                value=self.overhead_and_variable_costs[
+                    "insurance_eur_per_year"
+                ].value,
+                description=f"Legal cost ({year_label}, EUR)",
+                excel_ref=f"Cost_Model!J{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[f"fixed_overhead_it_year_{year_index}"] = (
+                InputField(
+                    value=self.overhead_and_variable_costs[
+                        "it_and_software_eur_per_year"
+                    ].value,
+                    description=f"IT & software cost ({year_label}, EUR)",
+                    excel_ref=f"Cost_Model!K{3 + year_index}",
+                    editable=True,
+                )
+            )
+            self.cost_model[
+                f"fixed_overhead_office_year_{year_index}"
+            ] = InputField(
+                value=self.overhead_and_variable_costs["rent_eur_per_year"].value,
+                description=f"Office rent ({year_label}, EUR)",
+                excel_ref=f"Cost_Model!L{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"fixed_overhead_services_year_{year_index}"
+            ] = InputField(
+                value=self.overhead_and_variable_costs[
+                    "other_overhead_eur_per_year"
+                ].value,
+                description=f"Services cost ({year_label}, EUR)",
+                excel_ref=f"Cost_Model!M{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"variable_training_pct_year_{year_index}"
+            ] = InputField(
+                value=self.overhead_and_variable_costs[
+                    "training_pct_of_revenue"
+                ].value,
+                description=f"Training % of revenue ({year_label})",
+                excel_ref=f"Cost_Model!N{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"variable_training_eur_year_{year_index}"
+            ] = InputField(
+                value=0.0,
+                description=f"Training cost ({year_label}, EUR)",
+                excel_ref=f"Cost_Model!O{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[f"variable_travel_pct_year_{year_index}"] = (
+                InputField(
+                    value=self.overhead_and_variable_costs[
+                        "travel_pct_of_revenue"
+                    ].value,
+                    description=f"Travel % of revenue ({year_label})",
+                    excel_ref=f"Cost_Model!P{3 + year_index}",
+                    editable=True,
+                )
+            )
+            self.cost_model[f"variable_travel_eur_year_{year_index}"] = (
+                InputField(
+                    value=0.0,
+                    description=f"Travel cost ({year_label}, EUR)",
+                    excel_ref=f"Cost_Model!Q{3 + year_index}",
+                    editable=True,
+                )
+            )
+            self.cost_model[
+                f"variable_communication_pct_year_{year_index}"
+            ] = InputField(
+                value=self.overhead_and_variable_costs[
+                    "marketing_pct_of_revenue"
+                ].value,
+                description=f"Communication % of revenue ({year_label})",
+                excel_ref=f"Cost_Model!R{3 + year_index}",
+                editable=True,
+            )
+            self.cost_model[
+                f"variable_communication_eur_year_{year_index}"
+            ] = InputField(
+                value=0.0,
+                description=f"Communication cost ({year_label}, EUR)",
+                excel_ref=f"Cost_Model!S{3 + year_index}",
+                editable=True,
+            )
+
         # Tax and distributions: tax rate and shareholder payouts.
         self.tax_and_distributions = {
             "tax_rate_pct": InputField(
@@ -616,6 +783,95 @@ def create_demo_input_model():
     input_model.overhead_and_variable_costs[
         "marketing_pct_of_revenue"
     ].value = 0.0
+
+    wage_inflation = input_model.personnel_cost_assumptions[
+        "wage_inflation_pct"
+    ].value
+    overhead_inflation = input_model.overhead_and_variable_costs[
+        "overhead_inflation_pct"
+    ].value
+    for year_index in range(5):
+        fte_growth = input_model.operating_assumptions[
+            "consulting_fte_growth_pct"
+        ].value
+        backoffice_growth = input_model.operating_assumptions[
+            "backoffice_fte_growth_pct"
+        ].value
+        input_model.cost_model[
+            f"consultant_fte_year_{year_index}"
+        ].value = input_model.operating_assumptions[
+            "consulting_fte_start"
+        ].value * ((1 + fte_growth) ** year_index)
+        input_model.cost_model[
+            f"consultant_base_cost_eur_year_{year_index}"
+        ].value = input_model.personnel_cost_assumptions[
+            "avg_consultant_base_cost_eur_per_year"
+        ].value * ((1 + wage_inflation) ** year_index)
+        input_model.cost_model[
+            f"consultant_bonus_pct_year_{year_index}"
+        ].value = input_model.personnel_cost_assumptions[
+            "bonus_pct_of_base"
+        ].value
+        input_model.cost_model[
+            f"consultant_payroll_pct_year_{year_index}"
+        ].value = input_model.personnel_cost_assumptions[
+            "payroll_burden_pct_of_comp"
+        ].value
+        input_model.cost_model[
+            f"backoffice_fte_year_{year_index}"
+        ].value = input_model.operating_assumptions[
+            "backoffice_fte_start"
+        ].value * ((1 + backoffice_growth) ** year_index)
+        input_model.cost_model[
+            f"backoffice_base_cost_eur_year_{year_index}"
+        ].value = input_model.operating_assumptions[
+            "avg_backoffice_salary_eur_per_year"
+        ].value * ((1 + wage_inflation) ** year_index)
+        input_model.cost_model[
+            f"backoffice_payroll_pct_year_{year_index}"
+        ].value = input_model.personnel_cost_assumptions[
+            "payroll_burden_pct_of_comp"
+        ].value
+        input_model.cost_model[
+            f"fixed_overhead_advisory_year_{year_index}"
+        ].value = input_model.overhead_and_variable_costs[
+            "legal_audit_eur_per_year"
+        ].value * ((1 + overhead_inflation) ** year_index)
+        input_model.cost_model[
+            f"fixed_overhead_legal_year_{year_index}"
+        ].value = input_model.overhead_and_variable_costs[
+            "insurance_eur_per_year"
+        ].value * ((1 + overhead_inflation) ** year_index)
+        input_model.cost_model[
+            f"fixed_overhead_it_year_{year_index}"
+        ].value = input_model.overhead_and_variable_costs[
+            "it_and_software_eur_per_year"
+        ].value * ((1 + overhead_inflation) ** year_index)
+        input_model.cost_model[
+            f"fixed_overhead_office_year_{year_index}"
+        ].value = input_model.overhead_and_variable_costs[
+            "rent_eur_per_year"
+        ].value * ((1 + overhead_inflation) ** year_index)
+        input_model.cost_model[
+            f"fixed_overhead_services_year_{year_index}"
+        ].value = input_model.overhead_and_variable_costs[
+            "other_overhead_eur_per_year"
+        ].value * ((1 + overhead_inflation) ** year_index)
+        input_model.cost_model[
+            f"variable_training_pct_year_{year_index}"
+        ].value = input_model.overhead_and_variable_costs[
+            "training_pct_of_revenue"
+        ].value
+        input_model.cost_model[
+            f"variable_travel_pct_year_{year_index}"
+        ].value = input_model.overhead_and_variable_costs[
+            "travel_pct_of_revenue"
+        ].value
+        input_model.cost_model[
+            f"variable_communication_pct_year_{year_index}"
+        ].value = input_model.overhead_and_variable_costs[
+            "marketing_pct_of_revenue"
+        ].value
 
     # Seed revenue model defaults to the operational baseline.
     reference_revenue = input_model.revenue_model["reference_revenue_eur"].value

@@ -97,15 +97,15 @@ def calculate_pnl(input_model, depreciation_by_year=None):
     tax_rate_pct = input_model.tax_and_distributions["tax_rate_pct"].value
 
     pnl_by_year = []
+    cost_model_totals = getattr(input_model, "cost_model_totals_by_year", None)
 
+    revenue_by_year = getattr(input_model, "revenue_by_year", None)
+    revenue_model = getattr(input_model, "revenue_model", None)
     reference_volume_eur = 20_000_000
     if isinstance(revenue_model, dict):
         reference_volume_eur = revenue_model[
             "reference_revenue_eur"
         ].value
-
-    revenue_by_year = getattr(input_model, "revenue_by_year", None)
-    revenue_model = getattr(input_model, "revenue_model", None)
 
     for year_index in range(planning_horizon_years):
         # Grow FTEs and rates by their respective growth assumptions.
@@ -156,47 +156,62 @@ def calculate_pnl(input_model, depreciation_by_year=None):
         non_guaranteed_revenue = total_revenue - guaranteed_revenue
         revenue = total_revenue
 
-        # Consultant personnel cost: base + bonus + payroll burden, inflated.
-        # Consultant all-in cost per FTE drives compensation directly.
-        consultant_cost_per_fte = avg_consultant_base_cost_eur_per_year
-        consultant_cost_per_fte *= (1 + wage_inflation_pct) ** year_index
-        consultant_personnel_cost = consultants_fte * consultant_cost_per_fte
+        if isinstance(cost_model_totals, list) and len(cost_model_totals) > year_index:
+            year_costs = cost_model_totals[year_index]
+            consultant_personnel_cost = year_costs.get("consultant_costs", 0.0)
+            backoffice_personnel_cost = year_costs.get("backoffice_costs", 0.0)
+            managing_directors_cost = year_costs.get("management_costs", 0.0)
+            total_personnel_costs = year_costs.get(
+                "personnel_costs",
+                consultant_personnel_cost
+                + backoffice_personnel_cost
+                + managing_directors_cost,
+            )
+            overhead_and_variable_costs = year_costs.get(
+                "overhead_and_variable_costs", 0.0
+            )
+        else:
+            # Consultant personnel cost: base + bonus + payroll burden, inflated.
+            # Consultant all-in cost per FTE drives compensation directly.
+            consultant_cost_per_fte = avg_consultant_base_cost_eur_per_year
+            consultant_cost_per_fte *= (1 + wage_inflation_pct) ** year_index
+            consultant_personnel_cost = consultants_fte * consultant_cost_per_fte
 
-        # Backoffice personnel cost: all-in cost per FTE with inflation.
-        backoffice_cost_per_fte = avg_backoffice_salary_eur_per_year
-        backoffice_cost_per_fte *= (1 + wage_inflation_pct) ** year_index
-        backoffice_personnel_cost = backoffice_fte * backoffice_cost_per_fte
+            # Backoffice personnel cost: all-in cost per FTE with inflation.
+            backoffice_cost_per_fte = avg_backoffice_salary_eur_per_year
+            backoffice_cost_per_fte *= (1 + wage_inflation_pct) ** year_index
+            backoffice_personnel_cost = backoffice_fte * backoffice_cost_per_fte
 
-        # Management / MD cost from assumptions with annual growth.
-        managing_directors_cost = management_md_cost * (
-            (1 + management_md_growth) ** year_index
-        )
+            # Management / MD cost from assumptions with annual growth.
+            managing_directors_cost = management_md_cost * (
+                (1 + management_md_growth) ** year_index
+            )
 
-        total_personnel_costs = (
-            consultant_personnel_cost
-            + backoffice_personnel_cost
-            + managing_directors_cost
-        )
+            total_personnel_costs = (
+                consultant_personnel_cost
+                + backoffice_personnel_cost
+                + managing_directors_cost
+            )
 
-        # Fixed overhead costs with inflation.
-        fixed_overhead = (
-            rent_eur_per_year
-            + it_and_software_eur_per_year
-            + insurance_eur_per_year
-            + legal_audit_eur_per_year
-            + other_overhead_eur_per_year
-        )
-        fixed_overhead *= (1 + overhead_inflation_pct) ** year_index
+            # Fixed overhead costs with inflation.
+            fixed_overhead = (
+                rent_eur_per_year
+                + it_and_software_eur_per_year
+                + insurance_eur_per_year
+                + legal_audit_eur_per_year
+                + other_overhead_eur_per_year
+            )
+            fixed_overhead *= (1 + overhead_inflation_pct) ** year_index
 
-        # Variable overhead costs based on revenue.
-        variable_overhead = revenue * (
-            travel_pct_of_revenue
-            + recruiting_pct_of_revenue
-            + training_pct_of_revenue
-            + marketing_pct_of_revenue
-        )
+            # Variable overhead costs based on revenue.
+            variable_overhead = revenue * (
+                travel_pct_of_revenue
+                + recruiting_pct_of_revenue
+                + training_pct_of_revenue
+                + marketing_pct_of_revenue
+            )
 
-        overhead_and_variable_costs = fixed_overhead + variable_overhead
+            overhead_and_variable_costs = fixed_overhead + variable_overhead
 
         # EBITDA and EBIT.
         ebitda = revenue - total_personnel_costs - overhead_and_variable_costs
