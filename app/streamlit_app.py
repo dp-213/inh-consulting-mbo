@@ -1764,6 +1764,27 @@ def run_app():
             color: #111827 !important;
             border-color: #d1d5db !important;
           }
+          .stDataEditor, .stDataEditor [role="grid"] {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+          }
+          .stDataEditor .rdg {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+          }
+          .stDataEditor .rdg-cell {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+          }
+          .stDataEditor .rdg-cell[aria-readonly="true"] {
+            background: #f3f4f6 !important;
+            color: #6b7280 !important;
+          }
+          .stDataEditor .rdg-header-row,
+          .stDataEditor .rdg-header-row .rdg-cell {
+            background-color: #f9fafb !important;
+            color: #111827 !important;
+          }
         </style>
         """,
         unsafe_allow_html=True,
