@@ -1114,6 +1114,8 @@ def _build_pnl_excel(input_model):
             "Equity at Start of Year",
             "Net Income",
             "Dividends",
+            "Equity Injections",
+            "Equity Buybacks / Exit Payouts",
             "Equity at End of Year",
             "CHECK",
             "Total Assets",
@@ -1133,9 +1135,11 @@ def _build_pnl_excel(input_model):
             "Equity at Start of Year": balance_table_start + 9,
             "Net Income": balance_table_start + 10,
             "Dividends": balance_table_start + 11,
-            "Equity at End of Year": balance_table_start + 12,
-            "Total Assets (Check)": balance_table_start + 14,
-            "Total Liabilities + Equity": balance_table_start + 15,
+            "Equity Injections": balance_table_start + 12,
+            "Equity Buybacks / Exit Payouts": balance_table_start + 13,
+            "Equity at End of Year": balance_table_start + 14,
+            "Total Assets (Check)": balance_table_start + 16,
+            "Total Liabilities + Equity": balance_table_start + 17,
         }
 
         opening_equity_cell = "B2"
@@ -1185,10 +1189,16 @@ def _build_pnl_excel(input_model):
                 f"='P&L'!{col}23"
             )
             ws_balance[f"{col}{balance_row_map['Dividends']}"] = "=0"
+            ws_balance[f"{col}{balance_row_map['Equity Injections']}"] = (
+                f"=IF({year_index}=0,{assumption_cells['Equity Contribution (EUR)']},0)"
+            )
+            ws_balance[f"{col}{balance_row_map['Equity Buybacks / Exit Payouts']}"] = "=0"
             ws_balance[f"{col}{balance_row_map['Equity at End of Year']}"] = (
                 f"={col}{balance_row_map['Equity at Start of Year']}"
                 f"+{col}{balance_row_map['Net Income']}"
                 f"-{col}{balance_row_map['Dividends']}"
+                f"+{col}{balance_row_map['Equity Injections']}"
+                f"-{col}{balance_row_map['Equity Buybacks / Exit Payouts']}"
             )
             ws_balance[f"{col}{balance_row_map['Total Assets (Check)']}"] = (
                 f"={col}{balance_row_map['Total Assets (Assets)']}"
@@ -1208,7 +1218,7 @@ def _build_pnl_excel(input_model):
         ws_balance.cell(
             row=balance_notes_row + 2,
             column=1,
-            value="Equity end = equity start + net income - dividends.",
+            value="Equity end = equity start + net income - dividends + injections - buybacks.",
         )
         ws_balance.cell(
             row=balance_notes_row + 3,
@@ -4434,6 +4444,14 @@ def run_app():
             _set_balance_value("Net Income", year_label, row["net_income"])
             _set_balance_value("Dividends", year_label, row["dividends"])
             _set_balance_value(
+                "Equity Injections", year_label, row.get("equity_injection", 0.0)
+            )
+            _set_balance_value(
+                "Equity Buybacks / Exit Payouts",
+                year_label,
+                row.get("equity_buyback", 0.0),
+            )
+            _set_balance_value(
                 "Equity at End of Year", year_label, row["equity_end"]
             )
             _set_balance_value(
@@ -4459,6 +4477,8 @@ def run_app():
             "Equity at Start of Year",
             "Net Income",
             "Dividends",
+            "Equity Injections",
+            "Equity Buybacks / Exit Payouts",
             "Equity at End of Year",
             "CHECK",
             "Total Assets",
@@ -4513,7 +4533,7 @@ def run_app():
         ]
         if reconciliation_issues:
             st.warning(
-                "Balance sheet does not reconcile in "
+                "Balance check (Assets - Liabilities - Equity) is not zero in "
                 f"{', '.join(reconciliation_issues)}."
             )
 
@@ -4630,6 +4650,10 @@ def run_app():
                     ],
                     "Net Income": balance_line_items["Net Income"],
                     "Dividends": balance_line_items["Dividends"],
+                    "Equity Injections": balance_line_items["Equity Injections"],
+                    "Equity Buybacks / Exit Payouts": balance_line_items[
+                        "Equity Buybacks / Exit Payouts"
+                    ],
                     "Equity at End of Year": balance_line_items[
                         "Equity at End of Year"
                     ],
@@ -4641,7 +4665,8 @@ def run_app():
             )
             st.dataframe(equity_table, use_container_width=True)
             st.caption(
-                "Equity end = Equity start + Net Income - Dividends (assumed 0)."
+                "Equity end = Equity start + Net Income - Dividends "
+                "+ Equity Injections - Equity Buybacks."
             )
 
             st.markdown("### Reconciliation Check")

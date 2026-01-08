@@ -10,6 +10,9 @@ def calculate_balance_sheet(
     balance_assumptions = getattr(input_model, "balance_sheet_assumptions", {})
     opening_equity = balance_assumptions.get("opening_equity_eur", 0.0)
     depreciation_rate = balance_assumptions.get("depreciation_rate_pct", 0.0)
+    equity_contribution = input_model.transaction_and_financing[
+        "equity_contribution_eur"
+    ].value
 
     # Build a net income lookup from P&L results.
     net_income_by_year = {}
@@ -47,7 +50,16 @@ def calculate_balance_sheet(
         financial_debt = debt_by_year.get(year, 0.0)
         net_income = net_income_by_year.get(year, 0.0)
         dividends = 0.0
-        equity_end = equity_start + net_income - dividends
+        # Model the upfront equity contribution at close in year 0 only.
+        equity_injection = equity_contribution if year == 0 else 0.0
+        equity_buyback = 0.0
+        equity_end = (
+            equity_start
+            + net_income
+            - dividends
+            + equity_injection
+            - equity_buyback
+        )
 
         total_assets = cash_balance + fixed_assets
         total_liabilities = financial_debt
@@ -65,6 +77,8 @@ def calculate_balance_sheet(
                 "equity_start": equity_start,
                 "net_income": net_income,
                 "dividends": dividends,
+                "equity_injection": equity_injection,
+                "equity_buyback": equity_buyback,
                 "equity_end": equity_end,
                 "total_liabilities_equity": total_liabilities_equity,
                 "balance_check": balance_check,
