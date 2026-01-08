@@ -90,17 +90,6 @@ def calculate_cashflow(input_model, pnl_result):
             outstanding_principal - principal_repayment, 0.0
         )
 
-        # Taxes are cash-based on EBT, with an optional payment lag.
-        ebt = ebit - interest
-        taxes_due = max(ebt, 0) * tax_cash_rate_pct
-        taxes_due_by_year.append(taxes_due)
-        if tax_payment_lag_years == 0:
-            taxes_paid = taxes_due
-        elif tax_payment_lag_years == 1:
-            taxes_paid = taxes_due_by_year[i - 1] if i > 0 else 0.0
-        else:
-            taxes_paid = 0.0
-
         # Working capital adjustment and capex are modeled as revenue percentages.
         working_capital_change = revenue * working_capital_pct_revenue
         capex = revenue * capex_pct_revenue
@@ -111,6 +100,17 @@ def calculate_cashflow(input_model, pnl_result):
 
         # EBIT uses EBITDA and cashflow-derived depreciation.
         ebit = ebitda - depreciation
+
+        # Taxes are cash-based on EBT, with an optional payment lag.
+        ebt = ebit - interest
+        taxes_due = max(ebt, 0) * tax_cash_rate_pct
+        taxes_due_by_year.append(taxes_due)
+        if tax_payment_lag_years == 0:
+            taxes_paid = taxes_due
+        elif tax_payment_lag_years == 1:
+            taxes_paid = taxes_due_by_year[i - 1] if i > 0 else 0.0
+        else:
+            taxes_paid = 0.0
 
         # Operating cash flow starts from EBITDA and adjusts for taxes and working capital.
         operating_cf = ebitda - taxes_paid - working_capital_change
