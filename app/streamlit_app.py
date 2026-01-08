@@ -21,9 +21,15 @@ def _format_section_title(section_key):
     return section_key.replace("_", " ").title()
 
 
-def _render_input_field(input_field, widget_key):
+def _render_input_field(
+    input_field, widget_key, scenario_tag=None, scenario_help=None
+):
     label = input_field.description
+    if scenario_tag:
+        label = f"{label} {scenario_tag}"
     help_text = f"Excel: {input_field.excel_ref}"
+    if scenario_help:
+        help_text = f"{help_text} | {scenario_help}"
     value = input_field.value
 
     if isinstance(value, bool):
@@ -63,7 +69,9 @@ def _render_input_field(input_field, widget_key):
     )
 
 
-def _render_section(section_data, section_key):
+def _render_section(
+    section_data, section_key, selected_scenario=None, is_scenario_section=False
+):
     edited_values = {}
     for key, value in section_data.items():
         field_key = f"{section_key}.{key}"
@@ -71,7 +79,35 @@ def _render_section(section_data, section_key):
             edited_values[key] = _render_input_field(value, field_key)
         elif isinstance(value, dict):
             st.markdown(f"**{_format_section_title(key)}**")
-            edited_values[key] = _render_section(value, field_key)
+            if is_scenario_section:
+                edited_values[key] = {}
+                for scenario_key, scenario_field in value.items():
+                    scenario_tag = (
+                        "(Scenario-driven)"
+                        if scenario_key == selected_scenario
+                        else "(Scenario parameter)"
+                    )
+                    scenario_help = (
+                        "Active scenario input"
+                        if scenario_key == selected_scenario
+                        else "Not active for selected scenario"
+                    )
+                    scenario_field_key = (
+                        f"{field_key}.{scenario_key}"
+                    )
+                    edited_values[key][scenario_key] = _render_input_field(
+                        scenario_field,
+                        scenario_field_key,
+                        scenario_tag=scenario_tag,
+                        scenario_help=scenario_help,
+                    )
+            else:
+                edited_values[key] = _render_section(
+                    value,
+                    field_key,
+                    selected_scenario=selected_scenario,
+                    is_scenario_section=is_scenario_section,
+                )
     return edited_values
 
 
@@ -91,16 +127,56 @@ def run_app():
     edited_values = {}
 
     st.sidebar.header("Assumptions")
+    scenario_options = ["Base", "Best", "Worst"]
+    scenario_default = base_model.scenario_selection[
+        "selected_scenario"
+    ].value
+    scenario_index = (
+        scenario_options.index(scenario_default)
+        if scenario_default in scenario_options
+        else 0
+    )
+    selected_scenario = st.sidebar.selectbox(
+        "Scenario (controls scenario-driven fields)",
+        scenario_options,
+        index=scenario_index,
+    )
+    auto_sync = st.sidebar.checkbox(
+        "Auto-update scenario inputs", value=True
+    )
+
+    previous_scenario = st.session_state.get(
+        "selected_scenario", selected_scenario
+    )
+    if auto_sync and selected_scenario != previous_scenario:
+        scenario_key = selected_scenario.lower()
+        for metric_key, scenario_map in (
+            base_model.scenario_parameters.items()
+        ):
+            if scenario_key in scenario_map:
+                widget_key = (
+                    f"scenario_parameters.{metric_key}.{scenario_key}"
+                )
+                st.session_state[widget_key] = scenario_map[scenario_key].value
+    st.session_state["selected_scenario"] = selected_scenario
+
     for section_key, section_data in base_model.__dict__.items():
         if not isinstance(section_data, dict):
             continue
         section_title = _format_section_title(section_key)
         with st.sidebar.expander(section_title, expanded=False):
             edited_values[section_key] = _render_section(
-                section_data, section_key
+                section_data,
+                section_key,
+                selected_scenario=selected_scenario.lower(),
+                is_scenario_section=section_key == "scenario_parameters",
             )
 
     input_model = create_demo_input_model()
+    if "scenario_selection" in edited_values:
+        edited_values["scenario_selection"]["selected_scenario"] = (
+            selected_scenario
+        )
     for section_key, section_values in edited_values.items():
         _apply_section_values(
             getattr(input_model, section_key), section_values
