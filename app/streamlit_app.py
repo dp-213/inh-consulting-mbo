@@ -2802,7 +2802,7 @@ def run_app():
         input_model, cashflow_result, debt_schedule, pnl_list
     )
     investment_result = run_model.calculate_investment(
-        input_model, cashflow_result, pnl_result
+        input_model, cashflow_result, pnl_list
     )
 
     def _format_value(value, formatter):
