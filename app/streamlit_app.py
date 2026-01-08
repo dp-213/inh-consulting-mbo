@@ -7,6 +7,7 @@ st.set_page_config(layout="wide")
 
 from data_model import InputModel, create_demo_input_model
 import run_model as run_model
+from calculations.investment import _calculate_irr
 
 
 def _pnl_dict_to_list(pnl_dict):
@@ -123,6 +124,26 @@ def _default_valuation_assumptions(input_model):
     }
 
 
+def _default_equity_assumptions(input_model):
+    total_equity = input_model.transaction_and_financing[
+        "equity_contribution_eur"
+    ].value
+    default_multiple = (
+        input_model.valuation_assumptions["multiple_valuation"][
+            "seller_multiple"
+        ].value
+        or 0.0
+    )
+    return {
+        "sponsor_equity_eur": total_equity * 0.5,
+        "investor_equity_eur": total_equity * 0.5,
+        "exit_year": 4,
+        "exit_method": "Exit Multiple",
+        "exit_multiple": default_multiple,
+        "exit_equity_value_eur": None,
+    }
+
+
 def _seed_session_defaults(input_model):
     def _seed_section(section_data, prefix=""):
         for key, value in section_data.items():
@@ -164,6 +185,9 @@ def _seed_session_defaults(input_model):
 
     for key, value in _default_valuation_assumptions(input_model).items():
         st.session_state.setdefault(f"valuation.{key}", value)
+
+    for key, value in _default_equity_assumptions(input_model).items():
+        st.session_state.setdefault(f"equity.{key}", value)
 
 
 def _render_input_field(
@@ -707,6 +731,11 @@ def _build_pnl_excel(input_model):
         "financing_assumptions",
         _default_financing_assumptions(input_model),
     )
+    equity_assumptions = getattr(
+        input_model,
+        "equity_assumptions",
+        _default_equity_assumptions(input_model),
+    )
 
     assumptions = [
         ("Consulting FTE", input_model.operating_assumptions["consulting_fte_start"].value),
@@ -746,6 +775,12 @@ def _build_pnl_excel(input_model):
         ("Amortisation Period (Years)", financing_assumptions["amortization_period_years"]),
         ("Working Capital Adjustment (% of Revenue)", cashflow_assumptions["working_capital_pct_revenue"]),
         ("Opening Cash Balance (EUR)", cashflow_assumptions["opening_cash_balance_eur"]),
+        ("Sponsor Equity (EUR)", equity_assumptions["sponsor_equity_eur"]),
+        ("Investor Equity (EUR)", equity_assumptions["investor_equity_eur"]),
+        ("Exit Year", equity_assumptions["exit_year"]),
+        ("Exit Method", equity_assumptions["exit_method"]),
+        ("Exit Multiple (x)", equity_assumptions["exit_multiple"]),
+        ("Exit Equity Value (EUR)", equity_assumptions["exit_equity_value_eur"] or 0),
     ]
     assumptions_df = pd.DataFrame(assumptions, columns=["Item", "Value"])
 
@@ -759,6 +794,7 @@ def _build_pnl_excel(input_model):
         ws_balance = wb.create_sheet("Balance Sheet")
         ws_valuation = wb.create_sheet("Valuation")
         ws_financing = wb.create_sheet("Financing & Debt")
+        ws_equity = wb.create_sheet("Equity Case")
 
         assumption_cells = {
             name: f"Assumptions!B{idx + 2}" for idx, (name, _) in enumerate(assumptions)
@@ -1524,6 +1560,150 @@ def _build_pnl_excel(input_model):
             value="DSCR = CFADS / Debt Service.",
         )
 
+        ws_equity["A1"] = "Equity Assumptions"
+        equity_rows = [
+            ("Sponsor Equity (EUR)", "Sponsor Equity (EUR)"),
+            ("Investor Equity (EUR)", "Investor Equity (EUR)"),
+            ("Exit Year", "Exit Year"),
+            ("Exit Method", "Exit Method"),
+            ("Exit Multiple (x)", "Exit Multiple (x)"),
+            ("Exit Equity Value (EUR)", "Exit Equity Value (EUR)"),
+        ]
+        for idx, (label, key) in enumerate(equity_rows, start=2):
+            ws_equity.cell(row=idx, column=1, value=label)
+            ws_equity.cell(
+                row=idx, column=2, value=f"={assumption_cells[key]}"
+            )
+
+        equity_calc_start = len(equity_rows) + 4
+        ws_equity.cell(row=equity_calc_start, column=1, value="Equity Summary")
+        ws_equity.cell(row=equity_calc_start + 1, column=1, value="Metric")
+        ws_equity.cell(row=equity_calc_start + 1, column=2, value="Value")
+
+        sponsor_cell = "B2"
+        investor_cell = "B3"
+        exit_year_cell = "B4"
+        exit_method_cell = "B5"
+        exit_multiple_cell = "B6"
+        exit_equity_cell = "B7"
+
+        ws_equity.cell(row=equity_calc_start + 2, column=1, value="Total Equity")
+        ws_equity.cell(
+            row=equity_calc_start + 2, column=2, value=f"={sponsor_cell}+{investor_cell}"
+        )
+        ws_equity.cell(row=equity_calc_start + 3, column=1, value="Sponsor %")
+        ws_equity.cell(
+            row=equity_calc_start + 3,
+            column=2,
+            value=f"=IF(B{equity_calc_start + 2}=0,0,{sponsor_cell}/B{equity_calc_start + 2})",
+        )
+        ws_equity.cell(row=equity_calc_start + 4, column=1, value="Investor %")
+        ws_equity.cell(
+            row=equity_calc_start + 4,
+            column=2,
+            value=f"=IF(B{equity_calc_start + 2}=0,0,{investor_cell}/B{equity_calc_start + 2})",
+        )
+        ws_equity.cell(row=equity_calc_start + 5, column=1, value="Exit EBITDA")
+        ws_equity.cell(
+            row=equity_calc_start + 5,
+            column=2,
+            value=f"=INDEX('P&L'!B17:F17,1,{exit_year_cell}+1)",
+        )
+        ws_equity.cell(row=equity_calc_start + 6, column=1, value="Net Debt at Exit")
+        ws_equity.cell(
+            row=equity_calc_start + 6,
+            column=2,
+            value=f"=INDEX('Balance Sheet'!B14:F14,1,{exit_year_cell}+1)-INDEX('Balance Sheet'!B10:F10,1,{exit_year_cell}+1)",
+        )
+        ws_equity.cell(row=equity_calc_start + 7, column=1, value="Enterprise Value Exit")
+        ws_equity.cell(
+            row=equity_calc_start + 7,
+            column=2,
+            value=(
+                f"=IF({exit_method_cell}=\"Exit Equity Value\","
+                f"{exit_equity_cell}+B{equity_calc_start + 6},"
+                f"{exit_multiple_cell}*B{equity_calc_start + 5})"
+            ),
+        )
+        ws_equity.cell(row=equity_calc_start + 8, column=1, value="Equity Value Exit")
+        ws_equity.cell(
+            row=equity_calc_start + 8,
+            column=2,
+            value=(
+                f"=IF({exit_method_cell}=\"Exit Equity Value\","
+                f"{exit_equity_cell},"
+                f"B{equity_calc_start + 7}-B{equity_calc_start + 6})"
+            ),
+        )
+
+        cashflow_start = equity_calc_start + 11
+        ws_equity.cell(row=cashflow_start, column=1, value="Equity Cashflows")
+        ws_equity.cell(row=cashflow_start + 1, column=1, value="Line Item")
+        for idx, header in enumerate(year_headers, start=2):
+            ws_equity.cell(row=cashflow_start + 1, column=idx, value=header)
+
+        ws_equity.cell(row=cashflow_start + 2, column=1, value="Sponsor Cashflow")
+        ws_equity.cell(row=cashflow_start + 3, column=1, value="Investor Cashflow")
+
+        sponsor_pct_cell = f"B{equity_calc_start + 3}"
+        investor_pct_cell = f"B{equity_calc_start + 4}"
+        equity_value_exit_cell = f"B{equity_calc_start + 8}"
+
+        for year_index in range(5):
+            col = year_col(2 + year_index)
+            ws_equity[f"{col}{cashflow_start + 2}"] = (
+                f"=IF({year_index}=0,-{sponsor_cell},"
+                f"IF({year_index}={exit_year_cell},{equity_value_exit_cell}*{sponsor_pct_cell},0))"
+            )
+            ws_equity[f"{col}{cashflow_start + 3}"] = (
+                f"=IF({year_index}=0,-{investor_cell},"
+                f"IF({year_index}={exit_year_cell},{equity_value_exit_cell}*{investor_pct_cell},0))"
+            )
+
+        kpi_start = cashflow_start + 6
+        ws_equity.cell(row=kpi_start, column=1, value="Equity KPIs")
+        ws_equity.cell(row=kpi_start + 1, column=1, value="Investor")
+        ws_equity.cell(row=kpi_start + 1, column=2, value="Invested Equity")
+        ws_equity.cell(row=kpi_start + 1, column=3, value="Exit Proceeds")
+        ws_equity.cell(row=kpi_start + 1, column=4, value="MOIC")
+        ws_equity.cell(row=kpi_start + 1, column=5, value="IRR")
+
+        ws_equity.cell(row=kpi_start + 2, column=1, value="Sponsor")
+        ws_equity.cell(row=kpi_start + 3, column=1, value="Investor")
+
+        ws_equity.cell(row=kpi_start + 2, column=2, value=f"={sponsor_cell}")
+        ws_equity.cell(row=kpi_start + 3, column=2, value=f"={investor_cell}")
+        ws_equity.cell(
+            row=kpi_start + 2,
+            column=3,
+            value=f"={equity_value_exit_cell}*{sponsor_pct_cell}",
+        )
+        ws_equity.cell(
+            row=kpi_start + 3,
+            column=3,
+            value=f"={equity_value_exit_cell}*{investor_pct_cell}",
+        )
+        ws_equity.cell(
+            row=kpi_start + 2,
+            column=4,
+            value=f"=IF({sponsor_cell}=0,0,C{kpi_start + 2}/{sponsor_cell})",
+        )
+        ws_equity.cell(
+            row=kpi_start + 3,
+            column=4,
+            value=f"=IF({investor_cell}=0,0,C{kpi_start + 3}/{investor_cell})",
+        )
+        ws_equity.cell(
+            row=kpi_start + 2,
+            column=5,
+            value=f"=IRR(B{cashflow_start + 2}:F{cashflow_start + 2})",
+        )
+        ws_equity.cell(
+            row=kpi_start + 3,
+            column=5,
+            value=f"=IRR(B{cashflow_start + 3}:F{cashflow_start + 3})",
+        )
+
         writer.close()
 
     output.seek(0)
@@ -1539,6 +1719,7 @@ def run_app():
     st.session_state.setdefault("edit_balance_sheet_assumptions", False)
     st.session_state.setdefault("edit_valuation_assumptions", False)
     st.session_state.setdefault("edit_financing_assumptions", False)
+    st.session_state.setdefault("edit_equity_assumptions", False)
     if not st.session_state.get("defaults_initialized"):
         _seed_session_defaults(base_model)
         st.session_state["defaults_initialized"] = True
@@ -2171,6 +2352,89 @@ def run_app():
                 },
             ]
             _render_inline_controls("Financing Drivers", financing_controls, columns=1)
+        if page == "Equity Case" and st.session_state.get(
+            "edit_equity_assumptions"
+        ):
+            st.markdown("## Equity Assumptions")
+            equity_defaults = _default_equity_assumptions(base_model)
+            sponsor_equity = st.number_input(
+                "Sponsor Equity Contribution (EUR)",
+                value=_get_current_value(
+                    "equity.sponsor_equity_eur",
+                    equity_defaults["sponsor_equity_eur"],
+                ),
+                step=100000.0,
+                format="%.0f",
+            )
+            st.session_state["equity.sponsor_equity_eur"] = sponsor_equity
+            investor_equity = st.number_input(
+                "Investor Equity Contribution (EUR)",
+                value=_get_current_value(
+                    "equity.investor_equity_eur",
+                    equity_defaults["investor_equity_eur"],
+                ),
+                step=100000.0,
+                format="%.0f",
+            )
+            st.session_state["equity.investor_equity_eur"] = investor_equity
+            total_equity = sponsor_equity + investor_equity
+            sponsor_pct = (
+                sponsor_equity / total_equity if total_equity else 0.0
+            )
+            investor_pct = (
+                investor_equity / total_equity if total_equity else 0.0
+            )
+            st.caption(
+                f"Ownership Split: Sponsor {format_pct(sponsor_pct)}, "
+                f"Investor {format_pct(investor_pct)}"
+            )
+            exit_year = st.selectbox(
+                "Exit Year",
+                ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"],
+                index=_get_current_value(
+                    "equity.exit_year",
+                    equity_defaults["exit_year"],
+                ),
+            )
+            st.session_state["equity.exit_year"] = int(exit_year.split()[-1])
+            exit_method = st.selectbox(
+                "Exit Method",
+                ["Exit Multiple", "Exit Equity Value"],
+                index=0
+                if _get_current_value(
+                    "equity.exit_method",
+                    equity_defaults["exit_method"],
+                )
+                == "Exit Multiple"
+                else 1,
+            )
+            st.session_state["equity.exit_method"] = exit_method
+            if exit_method == "Exit Multiple":
+                exit_multiple = st.number_input(
+                    "Exit Multiple (x)",
+                    value=_get_current_value(
+                        "equity.exit_multiple",
+                        equity_defaults["exit_multiple"],
+                    ),
+                    step=0.1,
+                    format="%.2f",
+                )
+                st.session_state["equity.exit_multiple"] = exit_multiple
+            else:
+                exit_equity_value = st.number_input(
+                    "Exit Equity Value (EUR)",
+                    value=_get_current_value(
+                        "equity.exit_equity_value_eur",
+                        equity_defaults["exit_equity_value_eur"],
+                    )
+                    or 0.0,
+                    step=100000.0,
+                    format="%.0f",
+                )
+                st.session_state[
+                    "equity.exit_equity_value_eur"
+                ] = exit_equity_value
+            st.caption("Distribution Rule: Pro-rata to ownership.")
 
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
@@ -2481,6 +2745,33 @@ def run_app():
         "include_terminal_value": st.session_state.get(
             "valuation.include_terminal_value",
             valuation_defaults["include_terminal_value"],
+        ),
+    }
+    equity_defaults = _default_equity_assumptions(input_model)
+    input_model.equity_assumptions = {
+        "sponsor_equity_eur": st.session_state.get(
+            "equity.sponsor_equity_eur",
+            equity_defaults["sponsor_equity_eur"],
+        ),
+        "investor_equity_eur": st.session_state.get(
+            "equity.investor_equity_eur",
+            equity_defaults["investor_equity_eur"],
+        ),
+        "exit_year": st.session_state.get(
+            "equity.exit_year",
+            equity_defaults["exit_year"],
+        ),
+        "exit_method": st.session_state.get(
+            "equity.exit_method",
+            equity_defaults["exit_method"],
+        ),
+        "exit_multiple": st.session_state.get(
+            "equity.exit_multiple",
+            equity_defaults["exit_multiple"],
+        ),
+        "exit_equity_value_eur": st.session_state.get(
+            "equity.exit_equity_value_eur",
+            equity_defaults["exit_equity_value_eur"],
         ),
     }
 
@@ -4581,155 +4872,313 @@ def run_app():
 
     if page == "Equity Case":
         st.header("Equity Case")
-        st.write(
-            "Investor returns and exit value based on current assumptions."
+        st.write("Equity sponsor and investor economics (5-year plan).")
+        if st.button(
+            "Edit Equity Assumptions",
+            key="edit_equity_assumptions_button",
+            help="Open equity assumptions in the sidebar",
+        ):
+            st.session_state["edit_equity_assumptions"] = True
+
+        equity_defaults = _default_equity_assumptions(input_model)
+        sponsor_equity = st.session_state.get(
+            "equity.sponsor_equity_eur",
+            equity_defaults["sponsor_equity_eur"],
         )
-        scenario_options = ["Base", "Best", "Worst"]
-        selected_scenario = st.session_state.get(
-            "scenario_selection.selected_scenario",
-            input_model.scenario_selection["selected_scenario"].value,
+        investor_equity = st.session_state.get(
+            "equity.investor_equity_eur",
+            equity_defaults["investor_equity_eur"],
         )
-        scenario_index = (
-            scenario_options.index(selected_scenario)
-            if selected_scenario in scenario_options
-            else 0
+        total_equity = sponsor_equity + investor_equity
+        sponsor_pct = sponsor_equity / total_equity if total_equity else 0.0
+        investor_pct = investor_equity / total_equity if total_equity else 0.0
+        exit_year = st.session_state.get(
+            "equity.exit_year",
+            equity_defaults["exit_year"],
         )
-        equity_field = _get_field_by_path(
-            input_model.__dict__,
-            ["transaction_and_financing", "equity_contribution_eur"],
+        exit_method = st.session_state.get(
+            "equity.exit_method",
+            equity_defaults["exit_method"],
         )
-        debt_field = _get_field_by_path(
-            input_model.__dict__,
-            ["transaction_and_financing", "senior_term_loan_start_eur"],
+        exit_multiple = st.session_state.get(
+            "equity.exit_multiple",
+            equity_defaults["exit_multiple"],
         )
-        seller_multiple_field = _get_field_by_path(
-            input_model.__dict__,
-            ["valuation_assumptions", "multiple_valuation", "seller_multiple"],
-        )
-        wacc_field = _get_field_by_path(
-            input_model.__dict__,
-            ["valuation_assumptions", "dcf_valuation", "discount_rate_wacc"],
-        )
-        dividend_field = _get_field_by_path(
-            input_model.__dict__,
-            ["tax_and_distributions", "dividend_payout_ratio_pct"],
+        exit_equity_value = st.session_state.get(
+            "equity.exit_equity_value_eur",
+            equity_defaults["exit_equity_value_eur"],
         )
 
-        equity_controls = [
+        ebitda_exit = pnl_result[f"Year {exit_year}"]["ebitda"]
+        net_debt_exit = (
+            balance_sheet[exit_year]["financial_debt"]
+            - balance_sheet[exit_year]["cash"]
+        )
+        if exit_method == "Exit Equity Value" and exit_equity_value:
+            equity_value_exit = exit_equity_value
+            enterprise_value_exit = equity_value_exit + net_debt_exit
+        else:
+            enterprise_value_exit = ebitda_exit * exit_multiple
+            equity_value_exit = enterprise_value_exit - net_debt_exit
+
+        kpi_row = st.columns(4)
+        kpi_row[0].metric(
+            "Sponsor Equity",
+            format_currency(sponsor_equity),
+        )
+        kpi_row[1].metric(
+            "Investor Equity",
+            format_currency(investor_equity),
+        )
+        kpi_row[2].metric(
+            "Ownership Split",
+            f"{format_pct(sponsor_pct)} / {format_pct(investor_pct)}",
+        )
+        kpi_row[3].metric(
+            "Exit Equity Value",
+            format_currency(equity_value_exit),
+        )
+
+        st.markdown("### Sources & Uses")
+        purchase_price = input_model.transaction_and_financing[
+            "purchase_price_eur"
+        ].value
+        transaction_cost_pct = st.session_state.get(
+            "valuation.transaction_cost_pct",
+            _default_valuation_assumptions(input_model)["transaction_cost_pct"],
+        )
+        transaction_fees = purchase_price * transaction_cost_pct
+        opening_cash = cashflow_result[0]["cash_balance"]
+        debt_at_close = debt_schedule[0]["opening_debt"]
+        uses_total = purchase_price + transaction_fees + opening_cash
+        sources_total = debt_at_close + sponsor_equity + investor_equity
+
+        sources_uses = pd.DataFrame(
+            [
+                {
+                    "Line Item": "SOURCES",
+                    "Year 0": "",
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Senior Debt",
+                    "Year 0": debt_at_close,
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Sponsor Equity",
+                    "Year 0": sponsor_equity,
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Investor Equity",
+                    "Year 0": investor_equity,
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Total Sources",
+                    "Year 0": sources_total,
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "USES",
+                    "Year 0": "",
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Purchase Price",
+                    "Year 0": purchase_price,
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Transaction Fees",
+                    "Year 0": transaction_fees,
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Cash to Balance Sheet",
+                    "Year 0": opening_cash,
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Total Uses",
+                    "Year 0": uses_total,
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+            ]
+        )
+        _render_custom_table_html(
+            sources_uses,
+            {"SOURCES", "USES"},
+            {"Total Sources", "Total Uses"},
+            {},
+        )
+
+        st.markdown("### Equity Ownership")
+        ownership_table = pd.DataFrame(
+            [
+                {
+                    "Line Item": "Sponsor Equity",
+                    "Year 0": sponsor_equity,
+                    "Year 1": format_pct(sponsor_pct),
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Investor Equity",
+                    "Year 0": investor_equity,
+                    "Year 1": format_pct(investor_pct),
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+                {
+                    "Line Item": "Total Equity",
+                    "Year 0": total_equity,
+                    "Year 1": format_pct(1.0),
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                },
+            ]
+        )
+        _render_custom_table_html(
+            ownership_table,
+            set(),
+            {"Total Equity"},
+            {"Sponsor Equity": format_currency, "Investor Equity": format_currency, "Total Equity": format_currency},
+        )
+
+        st.markdown("### Equity Cashflows")
+        sponsor_cashflows = []
+        investor_cashflows = []
+        for year_index in range(exit_year + 1):
+            if year_index == 0:
+                sponsor_cf = -sponsor_equity
+                investor_cf = -investor_equity
+            elif year_index == exit_year:
+                sponsor_cf = equity_value_exit * sponsor_pct
+                investor_cf = equity_value_exit * investor_pct
+            else:
+                sponsor_cf = 0.0
+                investor_cf = 0.0
+            sponsor_cashflows.append(sponsor_cf)
+            investor_cashflows.append(investor_cf)
+
+        cashflow_rows = [
             {
-                "type": "select",
-                "label": "Scenario",
-                "options": scenario_options,
-                "index": scenario_index,
-                "field_key": "scenario_selection.selected_scenario",
+                "Line Item": "Sponsor Cashflow",
+                **{f"Year {i}": sponsor_cashflows[i] for i in range(exit_year + 1)},
             },
             {
-                "type": "number",
-                "label": "Equity Contribution (EUR)",
-                "field_key": "transaction_and_financing.equity_contribution_eur",
-                "value": equity_field.value,
-                "step": 100000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Debt Amount (EUR)",
-                "field_key": "transaction_and_financing.senior_term_loan_start_eur",
-                "value": debt_field.value,
-                "step": 100000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Seller Multiple (x)",
-                "field_key": "valuation_assumptions.multiple_valuation.seller_multiple",
-                "value": seller_multiple_field.value or 0,
-                "step": 0.1,
-                "format": "%.2f",
-            },
-            {
-                "type": "pct",
-                "label": "WACC / Target IRR (%)",
-                "field_key": "valuation_assumptions.dcf_valuation.discount_rate_wacc",
-                "value": wacc_field.value or 0,
-            },
-            {
-                "type": "pct",
-                "label": "Dividend Payout (%)",
-                "field_key": "tax_and_distributions.dividend_payout_ratio_pct",
-                "value": dividend_field.value,
+                "Line Item": "Investor Cashflow",
+                **{f"Year {i}": investor_cashflows[i] for i in range(exit_year + 1)},
             },
         ]
-        _render_inline_controls("Key Inputs", equity_controls, columns=3)
-        summary = {
-            "initial_equity": investment_result["initial_equity"],
-            "exit_value": investment_result["exit_value"],
-            "irr": investment_result["irr"],
-        }
-        summary_table = pd.DataFrame([summary])
-
-        equity_cashflows = investment_result["equity_cashflows"]
-        total_equity_invested = investment_result["initial_equity"]
-        total_distributions = sum(
-            cf for cf in equity_cashflows if cf > 0
+        cashflow_table = pd.DataFrame(cashflow_rows)
+        for year_index in range(exit_year + 1, 5):
+            cashflow_table[f"Year {year_index}"] = ""
+        cashflow_table = cashflow_table[
+            ["Line Item"] + [f"Year {i}" for i in range(5)]
+        ]
+        _render_custom_table_html(
+            cashflow_table,
+            set(),
+            set(),
+            {},
         )
-        cash_on_cash_multiple = (
-            total_distributions / abs(total_equity_invested)
-            if total_equity_invested
+
+        sponsor_irr = _calculate_irr(sponsor_cashflows)
+        investor_irr = _calculate_irr(investor_cashflows)
+        sponsor_moic = (
+            (sponsor_cashflows[-1] / abs(sponsor_equity))
+            if sponsor_equity
+            else 0
+        )
+        investor_moic = (
+            (investor_cashflows[-1] / abs(investor_equity))
+            if investor_equity
             else 0
         )
 
-        kpi_col_1, kpi_col_2, kpi_col_3 = st.columns(3)
-        kpi_col_1.metric(
-            "Total Equity Invested",
-            format_currency(total_equity_invested),
+        st.markdown("### Equity KPIs")
+        kpi_table = pd.DataFrame(
+            [
+                {
+                    "Investor": "Sponsor",
+                    "Invested Equity": format_currency(sponsor_equity),
+                    "Exit Proceeds": format_currency(sponsor_cashflows[-1]),
+                    "MOIC": f"{sponsor_moic:.2f}x",
+                    "IRR": format_pct(sponsor_irr),
+                },
+                {
+                    "Investor": "Investor",
+                    "Invested Equity": format_currency(investor_equity),
+                    "Exit Proceeds": format_currency(investor_cashflows[-1]),
+                    "MOIC": f"{investor_moic:.2f}x",
+                    "IRR": format_pct(investor_irr),
+                },
+            ]
         )
-        kpi_col_2.metric("IRR", format_pct(summary["irr"]))
-        kpi_col_3.metric(
-            "Cash-on-Cash Multiple", f"{cash_on_cash_multiple:.2f}x"
-        )
-        summary_display = summary_table.copy()
-        summary_display.rename(
-            columns={
-                "initial_equity": "Eigenkapital (Start, m EUR)",
-                "exit_value": "Exit Value (m EUR)",
-                "irr": "IRR (%)",
-            },
-            inplace=True,
-        )
-        summary_format_map = {
-            "Eigenkapital (Start, m EUR)": format_currency,
-            "Exit Value (m EUR)": format_currency,
-            "IRR (%)": format_pct,
-        }
-        summary_totals = ["Eigenkapital (Start, m EUR)", "Exit Value (m EUR)"]
-        summary_styled = _style_totals(
-            summary_display, summary_totals
-        ).format(summary_format_map)
+        st.dataframe(kpi_table, use_container_width=True)
 
-        cashflows_table = pd.DataFrame(
-            {"equity_cashflows": investment_result["equity_cashflows"]}
-        )
-        cashflows_display = cashflows_table.copy()
-        cashflows_display.insert(
-            0, "year", [f"Year {i}" for i in range(len(cashflows_display))]
-        )
-        cashflows_display.rename(
-            columns={
-                "year": "Year",
-                "equity_cashflows": "Equity Cashflows (m EUR)",
-            },
-            inplace=True,
-        )
-        cashflows_format_map = {
-            "Equity Cashflows (m EUR)": format_currency
-        }
-        cashflows_styled = _style_totals(
-            cashflows_display, ["Equity Cashflows (m EUR)"]
-        ).format(cashflows_format_map)
-
-        st.dataframe(summary_styled, use_container_width=True)
-        st.dataframe(cashflows_styled, use_container_width=True)
+        explain_equity = st.toggle("Explain Equity Logic")
+        if explain_equity:
+            st.markdown("### Explanation")
+            st.write(
+                f"Equity is split between sponsor ({format_pct(sponsor_pct)}) "
+                f"and investor ({format_pct(investor_pct)}), based on their "
+                "contributions at close."
+            )
+            st.write(
+                f"The purchase price of {format_currency(purchase_price)} is "
+                f"funded by {format_currency(debt_at_close)} of senior debt and "
+                f"{format_currency(total_equity)} of equity."
+            )
+            st.write(
+                f"Exit value is determined using {exit_method}. At exit year "
+                f"{exit_year}, equity value is {format_currency(equity_value_exit)}, "
+                "distributed pro-rata to ownership."
+            )
+            st.write(
+                "Sponsor and investor returns are driven by the exit value, "
+                "the equity split, and the leverage level over the hold period."
+            )
+            st.write(
+                "Key sensitivities are the exit multiple, net debt at exit, "
+                "and the level of leverage at close."
+            )
 
 
 if __name__ == "__main__":
