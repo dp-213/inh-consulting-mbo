@@ -1728,6 +1728,20 @@ def _build_pnl_excel(input_model):
 
 def run_app():
     st.title("Financial Model")
+    st.markdown(
+        """
+        <style>
+          :root, html, body, [data-testid="stAppViewContainer"] {
+            color: #111827 !important;
+            background-color: #ffffff !important;
+          }
+          [data-testid="stSidebar"] {
+            background-color: #f7f8fa !important;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     base_model = create_demo_input_model()
     if not st.session_state.get("defaults_initialized"):
