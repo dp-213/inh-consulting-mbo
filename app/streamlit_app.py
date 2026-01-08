@@ -79,6 +79,26 @@ def _default_balance_sheet_assumptions(input_model):
     }
 
 
+def _default_valuation_assumptions(input_model):
+    return {
+        "seller_ebit_multiple": input_model.valuation_assumptions[
+            "multiple_valuation"
+        ]["seller_multiple"].value
+        or 0.0,
+        "reference_year": 1,
+        "buyer_discount_rate": input_model.valuation_assumptions["dcf_valuation"][
+            "discount_rate_wacc"
+        ].value
+        or 0.10,
+        "valuation_start_year": 0,
+        "debt_at_close_eur": input_model.transaction_and_financing[
+            "senior_term_loan_start_eur"
+        ].value,
+        "transaction_cost_pct": 0.01,
+        "include_terminal_value": False,
+    }
+
+
 def _seed_session_defaults(input_model):
     def _seed_section(section_data, prefix=""):
         for key, value in section_data.items():
@@ -114,6 +134,9 @@ def _seed_session_defaults(input_model):
 
     for key, value in _default_balance_sheet_assumptions(input_model).items():
         st.session_state.setdefault(f"balance_sheet.{key}", value)
+
+    for key, value in _default_valuation_assumptions(input_model).items():
+        st.session_state.setdefault(f"valuation.{key}", value)
 
 
 def _render_input_field(
@@ -262,7 +285,19 @@ def _render_inline_controls(title, controls, columns=3):
                     index=control["index"],
                     key=widget_key,
                 )
-                _set_field_value(control["field_key"], selection)
+                if isinstance(control["options"][0], str) and control["options"] == [
+                    "Off",
+                    "On",
+                ]:
+                    _set_field_value(
+                        control["field_key"], True if selection == "On" else False
+                    )
+                elif isinstance(control["options"][0], str) and control["options"][0].startswith("Year "):
+                    _set_field_value(
+                        control["field_key"], int(selection.split()[-1])
+                    )
+                else:
+                    _set_field_value(control["field_key"], selection)
             else:
                 if control["type"] == "pct":
                     ui_value = st.number_input(
@@ -531,6 +566,91 @@ def _render_balance_sheet_html(balance_statement, section_rows, bold_rows):
     st.markdown(table_html, unsafe_allow_html=True)
 
 
+def _render_custom_table_html(
+    statement, section_rows, bold_rows, row_formatters=None
+):
+    def escape(text):
+        return (
+            str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    columns = ["Line Item", "Year 0", "Year 1", "Year 2", "Year 3", "Year 4"]
+    header_cells = "".join(f"<th>{escape(col)}</th>" for col in columns)
+    row_formatters = row_formatters or {}
+
+    body_rows = []
+    for _, row in statement.iterrows():
+        label = row["Line Item"]
+        row_class = ""
+        if label in section_rows:
+            row_class = "section-row"
+        elif label in bold_rows:
+            row_class = "total-row"
+        cells = []
+        for col in columns:
+            value = row[col]
+            cell_class = ""
+            if col != "Line Item":
+                formatter = row_formatters.get(label, format_currency)
+                if value is None or value == "" or pd.isna(value):
+                    value = ""
+                else:
+                    value = formatter(value)
+                try:
+                    if float(row[col]) < 0:
+                        cell_class = "negative"
+                except (TypeError, ValueError):
+                    cell_class = ""
+            cell_value = "&nbsp;" if value in ("", None) else escape(value)
+            cells.append(f"<td class=\"{cell_class}\">{cell_value}</td>")
+        body_rows.append(f"<tr class=\"{row_class}\">{''.join(cells)}</tr>")
+
+    css = """
+    <style>
+      .custom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .custom-table col.line-item { width: 42%; }
+      .custom-table col.year { width: 11.6%; }
+      .custom-table th, .custom-table td {
+        padding: 2px 6px;
+        white-space: nowrap;
+        line-height: 1.0;
+        border: 0;
+        font-size: 0.9rem;
+      }
+      .custom-table th { text-align: right; font-weight: 600; }
+      .custom-table th:first-child { text-align: left; }
+      .custom-table td { text-align: right; }
+      .custom-table td:first-child { text-align: left; }
+      .custom-table .section-row td {
+        font-weight: 700;
+        background: #f9fafb;
+      }
+      .custom-table .total-row td {
+        font-weight: 700;
+        background: #f3f4f6;
+        border-top: 1px solid #c7c7c7;
+      }
+      .custom-table td.negative { color: #b45309; }
+    </style>
+    """
+    colgroup = (
+        "<colgroup>"
+        "<col class=\"line-item\"/>"
+        "<col class=\"year\"/><col class=\"year\"/><col class=\"year\"/>"
+        "<col class=\"year\"/><col class=\"year\"/>"
+        "</colgroup>"
+    )
+    table_html = (
+        f"{css}<table class=\"custom-table\">{colgroup}"
+        f"<thead><tr>{header_cells}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody></table>"
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
 def _build_pnl_excel(input_model):
     scenario = input_model.scenario_selection["selected_scenario"].value
     scenario_key = scenario.lower()
@@ -541,6 +661,11 @@ def _build_pnl_excel(input_model):
         input_model,
         "balance_sheet_assumptions",
         _default_balance_sheet_assumptions(input_model),
+    )
+    valuation_runtime = getattr(
+        input_model,
+        "valuation_runtime",
+        _default_valuation_assumptions(input_model),
     )
 
     assumptions = [
@@ -587,6 +712,7 @@ def _build_pnl_excel(input_model):
         ws_kpi = wb.create_sheet("KPIs")
         ws_cashflow = wb.create_sheet("Cashflow")
         ws_balance = wb.create_sheet("Balance Sheet")
+        ws_valuation = wb.create_sheet("Valuation")
 
         assumption_cells = {
             name: f"Assumptions!B{idx + 2}" for idx, (name, _) in enumerate(assumptions)
@@ -1006,6 +1132,186 @@ def _build_pnl_excel(input_model):
             value="Total Assets should equal Total Liabilities + Equity.",
         )
 
+        ws_valuation["A1"] = "Valuation Assumptions"
+        valuation_assumption_rows = [
+            ("Seller EBIT Multiple (x)", valuation_runtime["seller_ebit_multiple"]),
+            ("Reference Year (0-4)", valuation_runtime["reference_year"]),
+            ("Discount Rate (WACC)", valuation_runtime["buyer_discount_rate"]),
+            ("Valuation Start Year (0-4)", valuation_runtime["valuation_start_year"]),
+            ("Debt at Close (EUR)", valuation_runtime["debt_at_close_eur"]),
+            ("Transaction Costs (% of EV)", valuation_runtime["transaction_cost_pct"]),
+            ("Include Terminal Value (1=On)", 1 if valuation_runtime["include_terminal_value"] else 0),
+        ]
+        for idx, (label, value) in enumerate(valuation_assumption_rows, start=2):
+            ws_valuation.cell(row=idx, column=1, value=label)
+            ws_valuation.cell(row=idx, column=2, value=value)
+
+        seller_table_start = 10
+        ws_valuation.cell(row=seller_table_start, column=1, value="Seller Valuation (Multiple-Based)")
+        ws_valuation.cell(row=seller_table_start + 1, column=1, value="Line Item")
+        for idx, header in enumerate(year_headers, start=2):
+            ws_valuation.cell(row=seller_table_start + 1, column=idx, value=header)
+
+        seller_items = [
+            "Reference Year EBIT",
+            "Applied EBIT Multiple",
+            "Enterprise Value (EV)",
+            "Net Debt at Close",
+            "Equity Value (Seller View)",
+        ]
+        for row_idx, item in enumerate(seller_items, start=seller_table_start + 2):
+            ws_valuation.cell(row=row_idx, column=1, value=item)
+
+        seller_row_map = {
+            "Reference Year EBIT": seller_table_start + 2,
+            "Applied EBIT Multiple": seller_table_start + 3,
+            "Enterprise Value (EV)": seller_table_start + 4,
+            "Net Debt at Close": seller_table_start + 5,
+            "Equity Value (Seller View)": seller_table_start + 6,
+        }
+        seller_multiple_cell = "B2"
+        reference_year_cell = "B3"
+
+        for year_index in range(5):
+            col = year_col(2 + year_index)
+            is_ref_year = f"={reference_year_cell}={year_index}"
+            ebit_cell = f"=INDEX('P&L'!B19:F19,1,{reference_year_cell}+1)"
+            ws_valuation[f"{col}{seller_row_map['Reference Year EBIT']}"] = (
+                f"=IF({is_ref_year},{ebit_cell},\"\")"
+            )
+            ws_valuation[f"{col}{seller_row_map['Applied EBIT Multiple']}"] = (
+                f"=IF({is_ref_year},{seller_multiple_cell},\"\")"
+            )
+            ws_valuation[f"{col}{seller_row_map['Enterprise Value (EV)']}"] = (
+                f"=IF({is_ref_year},{ebit_cell}*{seller_multiple_cell},\"\")"
+            )
+            ws_valuation[f"{col}{seller_row_map['Net Debt at Close']}"] = (
+                f"=IF({year_index}=0,'Balance Sheet'!{col}14-'Balance Sheet'!{col}10,\"\")"
+            )
+            ws_valuation[f"{col}{seller_row_map['Equity Value (Seller View)']}"] = (
+                f"=IF({is_ref_year},{col}{seller_row_map['Enterprise Value (EV)']}-'Balance Sheet'!B14+'Balance Sheet'!B10,\"\")"
+            )
+
+        buyer_table_start = seller_table_start + len(seller_items) + 4
+        ws_valuation.cell(row=buyer_table_start, column=1, value="Buyer Valuation (DCF)")
+        ws_valuation.cell(row=buyer_table_start + 1, column=1, value="Line Item")
+        for idx, header in enumerate(year_headers, start=2):
+            ws_valuation.cell(row=buyer_table_start + 1, column=idx, value=header)
+
+        buyer_items = [
+            "Free Cashflow",
+            "Discount Factor",
+            "Present Value of FCF",
+            "Cumulative PV of FCF",
+            "Terminal Value",
+            "Enterprise Value (DCF)",
+            "Net Debt at Close",
+            "Transaction Costs",
+            "Equity Value (Buyer View)",
+        ]
+        for row_idx, item in enumerate(buyer_items, start=buyer_table_start + 2):
+            ws_valuation.cell(row=row_idx, column=1, value=item)
+
+        buyer_row_map = {
+            "Free Cashflow": buyer_table_start + 2,
+            "Discount Factor": buyer_table_start + 3,
+            "Present Value of FCF": buyer_table_start + 4,
+            "Cumulative PV of FCF": buyer_table_start + 5,
+            "Terminal Value": buyer_table_start + 6,
+            "Enterprise Value (DCF)": buyer_table_start + 7,
+            "Net Debt at Close": buyer_table_start + 8,
+            "Transaction Costs": buyer_table_start + 9,
+            "Equity Value (Buyer View)": buyer_table_start + 10,
+        }
+
+        discount_rate_cell = "B4"
+        start_year_cell = "B5"
+        debt_close_cell = "B6"
+        tx_cost_cell = "B7"
+        include_terminal_cell = "B8"
+
+        for year_index in range(5):
+            col = year_col(2 + year_index)
+            prev_col = year_col(1 + year_index) if year_index > 0 else None
+            ws_valuation[f"{col}{buyer_row_map['Free Cashflow']}"] = (
+                f"=Cashflow!{col}{cashflow_row_map['Free Cashflow']}"
+            )
+            ws_valuation[f"{col}{buyer_row_map['Discount Factor']}"] = (
+                f"=IF({year_index}>={start_year_cell},1/(1+{discount_rate_cell})^({year_index}-{start_year_cell}+1),0)"
+            )
+            ws_valuation[f"{col}{buyer_row_map['Present Value of FCF']}"] = (
+                f"={col}{buyer_row_map['Free Cashflow']}*{col}{buyer_row_map['Discount Factor']}"
+            )
+            if prev_col:
+                ws_valuation[f"{col}{buyer_row_map['Cumulative PV of FCF']}"] = (
+                    f"={prev_col}{buyer_row_map['Cumulative PV of FCF']}+{col}{buyer_row_map['Present Value of FCF']}"
+                )
+            else:
+                ws_valuation[f"{col}{buyer_row_map['Cumulative PV of FCF']}"] = (
+                    f"={col}{buyer_row_map['Present Value of FCF']}"
+                )
+            if year_index == 4:
+                ws_valuation[f"{col}{buyer_row_map['Terminal Value']}"] = (
+                    f"=IF({include_terminal_cell}=1,{col}{buyer_row_map['Free Cashflow']}/{discount_rate_cell},\"\")"
+                )
+                ws_valuation[f"{col}{buyer_row_map['Enterprise Value (DCF)']}"] = (
+                    f"={col}{buyer_row_map['Cumulative PV of FCF']}+IF({include_terminal_cell}=1,{col}{buyer_row_map['Terminal Value']}*{col}{buyer_row_map['Discount Factor']},0)"
+                )
+                ws_valuation[f"{col}{buyer_row_map['Net Debt at Close']}"] = (
+                    f"={debt_close_cell}"
+                )
+                ws_valuation[f"{col}{buyer_row_map['Transaction Costs']}"] = (
+                    f"={col}{buyer_row_map['Enterprise Value (DCF)']}*{tx_cost_cell}"
+                )
+                ws_valuation[f"{col}{buyer_row_map['Equity Value (Buyer View)']}"] = (
+                    f"={col}{buyer_row_map['Enterprise Value (DCF)']}-{col}{buyer_row_map['Net Debt at Close']}-{col}{buyer_row_map['Transaction Costs']}"
+                )
+
+        bridge_start = buyer_table_start + len(buyer_items) + 4
+        ws_valuation.cell(row=bridge_start, column=1, value="Purchase Price Bridge")
+        ws_valuation.cell(row=bridge_start + 1, column=1, value="Line Item")
+        ws_valuation.cell(row=bridge_start + 1, column=2, value="Year 0")
+
+        bridge_items = [
+            "Seller Equity Value",
+            "Buyer Equity Value",
+            "Valuation Gap (EUR)",
+            "Valuation Gap (%)",
+        ]
+        for row_idx, item in enumerate(bridge_items, start=bridge_start + 2):
+            ws_valuation.cell(row=row_idx, column=1, value=item)
+
+        ws_valuation[f"B{bridge_start + 2}"] = (
+            f"=INDEX(B{seller_row_map['Equity Value (Seller View)']}:F{seller_row_map['Equity Value (Seller View)']},1,{reference_year_cell}+1)"
+        )
+        ws_valuation[f"B{bridge_start + 3}"] = (
+            f"=F{buyer_row_map['Equity Value (Buyer View)']}"
+        )
+        ws_valuation[f"B{bridge_start + 4}"] = (
+            f"=B{bridge_start + 3}-B{bridge_start + 2}"
+        )
+        ws_valuation[f"B{bridge_start + 5}"] = (
+            f"=IF(B{bridge_start + 2}=0,0,B{bridge_start + 4}/B{bridge_start + 2})"
+        )
+
+        valuation_notes_row = bridge_start + len(bridge_items) + 2
+        ws_valuation.cell(row=valuation_notes_row, column=1, value="Notes")
+        ws_valuation.cell(
+            row=valuation_notes_row + 1,
+            column=1,
+            value="Seller EV = EBIT (reference year) × multiple.",
+        )
+        ws_valuation.cell(
+            row=valuation_notes_row + 2,
+            column=1,
+            value="DCF uses free cashflow discounted at the buyer rate.",
+        )
+        ws_valuation.cell(
+            row=valuation_notes_row + 3,
+            column=1,
+            value="Equity value = EV - net debt - transaction costs.",
+        )
+
         writer.close()
 
     output.seek(0)
@@ -1019,6 +1325,7 @@ def run_app():
     st.session_state.setdefault("edit_pnl_assumptions", True)
     st.session_state.setdefault("edit_cashflow_assumptions", False)
     st.session_state.setdefault("edit_balance_sheet_assumptions", False)
+    st.session_state.setdefault("edit_valuation_assumptions", False)
     if not st.session_state.get("defaults_initialized"):
         _seed_session_defaults(base_model)
         st.session_state["defaults_initialized"] = True
@@ -1457,6 +1764,86 @@ def run_app():
                 },
             ]
             _render_inline_controls("Balance Sheet Drivers", balance_controls, columns=1)
+        if page == "Valuation & Purchase Price" and st.session_state.get(
+            "edit_valuation_assumptions"
+        ):
+            st.markdown("## Valuation Assumptions")
+            valuation_defaults = _default_valuation_assumptions(base_model)
+            valuation_controls = [
+                {
+                    "type": "number",
+                    "label": "EBIT Multiple (x)",
+                    "field_key": "valuation.seller_ebit_multiple",
+                    "value": _get_current_value(
+                        "valuation.seller_ebit_multiple",
+                        valuation_defaults["seller_ebit_multiple"],
+                    ),
+                    "step": 0.1,
+                    "format": "%.2f",
+                },
+                {
+                    "type": "select",
+                    "label": "Reference Year for Multiple",
+                    "options": ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"],
+                    "index": _get_current_value(
+                        "valuation.reference_year",
+                        valuation_defaults["reference_year"],
+                    ),
+                    "field_key": "valuation.reference_year",
+                },
+                {
+                    "type": "pct",
+                    "label": "Discount Rate (WACC)",
+                    "field_key": "valuation.buyer_discount_rate",
+                    "value": _get_current_value(
+                        "valuation.buyer_discount_rate",
+                        valuation_defaults["buyer_discount_rate"],
+                    ),
+                },
+                {
+                    "type": "select",
+                    "label": "Valuation Start Year",
+                    "options": ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"],
+                    "index": _get_current_value(
+                        "valuation.valuation_start_year",
+                        valuation_defaults["valuation_start_year"],
+                    ),
+                    "field_key": "valuation.valuation_start_year",
+                },
+                {
+                    "type": "number",
+                    "label": "Debt at Close (EUR)",
+                    "field_key": "valuation.debt_at_close_eur",
+                    "value": _get_current_value(
+                        "valuation.debt_at_close_eur",
+                        valuation_defaults["debt_at_close_eur"],
+                    ),
+                    "step": 100000.0,
+                    "format": "%.0f",
+                },
+                {
+                    "type": "pct",
+                    "label": "Transaction Costs (% of EV)",
+                    "field_key": "valuation.transaction_cost_pct",
+                    "value": _get_current_value(
+                        "valuation.transaction_cost_pct",
+                        valuation_defaults["transaction_cost_pct"],
+                    ),
+                },
+                {
+                    "type": "select",
+                    "label": "Include Terminal Value",
+                    "options": ["Off", "On"],
+                    "index": 1
+                    if _get_current_value(
+                        "valuation.include_terminal_value",
+                        valuation_defaults["include_terminal_value"],
+                    )
+                    else 0,
+                    "field_key": "valuation.include_terminal_value",
+                },
+            ]
+            _render_inline_controls("Valuation Drivers", valuation_controls, columns=1)
 
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
@@ -1707,6 +2094,38 @@ def run_app():
         ),
     }
 
+    valuation_defaults = _default_valuation_assumptions(input_model)
+    input_model.valuation_runtime = {
+        "seller_ebit_multiple": st.session_state.get(
+            "valuation.seller_ebit_multiple",
+            valuation_defaults["seller_ebit_multiple"],
+        ),
+        "reference_year": st.session_state.get(
+            "valuation.reference_year",
+            valuation_defaults["reference_year"],
+        ),
+        "buyer_discount_rate": st.session_state.get(
+            "valuation.buyer_discount_rate",
+            valuation_defaults["buyer_discount_rate"],
+        ),
+        "valuation_start_year": st.session_state.get(
+            "valuation.valuation_start_year",
+            valuation_defaults["valuation_start_year"],
+        ),
+        "debt_at_close_eur": st.session_state.get(
+            "valuation.debt_at_close_eur",
+            valuation_defaults["debt_at_close_eur"],
+        ),
+        "transaction_cost_pct": st.session_state.get(
+            "valuation.transaction_cost_pct",
+            valuation_defaults["transaction_cost_pct"],
+        ),
+        "include_terminal_value": st.session_state.get(
+            "valuation.include_terminal_value",
+            valuation_defaults["include_terminal_value"],
+        ),
+    }
+
     # Run model calculations in the standard order.
     pnl_result = run_model.calculate_pnl(input_model)
     pnl_list = _pnl_dict_to_list(pnl_result)
@@ -1916,209 +2335,289 @@ def run_app():
 
     if page == "Valuation & Purchase Price":
         st.header("Valuation & Purchase Price")
-        st.write(
-            "Valuation perspective, purchase price context, and high-level "
-            "deal view."
+        st.write("Seller vs. buyer view (5-year plan)")
+        if st.button(
+            "Edit Valuation Assumptions",
+            key="edit_valuation_assumptions_button",
+            help="Open valuation assumptions in the sidebar",
+        ):
+            st.session_state["edit_valuation_assumptions"] = True
+
+        valuation_assumptions = _default_valuation_assumptions(input_model)
+        seller_multiple = st.session_state.get(
+            "valuation.seller_ebit_multiple",
+            valuation_assumptions["seller_ebit_multiple"],
         )
-        scenario_options = ["Base", "Best", "Worst"]
-        selected_scenario = st.session_state.get(
-            "scenario_selection.selected_scenario",
-            input_model.scenario_selection["selected_scenario"].value,
+        reference_year = st.session_state.get(
+            "valuation.reference_year",
+            valuation_assumptions["reference_year"],
         )
-        scenario_index = (
-            scenario_options.index(selected_scenario)
-            if selected_scenario in scenario_options
-            else 0
+        buyer_discount_rate = st.session_state.get(
+            "valuation.buyer_discount_rate",
+            valuation_assumptions["buyer_discount_rate"],
         )
-        seller_multiple_field = _get_field_by_path(
-            input_model.__dict__,
-            ["valuation_assumptions", "multiple_valuation", "seller_multiple"],
+        valuation_start_year = st.session_state.get(
+            "valuation.valuation_start_year",
+            valuation_assumptions["valuation_start_year"],
         )
-        buyer_multiple_field = _get_field_by_path(
-            input_model.__dict__,
-            ["valuation_assumptions", "multiple_valuation", "buyer_multiple"],
+        debt_at_close = st.session_state.get(
+            "valuation.debt_at_close_eur",
+            valuation_assumptions["debt_at_close_eur"],
         )
-        wacc_field = _get_field_by_path(
-            input_model.__dict__,
-            ["valuation_assumptions", "dcf_valuation", "discount_rate_wacc"],
+        transaction_cost_pct = st.session_state.get(
+            "valuation.transaction_cost_pct",
+            valuation_assumptions["transaction_cost_pct"],
         )
-        terminal_growth_field = _get_field_by_path(
-            input_model.__dict__,
-            ["valuation_assumptions", "dcf_valuation", "terminal_growth_rate"],
-        )
-        forecast_years_field = _get_field_by_path(
-            input_model.__dict__,
-            ["valuation_assumptions", "dcf_valuation", "explicit_forecast_years"],
-        )
-        purchase_price_field = _get_field_by_path(
-            input_model.__dict__,
-            ["transaction_and_financing", "purchase_price_eur"],
+        include_terminal_value = st.session_state.get(
+            "valuation.include_terminal_value",
+            valuation_assumptions["include_terminal_value"],
         )
 
-        valuation_controls = [
-            {
-                "type": "select",
-                "label": "Scenario",
-                "options": scenario_options,
-                "index": scenario_index,
-                "field_key": "scenario_selection.selected_scenario",
-            },
-            {
-                "type": "number",
-                "label": "Seller Multiple (x)",
-                "field_key": "valuation_assumptions.multiple_valuation.seller_multiple",
-                "value": seller_multiple_field.value or 0,
-                "step": 0.1,
-                "format": "%.2f",
-            },
-            {
-                "type": "number",
-                "label": "Buyer Multiple (x)",
-                "field_key": "valuation_assumptions.multiple_valuation.buyer_multiple",
-                "value": buyer_multiple_field.value or 0,
-                "step": 0.1,
-                "format": "%.2f",
-            },
-            {
-                "type": "pct",
-                "label": "WACC (%)",
-                "field_key": "valuation_assumptions.dcf_valuation.discount_rate_wacc",
-                "value": wacc_field.value or 0,
-            },
-            {
-                "type": "pct",
-                "label": "Terminal Growth (%)",
-                "field_key": "valuation_assumptions.dcf_valuation.terminal_growth_rate",
-                "value": terminal_growth_field.value or 0,
-            },
-            {
-                "type": "int",
-                "label": "Forecast Years",
-                "field_key": "valuation_assumptions.dcf_valuation.explicit_forecast_years",
-                "value": forecast_years_field.value or 5,
-            },
-            {
-                "type": "number",
-                "label": "Purchase Price (EUR)",
-                "field_key": "transaction_and_financing.purchase_price_eur",
-                "value": purchase_price_field.value,
-                "step": 100000.0,
-                "format": "%.0f",
-            },
-        ]
-        _render_inline_controls("Key Inputs", valuation_controls, columns=3)
-        st.markdown("### Seller View")
-        st.write(
-            "Seller view reflects upside valuation using a multiple and a "
-            "no-exit DCF based on plan free cash flow."
+        pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
+        ebit_ref = pnl_table.loc[f"Year {reference_year}", "ebit"]
+        seller_ev = ebit_ref * seller_multiple
+        balance_table = pd.DataFrame(balance_sheet)
+        net_debt_close = (
+            balance_table.loc[0, "financial_debt"]
+            - balance_table.loc[0, "cash"]
         )
+        seller_equity_value = seller_ev - net_debt_close
 
-        seller_multiple = input_model.valuation_assumptions[
-            "multiple_valuation"
-        ]["seller_multiple"].value
-        seller_multiple = 0 if seller_multiple is None else seller_multiple
-
-        avg_ebit = (
-            pd.DataFrame.from_dict(pnl_result, orient="index")["ebit"].mean()
-        )
-        seller_multiple_value = avg_ebit * seller_multiple
-
-        wacc = input_model.valuation_assumptions["dcf_valuation"][
-            "discount_rate_wacc"
-        ].value
-        wacc = 0 if wacc is None else wacc
-
-        free_cashflows = []
-        for year_data in cashflow_result[:5]:
-            free_cashflows.append(
-                year_data["operating_cf"] + year_data["investing_cf"]
+        seller_rows = {
+            "Reference Year EBIT": {},
+            "Applied EBIT Multiple": {},
+            "Enterprise Value (EV)": {},
+            "Net Debt at Close": {},
+            "Equity Value (Seller View)": {},
+        }
+        for year_index in range(5):
+            year_label = f"Year {year_index}"
+            seller_rows["Reference Year EBIT"][year_label] = (
+                ebit_ref if year_index == reference_year else ""
             )
-        dcf_value = 0
-        for i, cashflow in enumerate(free_cashflows, start=1):
-            dcf_value += cashflow / ((1 + wacc) ** i) if wacc != 0 else cashflow
+            seller_rows["Applied EBIT Multiple"][year_label] = (
+                seller_multiple if year_index == reference_year else ""
+            )
+            seller_rows["Enterprise Value (EV)"][year_label] = (
+                seller_ev if year_index == reference_year else ""
+            )
+            seller_rows["Net Debt at Close"][year_label] = (
+                net_debt_close if year_index == 0 else ""
+            )
+            seller_rows["Equity Value (Seller View)"][year_label] = (
+                seller_equity_value if year_index == reference_year else ""
+            )
 
-        seller_kpi_col_1, seller_kpi_col_2 = st.columns(2)
-        seller_kpi_col_1.metric(
-            "EBIT Multiple Valuation",
-            format_currency(seller_multiple_value),
-            help="Average EBIT multiplied by seller multiple assumption.",
-        )
-        seller_kpi_col_2.metric(
-            "DCF Valuation (No Exit)",
-            format_currency(dcf_value),
-            help="5-year free cash flow discounted at WACC.",
-        )
-
-        st.markdown("### Buyer View")
-        st.write(
-            "Buyer view reflects affordability based on liquidity, "
-            "bankability, and equity return thresholds."
+        st.markdown("### Seller Valuation (Multiple-Based)")
+        seller_table = pd.DataFrame.from_dict(seller_rows, orient="index")
+        seller_table = seller_table[
+            [f"Year {i}" for i in range(5)]
+        ].reset_index()
+        seller_table.rename(columns={"index": "Line Item"}, inplace=True)
+        seller_total_rows = {"Enterprise Value (EV)", "Equity Value (Seller View)"}
+        seller_formatters = {
+            "Applied EBIT Multiple": lambda value: f"{value:.2f}x"
+            if value not in ("", None)
+            else "",
+        }
+        _render_custom_table_html(
+            seller_table, set(), seller_total_rows, seller_formatters
         )
 
-        min_cash_balance = (
-            pd.DataFrame(cashflow_result)["cash_balance"].min()
+        st.markdown("### Buyer Valuation (DCF)")
+        cashflow_table = pd.DataFrame(cashflow_result)
+        free_cashflows = cashflow_table["free_cashflow"].tolist()
+
+        dcf_rows = {
+            "Free Cashflow": {},
+            "Discount Factor": {},
+            "Present Value of FCF": {},
+            "Cumulative PV of FCF": {},
+            "Terminal Value": {},
+            "Enterprise Value (DCF)": {},
+            "Net Debt at Close": {},
+            "Transaction Costs": {},
+            "Equity Value (Buyer View)": {},
+        }
+        cumulative_pv = 0.0
+        for year_index, fcf in enumerate(free_cashflows):
+            year_label = f"Year {year_index}"
+            if year_index >= valuation_start_year:
+                exponent = year_index - valuation_start_year + 1
+                discount_factor = (
+                    1 / ((1 + buyer_discount_rate) ** exponent)
+                    if buyer_discount_rate
+                    else 1.0
+                )
+            else:
+                discount_factor = 0.0
+            pv_fcf = fcf * discount_factor
+            cumulative_pv += pv_fcf
+
+            dcf_rows["Free Cashflow"][year_label] = fcf
+            dcf_rows["Discount Factor"][year_label] = discount_factor
+            dcf_rows["Present Value of FCF"][year_label] = pv_fcf
+            dcf_rows["Cumulative PV of FCF"][year_label] = cumulative_pv
+
+        terminal_value = 0.0
+        terminal_pv = 0.0
+        if include_terminal_value and buyer_discount_rate:
+            terminal_value = free_cashflows[-1] / buyer_discount_rate
+            last_exponent = max(1, len(free_cashflows) - valuation_start_year)
+            terminal_pv = terminal_value / (
+                (1 + buyer_discount_rate) ** last_exponent
+            )
+            dcf_rows["Terminal Value"]["Year 4"] = terminal_value
+
+        enterprise_value_dcf = cumulative_pv + terminal_pv
+        transaction_costs = enterprise_value_dcf * transaction_cost_pct
+        buyer_equity_value = (
+            enterprise_value_dcf - debt_at_close - transaction_costs
         )
-        min_dscr = (
-            pd.DataFrame(debt_schedule)["dscr"].min()
-            if debt_schedule
+
+        for year_index in range(5):
+            year_label = f"Year {year_index}"
+            dcf_rows["Enterprise Value (DCF)"][year_label] = (
+                enterprise_value_dcf if year_index == 4 else ""
+            )
+            dcf_rows["Net Debt at Close"][year_label] = (
+                debt_at_close if year_index == 4 else ""
+            )
+            dcf_rows["Transaction Costs"][year_label] = (
+                transaction_costs if year_index == 4 else ""
+            )
+            dcf_rows["Equity Value (Buyer View)"][year_label] = (
+                buyer_equity_value if year_index == 4 else ""
+            )
+
+        dcf_table = pd.DataFrame.from_dict(dcf_rows, orient="index")
+        dcf_table = dcf_table[[f"Year {i}" for i in range(5)]].reset_index()
+        dcf_table.rename(columns={"index": "Line Item"}, inplace=True)
+        dcf_total_rows = {"Enterprise Value (DCF)", "Equity Value (Buyer View)"}
+        dcf_formatters = {
+            "Discount Factor": lambda value: f"{value:.2f}"
+            if value not in ("", None)
+            else "",
+        }
+        _render_custom_table_html(
+            dcf_table, set(), dcf_total_rows, dcf_formatters
+        )
+
+        st.markdown("### Purchase Price Bridge")
+        valuation_gap = buyer_equity_value - seller_equity_value
+        valuation_gap_pct = (
+            valuation_gap / seller_equity_value
+            if seller_equity_value
             else 0
         )
-        target_irr = input_model.valuation_assumptions["dcf_valuation"][
-            "discount_rate_wacc"
-        ].value
-        target_irr = 0 if target_irr is None else target_irr
-        actual_irr = investment_result["irr"]
-
-        cash_ok = 1 if min_cash_balance >= 0 else 0
-        dscr_ratio = min_dscr / 1.3 if 1.3 != 0 else 0
-        irr_ratio = (
-            actual_irr / target_irr if target_irr not in (0, None) else 1
+        bridge_rows = {
+            "Seller Equity Value": {"Year 0": seller_equity_value},
+            "Buyer Equity Value": {"Year 0": buyer_equity_value},
+            "Valuation Gap (EUR)": {"Year 0": valuation_gap},
+            "Valuation Gap (%)": {"Year 0": valuation_gap_pct},
+        }
+        for year_index in range(1, 5):
+            year_label = f"Year {year_index}"
+            for key in bridge_rows:
+                bridge_rows[key][year_label] = ""
+        bridge_table = pd.DataFrame.from_dict(bridge_rows, orient="index")
+        bridge_table = bridge_table[[f"Year {i}" for i in range(5)]].reset_index()
+        bridge_table.rename(columns={"index": "Line Item"}, inplace=True)
+        bridge_formatters = {
+            "Valuation Gap (%)": format_pct,
+        }
+        _render_custom_table_html(
+            bridge_table, set(), {"Valuation Gap (EUR)"}, bridge_formatters
         )
-        affordability_factor = min(cash_ok, dscr_ratio, irr_ratio, 1)
+        gap_label = "Buyer > Seller" if valuation_gap >= 0 else "Buyer < Seller"
+        st.caption(f"Valuation gap indicator: {gap_label}.")
 
+        st.markdown("### KPIs")
         purchase_price = input_model.transaction_and_financing[
             "purchase_price_eur"
         ].value
-        buyer_value = purchase_price * affordability_factor
+        year0_revenue = pnl_table.loc["Year 0", "revenue"]
+        implied_ev_multiple = (
+            seller_ev / ebit_ref if ebit_ref else 0
+        )
+        purchase_price_pct_revenue = (
+            purchase_price / year0_revenue if year0_revenue else 0
+        )
+        kpi_table = pd.DataFrame(
+            [
+                {
+                    "KPI": "Implied EV / EBIT (Seller)",
+                    "Value": f"{implied_ev_multiple:.2f}x",
+                },
+                {
+                    "KPI": "Implied Equity IRR (Buyer)",
+                    "Value": format_pct(investment_result["irr"]),
+                },
+                {
+                    "KPI": "Max Affordable Purchase Price (Buyer)",
+                    "Value": format_currency(buyer_equity_value),
+                },
+                {
+                    "KPI": "Headroom vs Seller Ask",
+                    "Value": format_currency(valuation_gap),
+                },
+                {
+                    "KPI": "Purchase Price as % of Revenue",
+                    "Value": format_pct(purchase_price_pct_revenue),
+                },
+            ]
+        )
+        st.dataframe(kpi_table, use_container_width=True)
 
-        buyer_kpi_col_1, buyer_kpi_col_2, buyer_kpi_col_3 = st.columns(3)
-        buyer_kpi_col_1.metric(
-            "Max Affordable Price",
-            format_currency(buyer_value),
-            help=(
-                "Scaled purchase price based on min cash >= 0, "
-                "DSCR >= 1.3, and equity IRR vs target."
-            ),
-        )
-        buyer_kpi_col_2.metric(
-            "Minimum DSCR",
-            f"{min_dscr:.2f}x",
-            help="Lowest DSCR observed across the debt schedule.",
-        )
-        buyer_kpi_col_3.metric(
-            "Equity IRR vs Target",
-            f"{actual_irr:.1%} vs {target_irr:.1%}",
-            help="Actual equity IRR compared to target hurdle rate.",
-        )
+        explain_valuation = st.toggle("Explain Valuation Logic")
+        if explain_valuation:
+            st.markdown("### Seller Perspective")
+            st.write(
+                "The seller view uses an EBIT multiple on the selected reference year "
+                "to anchor enterprise value."
+            )
+            st.caption(
+                f"Reference Year EBIT (Year {reference_year}) = {format_currency(ebit_ref)}."
+            )
+            st.caption(
+                f"Enterprise Value = EBIT × Multiple = {format_currency(ebit_ref)} "
+                f"× {seller_multiple:.2f}x = {format_currency(seller_ev)}."
+            )
+            st.caption(
+                f"Equity Value = EV - Net Debt = {format_currency(seller_ev)} "
+                f"- {format_currency(net_debt_close)} = {format_currency(seller_equity_value)}."
+            )
 
-        st.markdown("### Valuation Gap")
-        st.write(
-            "Difference between seller expectations and buyer affordability."
-        )
-        seller_value = max(seller_multiple_value, dcf_value)
-        valuation_gap = seller_value - buyer_value
-        gap_col_1, gap_col_2 = st.columns(2)
-        gap_col_1.metric(
-            "Seller Value",
-            format_currency(seller_value),
-            help="Higher of seller multiple and DCF valuation.",
-        )
-        gap_col_2.metric(
-            "Buyer Value",
-            format_currency(buyer_value),
-            help="Affordability-based buyer price ceiling.",
-        )
-        st.caption(f"Valuation gap: {format_currency(valuation_gap)}")
+            st.markdown("### Buyer Perspective")
+            st.write(
+                "The buyer view discounts free cashflows from the valuation start year "
+                "at the required return."
+            )
+            st.caption(
+                f"Discount Rate = {format_pct(buyer_discount_rate)}; "
+                f"Valuation Start Year = Year {valuation_start_year}."
+            )
+            st.caption(
+                "Present Value of FCF = FCF × Discount Factor; "
+                "Enterprise Value is the sum of PVs."
+            )
+            if include_terminal_value:
+                st.caption(
+                    f"Terminal Value = Final Year FCF / Discount Rate = "
+                    f"{format_currency(free_cashflows[-1])} / "
+                    f"{format_pct(buyer_discount_rate)}."
+                )
+            st.caption(
+                f"Equity Value (Buyer) = EV - Debt at Close - Transaction Costs "
+                f"= {format_currency(enterprise_value_dcf)} - "
+                f"{format_currency(debt_at_close)} - "
+                f"{format_currency(transaction_costs)}."
+            )
+            st.markdown("### Buyer vs. Seller Gap")
+            st.write(
+                "The valuation gap highlights the difference between seller expectations "
+                "and buyer affordability after financing and transaction costs."
+            )
 
     if page == "Operating Model (P&L)":
         st.header("Operating Model (P&L)")
