@@ -126,51 +126,54 @@ def run_app():
     base_model = create_demo_input_model()
     edited_values = {}
 
-    st.sidebar.header("Assumptions")
-    scenario_options = ["Base", "Best", "Worst"]
-    scenario_default = base_model.scenario_selection[
-        "selected_scenario"
-    ].value
-    scenario_index = (
-        scenario_options.index(scenario_default)
-        if scenario_default in scenario_options
-        else 0
-    )
-    selected_scenario = st.sidebar.selectbox(
-        "Scenario (controls scenario-driven fields)",
-        scenario_options,
-        index=scenario_index,
-    )
-    auto_sync = st.sidebar.checkbox(
-        "Auto-update scenario inputs", value=True
-    )
+    with st.sidebar:
+        st.markdown("## Assumptions")
+        st.write("Sidebar active")
 
-    previous_scenario = st.session_state.get(
-        "selected_scenario", selected_scenario
-    )
-    if auto_sync and selected_scenario != previous_scenario:
-        scenario_key = selected_scenario.lower()
-        for metric_key, scenario_map in (
-            base_model.scenario_parameters.items()
-        ):
-            if scenario_key in scenario_map:
-                widget_key = (
-                    f"scenario_parameters.{metric_key}.{scenario_key}"
+        scenario_options = ["Base", "Best", "Worst"]
+        scenario_default = base_model.scenario_selection[
+            "selected_scenario"
+        ].value
+        scenario_index = (
+            scenario_options.index(scenario_default)
+            if scenario_default in scenario_options
+            else 0
+        )
+        selected_scenario = st.selectbox(
+            "Scenario (controls scenario-driven fields)",
+            scenario_options,
+            index=scenario_index,
+        )
+        auto_sync = st.checkbox("Auto-update scenario inputs", value=True)
+
+        previous_scenario = st.session_state.get(
+            "selected_scenario", selected_scenario
+        )
+        if auto_sync and selected_scenario != previous_scenario:
+            scenario_key = selected_scenario.lower()
+            for metric_key, scenario_map in (
+                base_model.scenario_parameters.items()
+            ):
+                if scenario_key in scenario_map:
+                    widget_key = (
+                        f"scenario_parameters.{metric_key}.{scenario_key}"
+                    )
+                    st.session_state[widget_key] = scenario_map[
+                        scenario_key
+                    ].value
+        st.session_state["selected_scenario"] = selected_scenario
+
+        for section_key, section_data in base_model.__dict__.items():
+            if not isinstance(section_data, dict):
+                continue
+            section_title = _format_section_title(section_key)
+            with st.expander(section_title, expanded=False):
+                edited_values[section_key] = _render_section(
+                    section_data,
+                    section_key,
+                    selected_scenario=selected_scenario.lower(),
+                    is_scenario_section=section_key == "scenario_parameters",
                 )
-                st.session_state[widget_key] = scenario_map[scenario_key].value
-    st.session_state["selected_scenario"] = selected_scenario
-
-    for section_key, section_data in base_model.__dict__.items():
-        if not isinstance(section_data, dict):
-            continue
-        section_title = _format_section_title(section_key)
-        with st.sidebar.expander(section_title, expanded=False):
-            edited_values[section_key] = _render_section(
-                section_data,
-                section_key,
-                selected_scenario=selected_scenario.lower(),
-                is_scenario_section=section_key == "scenario_parameters",
-            )
 
     input_model = create_demo_input_model()
     if "scenario_selection" in edited_values:
