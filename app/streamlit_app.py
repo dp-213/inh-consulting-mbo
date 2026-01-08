@@ -1,5 +1,7 @@
+import io
 import pandas as pd
 import streamlit as st
+from openpyxl.utils import get_column_letter
 
 st.set_page_config(layout="wide")
 
@@ -310,6 +312,186 @@ def _render_pnl_html(pnl_statement, section_rows, bold_rows):
         f"<tbody>{''.join(body_rows)}</tbody></table>"
     )
     st.markdown(table_html, unsafe_allow_html=True)
+
+
+def _build_pnl_excel(input_model):
+    scenario = input_model.scenario_selection["selected_scenario"].value
+    scenario_key = scenario.lower()
+
+    assumptions = [
+        ("Consulting FTE", input_model.operating_assumptions["consulting_fte_start"].value),
+        ("FTE Growth %", input_model.operating_assumptions["consulting_fte_growth_pct"].value),
+        ("Workdays per Year", input_model.operating_assumptions["work_days_per_year"].value),
+        ("Utilization %", input_model.scenario_parameters["utilization_rate"][scenario_key].value),
+        ("Day Rate (EUR)", input_model.scenario_parameters["day_rate_eur"][scenario_key].value),
+        ("Day Rate Growth %", input_model.operating_assumptions["day_rate_growth_pct"].value),
+        ("Guarantee % Year 1", input_model.operating_assumptions["revenue_guarantee_pct_year_1"].value),
+        ("Guarantee % Year 2", input_model.operating_assumptions["revenue_guarantee_pct_year_2"].value),
+        ("Guarantee % Year 3", input_model.operating_assumptions["revenue_guarantee_pct_year_3"].value),
+        ("Consultant Base Cost (EUR)", input_model.personnel_cost_assumptions["avg_consultant_base_cost_eur_per_year"].value),
+        ("Bonus %", input_model.personnel_cost_assumptions["bonus_pct_of_base"].value),
+        ("Payroll Burden %", input_model.personnel_cost_assumptions["payroll_burden_pct_of_comp"].value),
+        ("Wage Inflation %", input_model.personnel_cost_assumptions["wage_inflation_pct"].value),
+        ("Backoffice FTE", input_model.operating_assumptions["backoffice_fte_start"].value),
+        ("Backoffice Growth %", input_model.operating_assumptions["backoffice_fte_growth_pct"].value),
+        ("Backoffice Salary (EUR)", input_model.operating_assumptions["avg_backoffice_salary_eur_per_year"].value),
+        ("Overhead Inflation %", input_model.overhead_and_variable_costs["overhead_inflation_pct"].value),
+        ("External Advisors (EUR)", input_model.overhead_and_variable_costs["legal_audit_eur_per_year"].value),
+        ("IT (EUR)", input_model.overhead_and_variable_costs["it_and_software_eur_per_year"].value),
+        ("Office (EUR)", input_model.overhead_and_variable_costs["rent_eur_per_year"].value),
+        ("Insurance (EUR)", input_model.overhead_and_variable_costs["insurance_eur_per_year"].value),
+        ("Other Services (EUR)", input_model.overhead_and_variable_costs["other_overhead_eur_per_year"].value),
+        ("Depreciation (EUR)", input_model.capex_and_working_capital["depreciation_eur_per_year"].value),
+        ("Debt Amount (EUR)", input_model.transaction_and_financing["senior_term_loan_start_eur"].value),
+        ("Interest Rate %", input_model.transaction_and_financing["senior_interest_rate_pct"].value),
+        ("Tax Rate %", input_model.tax_and_distributions["tax_rate_pct"].value),
+    ]
+    assumptions_df = pd.DataFrame(assumptions, columns=["Item", "Value"])
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        assumptions_df.to_excel(writer, sheet_name="Assumptions", index=False)
+        wb = writer.book
+        ws_pnl = wb.create_sheet("P&L")
+        ws_kpi = wb.create_sheet("KPIs")
+
+        assumption_cells = {
+            name: f"Assumptions!B{idx + 2}" for idx, (name, _) in enumerate(assumptions)
+        }
+
+        def year_col(col_index):
+            return get_column_letter(col_index)
+
+        year_headers = ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"]
+        ws_pnl["A1"] = "Line Item"
+        for idx, header in enumerate(year_headers, start=2):
+            ws_pnl.cell(row=1, column=idx, value=header)
+
+        line_items = [
+            "Revenue",
+            "Guaranteed Revenue",
+            "Non-Guaranteed Revenue",
+            "Total Revenue",
+            "Personnel Costs",
+            "Consultant Compensation",
+            "Backoffice Compensation",
+            "Management / MD Compensation",
+            "Total Personnel Costs",
+            "Operating Expenses",
+            "External Consulting / Advisors",
+            "IT",
+            "Office",
+            "Other Services",
+            "Total Operating Expenses",
+            "EBITDA",
+            "Depreciation",
+            "EBIT",
+            "Interest Expense",
+            "EBT",
+            "Taxes",
+            "Net Income (Jahresüberschuss)",
+        ]
+
+        for row_idx, item in enumerate(line_items, start=2):
+            ws_pnl.cell(row=row_idx, column=1, value=item)
+
+        for year_index in range(5):
+            col = year_col(2 + year_index)
+            fte = f"({assumption_cells['Consulting FTE']}*(1+{assumption_cells['FTE Growth %']})^{year_index})"
+            workdays = assumption_cells["Workdays per Year"]
+            utilization = assumption_cells["Utilization %"]
+            day_rate = f"({assumption_cells['Day Rate (EUR)']}*(1+{assumption_cells['Day Rate Growth %']})^{year_index})"
+            guarantee_pct = "0"
+            if year_index == 0:
+                guarantee_pct = assumption_cells["Guarantee % Year 1"]
+            elif year_index == 1:
+                guarantee_pct = assumption_cells["Guarantee % Year 2"]
+            elif year_index == 2:
+                guarantee_pct = assumption_cells["Guarantee % Year 3"]
+
+            guaranteed = f"={fte}*{workdays}*{day_rate}*{guarantee_pct}"
+            non_guaranteed = f"={fte}*{workdays}*{day_rate}*MAX({utilization}-{guarantee_pct},0)"
+            total_revenue = f"={col}3+{col}4"
+
+            consultant_cost = (
+                f"={fte}*{assumption_cells['Consultant Base Cost (EUR)']}*"
+                f"(1+{assumption_cells['Bonus %']}+{assumption_cells['Payroll Burden %']})*"
+                f"(1+{assumption_cells['Wage Inflation %']})^{year_index}"
+            )
+            backoffice_fte = f"({assumption_cells['Backoffice FTE']}*(1+{assumption_cells['Backoffice Growth %']})^{year_index})"
+            backoffice_cost = (
+                f"={backoffice_fte}*{assumption_cells['Backoffice Salary (EUR)']}*"
+                f"(1+{assumption_cells['Payroll Burden %']})*"
+                f"(1+{assumption_cells['Wage Inflation %']})^{year_index}"
+            )
+            management_cost = "=0"
+            total_personnel = f"={col}7+{col}8+{col}9"
+
+            external_advisors = f"={assumption_cells['External Advisors (EUR)']}*(1+{assumption_cells['Overhead Inflation %']})^{year_index}"
+            it_cost = f"={assumption_cells['IT (EUR)']}*(1+{assumption_cells['Overhead Inflation %']})^{year_index}"
+            office_cost = f"={assumption_cells['Office (EUR)']}*(1+{assumption_cells['Overhead Inflation %']})^{year_index}"
+            other_services = f"=({assumption_cells['Insurance (EUR)']}+{assumption_cells['Other Services (EUR)']})*(1+{assumption_cells['Overhead Inflation %']})^{year_index}"
+            total_opex = f"={col}12+{col}13+{col}14+{col}15"
+
+            ebitda = f"={col}5-{col}10-{col}16"
+            depreciation = f"={assumption_cells['Depreciation (EUR)']}"
+            ebit = f"={col}17-{col}18"
+            interest = f"={assumption_cells['Debt Amount (EUR)']}*{assumption_cells['Interest Rate %']}"
+            ebt = f"={col}19-{col}20"
+            taxes = f"=MAX({col}21,0)*{assumption_cells['Tax Rate %']}"
+            net_income = f"={col}21-{col}22"
+
+            ws_pnl[f"{col}3"] = guaranteed
+            ws_pnl[f"{col}4"] = non_guaranteed
+            ws_pnl[f"{col}5"] = total_revenue
+            ws_pnl[f"{col}7"] = consultant_cost
+            ws_pnl[f"{col}8"] = backoffice_cost
+            ws_pnl[f"{col}9"] = management_cost
+            ws_pnl[f"{col}10"] = total_personnel
+            ws_pnl[f"{col}12"] = external_advisors
+            ws_pnl[f"{col}13"] = it_cost
+            ws_pnl[f"{col}14"] = office_cost
+            ws_pnl[f"{col}15"] = other_services
+            ws_pnl[f"{col}16"] = total_opex
+            ws_pnl[f"{col}17"] = ebitda
+            ws_pnl[f"{col}18"] = depreciation
+            ws_pnl[f"{col}19"] = ebit
+            ws_pnl[f"{col}20"] = interest
+            ws_pnl[f"{col}21"] = ebt
+            ws_pnl[f"{col}22"] = taxes
+            ws_pnl[f"{col}23"] = net_income
+
+        ws_kpi["A1"] = "KPI"
+        for idx, header in enumerate(year_headers, start=2):
+            ws_kpi.cell(row=1, column=idx, value=header)
+
+        kpis = [
+            "Revenue per Consultant",
+            "EBITDA Margin",
+            "EBIT Margin",
+            "Personnel Cost Ratio",
+            "Opex Ratio",
+            "Net Margin",
+            "Guaranteed Revenue %",
+        ]
+        for row_idx, kpi in enumerate(kpis, start=2):
+            ws_kpi.cell(row=row_idx, column=1, value=kpi)
+
+        for year_index in range(5):
+            col = year_col(2 + year_index)
+            fte = f"({assumption_cells['Consulting FTE']}*(1+{assumption_cells['FTE Growth %']})^{year_index})"
+            ws_kpi[f"{col}2"] = f"='P&L'!{col}5/{fte}"
+            ws_kpi[f"{col}3"] = f"='P&L'!{col}17/'P&L'!{col}5"
+            ws_kpi[f"{col}4"] = f"='P&L'!{col}19/'P&L'!{col}5"
+            ws_kpi[f"{col}5"] = f"='P&L'!{col}10/'P&L'!{col}5"
+            ws_kpi[f"{col}6"] = f"='P&L'!{col}16/'P&L'!{col}5"
+            ws_kpi[f"{col}7"] = f"='P&L'!{col}23/'P&L'!{col}5"
+            ws_kpi[f"{col}8"] = f"='P&L'!{col}3/'P&L'!{col}5"
+
+        writer.close()
+
+    output.seek(0)
+    return output
 
 
 def run_app():
@@ -1583,6 +1765,14 @@ def run_app():
                 "Operating expenses include advisors, IT, office, and services, "
                 "inflated annually by overhead inflation."
             )
+
+        pnl_excel = _build_pnl_excel(input_model)
+        st.download_button(
+            "Download P&L as Excel",
+            data=pnl_excel.getvalue(),
+            file_name="Financial_Model_PnL.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     if page == "Cashflow & Liquidity":
         st.header("Cashflow & Liquidity")
