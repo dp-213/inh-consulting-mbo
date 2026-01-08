@@ -260,22 +260,77 @@ def run_app():
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
         cashflow_table = pd.DataFrame(cashflow_result)
 
-        total_revenue_avg = pnl_table["revenue"].mean()
-        ebitda_margin = (
-            pnl_table["ebitda"].sum() / pnl_table["revenue"].sum()
-            if pnl_table["revenue"].sum() != 0
+        purchase_price = input_model.transaction_and_financing[
+            "purchase_price_eur"
+        ].value
+        equity_contribution = input_model.transaction_and_financing[
+            "equity_contribution_eur"
+        ].value
+        initial_debt = input_model.transaction_and_financing[
+            "senior_term_loan_start_eur"
+        ].value
+        opening_cash = (
+            cashflow_table["cash_balance"].iloc[0]
+            if not cashflow_table.empty
             else 0
         )
-        ebit_avg = pnl_table["ebit"].mean()
+        net_debt = initial_debt - opening_cash
+        avg_ebitda = pnl_table["ebitda"].mean()
+        avg_free_cashflow = (
+            cashflow_table["operating_cf"].mean()
+            + cashflow_table["investing_cf"].mean()
+        )
         min_cash_balance = cashflow_table["cash_balance"].min()
         irr = investment_result["irr"]
 
-        kpi_col_1, kpi_col_2, kpi_col_3, kpi_col_4, kpi_col_5 = st.columns(5)
-        kpi_col_1.metric("Avg Revenue", format_currency(total_revenue_avg))
-        kpi_col_2.metric("EBITDA Margin", format_pct(ebitda_margin))
-        kpi_col_3.metric("Avg EBIT", format_currency(ebit_avg))
-        kpi_col_4.metric("Minimum Cash", format_currency(min_cash_balance))
-        kpi_col_5.metric("IRR", format_pct(irr))
+        kpi_row_1 = st.columns(3)
+        kpi_row_2 = st.columns(3)
+        kpi_row_3 = st.columns(1)
+
+        kpi_row_1[0].metric(
+            "Purchase Price",
+            format_currency(purchase_price),
+            help="Transaction assumption: Purchase price input (EUR).",
+        )
+        kpi_row_1[0].caption("Headline transaction value.")
+        kpi_row_1[1].metric(
+            "Equity Contribution",
+            format_currency(equity_contribution),
+            help="Transaction assumption: Equity contribution input (EUR).",
+        )
+        kpi_row_1[1].caption("Sponsor equity invested at close.")
+        kpi_row_1[2].metric(
+            "Net Debt",
+            format_currency(net_debt),
+            help="Calculated as initial senior debt minus opening cash balance.",
+        )
+        kpi_row_1[2].caption("Leverage after closing cash position.")
+
+        kpi_row_2[0].metric(
+            "Avg EBITDA",
+            format_currency(avg_ebitda),
+            help="Average EBITDA across the 5-year plan.",
+        )
+        kpi_row_2[0].caption("Operating performance proxy.")
+        kpi_row_2[1].metric(
+            "Avg Free Cash Flow",
+            format_currency(avg_free_cashflow),
+            help="Average of Operating CF plus Investing CF across the plan.",
+        )
+        kpi_row_2[1].caption("Cash generation after capex.")
+        kpi_row_2[2].metric(
+            "Minimum Cash Balance",
+            format_currency(min_cash_balance),
+            help="Minimum cash balance observed across all years.",
+        )
+        kpi_row_2[2].caption("Liquidity low point.")
+
+        kpi_row_3[0].metric(
+            "Levered Equity IRR",
+            format_pct(irr),
+            help="IRR based on equity cashflows including exit value.",
+        )
+        kpi_row_3[0].caption("Return to equity after leverage.")
 
         scenario_label = input_model.scenario_selection[
             "selected_scenario"
