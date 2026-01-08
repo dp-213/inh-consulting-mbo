@@ -529,7 +529,7 @@ def run_app():
     st.title("Financial Model")
 
     base_model = create_demo_input_model()
-    st.session_state.setdefault("edit_pnl_assumptions", False)
+    st.session_state.setdefault("edit_pnl_assumptions", True)
     if not st.session_state.get("defaults_initialized"):
         _seed_session_defaults(base_model)
         st.session_state["defaults_initialized"] = True
@@ -553,9 +553,8 @@ def run_app():
         )
         if page == "Operating Model (P&L)":
             st.markdown("## Quick Assumptions")
+            st.session_state["edit_pnl_assumptions"] = True
             if st.session_state.get("edit_pnl_assumptions"):
-                if st.button("Close", key="hide_pnl_assumptions"):
-                    st.session_state["edit_pnl_assumptions"] = not st.session_state["edit_pnl_assumptions"]
                 scenario_options = ["Base", "Best", "Worst"]
                 selected_scenario = st.session_state.get(
                     "scenario_selection.selected_scenario",
@@ -1548,7 +1547,7 @@ def run_app():
             key="edit_pnl_assumptions_button",
             help="Open relevant P&L assumptions in the sidebar",
         ):
-            st.session_state["edit_pnl_assumptions"] = not st.session_state["edit_pnl_assumptions"]
+            st.session_state["edit_pnl_assumptions"] = True
 
 
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
