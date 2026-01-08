@@ -55,6 +55,37 @@ def _style_totals(df, columns_to_bold):
     return df.style.apply(style_row, axis=1)
 
 
+def _seed_session_defaults(input_model):
+    def _seed_section(section_data, prefix=""):
+        for key, value in section_data.items():
+            full_key = f"{prefix}.{key}" if prefix else key
+            if hasattr(value, "value"):
+                st.session_state.setdefault(full_key, value.value)
+            elif isinstance(value, dict):
+                _seed_section(value, full_key)
+
+    for section_key, section_value in input_model.__dict__.items():
+        if isinstance(section_value, dict):
+            _seed_section(section_value, section_key)
+
+    selected_scenario = st.session_state.get(
+        "scenario_selection.selected_scenario",
+        input_model.scenario_selection["selected_scenario"].value,
+    )
+    scenario_key = selected_scenario.lower()
+    base_utilization = input_model.scenario_parameters["utilization_rate"][
+        scenario_key
+    ].value
+    st.session_state.setdefault(
+        "utilization_by_year", [base_utilization] * 5
+    )
+    for year_index in range(5):
+        st.session_state.setdefault(
+            f"utilization_by_year.{year_index}",
+            st.session_state["utilization_by_year"][year_index],
+        )
+
+
 def _render_input_field(
     input_field, widget_key, scenario_tag=None, scenario_help=None
 ):
@@ -499,6 +530,9 @@ def run_app():
 
     base_model = create_demo_input_model()
     st.session_state.setdefault("edit_pnl_assumptions", False)
+    if not st.session_state.get("defaults_initialized"):
+        _seed_session_defaults(base_model)
+        st.session_state["defaults_initialized"] = True
 
     # Navigation for question-driven layout.
     with st.sidebar:
@@ -1973,6 +2007,15 @@ def run_app():
             if missing_revenue_inputs:
                 st.caption(
                     f"Missing inputs: {', '.join(missing_revenue_inputs)}."
+                )
+            year0_revenue = line_items.get("Total Revenue", {}).get("Year 0")
+            if year0_revenue is not None:
+                target_revenue = 20_000_000
+                delta = year0_revenue - target_revenue
+                status = "OK" if abs(delta) <= 10_000 else "Check"
+                st.caption(
+                    f"Debug: Year 0 Total Revenue = {_format_currency_expl(year0_revenue)} "
+                    f"(target 20.00 m EUR, {status})."
                 )
 
             st.markdown("### Personnel Costs Logic")
