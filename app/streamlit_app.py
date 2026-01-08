@@ -1551,41 +1551,31 @@ def run_app():
             return styles
 
         _render_pnl_html(pnl_statement, section_rows, bold_rows)
-        avg_revenue = pnl_table["revenue"].mean()
         consultant_counts = [
             fte_field.value * ((1 + fte_growth_field.value) ** idx)
             for idx in year_indexes
         ]
-        avg_consultants = (
-            sum(consultant_counts) / len(consultant_counts)
-            if consultant_counts
-            else 0
-        )
-        revenue_per_consultant = (
-            avg_revenue / avg_consultants if avg_consultants else 0
-        )
-        ebitda_margin = (
-            pnl_table["ebitda"].sum() / pnl_table["revenue"].sum()
-            if pnl_table["revenue"].sum()
-            else 0
-        )
-        ebit_margin = (
-            pnl_table["ebit"].sum() / pnl_table["revenue"].sum()
-            if pnl_table["revenue"].sum()
-            else 0
-        )
-        personnel_cost_ratio = (
-            pnl_table["personnel_costs"].sum() / pnl_table["revenue"].sum()
-            if pnl_table["revenue"].sum()
-            else 0
-        )
-        revenue_guarantee_pct = (
-            (guarantee_y1_field.value + guarantee_y2_field.value + guarantee_y3_field.value)
-            / 3
-        )
-
         for year_index in year_indexes:
             year_label = f"Year {year_index}"
+            year_revenue = pnl_table.iloc[year_index]["revenue"]
+            year_ebitda = pnl_table.iloc[year_index]["ebitda"]
+            year_ebit = pnl_table.iloc[year_index]["ebit"]
+            year_personnel = pnl_table.iloc[year_index]["personnel_costs"]
+            year_consultants = consultant_counts[year_index]
+
+            revenue_per_consultant = (
+                year_revenue / year_consultants if year_consultants else 0
+            )
+            ebitda_margin = (
+                year_ebitda / year_revenue if year_revenue else 0
+            )
+            ebit_margin = (
+                year_ebit / year_revenue if year_revenue else 0
+            )
+            personnel_cost_ratio = (
+                year_personnel / year_revenue if year_revenue else 0
+            )
+
             _set_line_value(
                 "Revenue per Consultant",
                 year_label,
