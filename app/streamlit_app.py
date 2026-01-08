@@ -1720,11 +1720,6 @@ def run_app():
     st.title("Financial Model")
 
     base_model = create_demo_input_model()
-    st.session_state.setdefault("edit_pnl_assumptions", True)
-    st.session_state.setdefault("edit_cashflow_assumptions", False)
-    st.session_state.setdefault("edit_balance_sheet_assumptions", False)
-    st.session_state.setdefault("edit_valuation_assumptions", False)
-    st.session_state.setdefault("edit_financing_assumptions", False)
     if not st.session_state.get("defaults_initialized"):
         _seed_session_defaults(base_model)
         st.session_state["defaults_initialized"] = True
@@ -1766,6 +1761,20 @@ def run_app():
         </style>
         """
         st.markdown(nav_css, unsafe_allow_html=True)
+        editor_css = """
+        <style>
+          .rdg-cell[aria-readonly="true"] {
+            background: #f3f4f6;
+            color: #6b7280;
+            font-style: italic;
+          }
+          .rdg-cell[aria-readonly="false"] {
+            background: #ffffff;
+            border: 1px solid #93c5fd;
+          }
+        </style>
+        """
+        st.markdown(editor_css, unsafe_allow_html=True)
 
         def _nav_item(label):
             if st.session_state["current_page"] == label:
@@ -1801,241 +1810,153 @@ def run_app():
         _nav_item("Settings")
 
         page = st.session_state["current_page"]
-        if page == "Cashflow & Liquidity" and st.session_state.get(
-            "edit_cashflow_assumptions"
-        ):
-            st.markdown("## Cashflow Assumptions")
-            cashflow_defaults = _default_cashflow_assumptions()
-            cashflow_controls = [
-                {
-                    "type": "pct",
-                    "label": "Tax Cash Rate (%)",
-                    "field_key": "cashflow.tax_cash_rate_pct",
-                    "value": _get_current_value(
-                        "cashflow.tax_cash_rate_pct",
-                        cashflow_defaults["tax_cash_rate_pct"],
-                    ),
-                },
-                {
-                    "type": "select",
-                    "label": "Tax Payment Lag (Years)",
-                    "options": [0, 1],
-                    "index": [0, 1].index(
-                        _get_current_value(
-                            "cashflow.tax_payment_lag_years",
-                            cashflow_defaults["tax_payment_lag_years"],
-                        )
-                    ),
-                    "field_key": "cashflow.tax_payment_lag_years",
-                },
-                {
-                    "type": "pct",
-                    "label": "Capex (% of Revenue)",
-                    "field_key": "cashflow.capex_pct_revenue",
-                    "value": _get_current_value(
-                        "cashflow.capex_pct_revenue",
-                        cashflow_defaults["capex_pct_revenue"],
-                    ),
-                },
-                {
-                    "type": "pct",
-                    "label": "Working Capital Adjustment (% of Revenue)",
-                    "field_key": "cashflow.working_capital_pct_revenue",
-                    "value": _get_current_value(
-                        "cashflow.working_capital_pct_revenue",
-                        cashflow_defaults["working_capital_pct_revenue"],
-                    ),
-                },
-                {
-                    "type": "number",
-                    "label": "Opening Cash Balance (EUR)",
-                    "field_key": "cashflow.opening_cash_balance_eur",
-                    "value": _get_current_value(
-                        "cashflow.opening_cash_balance_eur",
-                        cashflow_defaults["opening_cash_balance_eur"],
-                    ),
-                    "step": 50000.0,
-                    "format": "%.0f",
-                },
-            ]
-            _render_inline_controls("Cashflow Drivers", cashflow_controls, columns=1)
-        if page == "Balance Sheet" and st.session_state.get(
-            "edit_balance_sheet_assumptions"
-        ):
-            st.markdown("## Balance Sheet Assumptions")
-            balance_defaults = _default_balance_sheet_assumptions(base_model)
-            balance_controls = [
-                {
-                    "type": "number",
-                    "label": "Opening Equity (EUR)",
-                    "field_key": "balance_sheet.opening_equity_eur",
-                    "value": _get_current_value(
-                        "balance_sheet.opening_equity_eur",
-                        balance_defaults["opening_equity_eur"],
-                    ),
-                    "step": 100000.0,
-                    "format": "%.0f",
-                },
-                {
-                    "type": "pct",
-                    "label": "Depreciation Rate (%)",
-                    "field_key": "balance_sheet.depreciation_rate_pct",
-                    "value": _get_current_value(
-                        "balance_sheet.depreciation_rate_pct",
-                        balance_defaults["depreciation_rate_pct"],
-                    ),
-                },
-                {
-                    "type": "number",
-                    "label": "Minimum Cash Balance (EUR)",
-                    "field_key": "balance_sheet.minimum_cash_balance_eur",
-                    "value": _get_current_value(
-                        "balance_sheet.minimum_cash_balance_eur",
-                        balance_defaults["minimum_cash_balance_eur"],
-                    ),
-                    "step": 50000.0,
-                    "format": "%.0f",
-                },
-            ]
-            _render_inline_controls("Balance Sheet Drivers", balance_controls, columns=1)
-        if page == "Valuation & Purchase Price" and st.session_state.get(
-            "edit_valuation_assumptions"
-        ):
-            st.markdown("## Valuation Assumptions")
-            valuation_defaults = _default_valuation_assumptions(base_model)
-            valuation_controls = [
-                {
-                    "type": "number",
-                    "label": "EBIT Multiple (x)",
-                    "field_key": "valuation.seller_ebit_multiple",
-                    "value": _get_current_value(
-                        "valuation.seller_ebit_multiple",
-                        valuation_defaults["seller_ebit_multiple"],
-                    ),
-                    "step": 0.1,
-                    "format": "%.2f",
-                },
-                {
-                    "type": "select",
-                    "label": "Reference Year for Multiple",
-                    "options": ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"],
-                    "index": _get_current_value(
-                        "valuation.reference_year",
-                        valuation_defaults["reference_year"],
-                    ),
-                    "field_key": "valuation.reference_year",
-                },
-                {
-                    "type": "pct",
-                    "label": "Discount Rate (WACC)",
-                    "field_key": "valuation.buyer_discount_rate",
-                    "value": _get_current_value(
-                        "valuation.buyer_discount_rate",
-                        valuation_defaults["buyer_discount_rate"],
-                    ),
-                },
-                {
-                    "type": "select",
-                    "label": "Valuation Start Year",
-                    "options": ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"],
-                    "index": _get_current_value(
-                        "valuation.valuation_start_year",
-                        valuation_defaults["valuation_start_year"],
-                    ),
-                    "field_key": "valuation.valuation_start_year",
-                },
-                {
-                    "type": "number",
-                    "label": "Debt at Close (EUR)",
-                    "field_key": "valuation.debt_at_close_eur",
-                    "value": _get_current_value(
-                        "valuation.debt_at_close_eur",
-                        valuation_defaults["debt_at_close_eur"],
-                    ),
-                    "step": 100000.0,
-                    "format": "%.0f",
-                },
-                {
-                    "type": "pct",
-                    "label": "Transaction Costs (% of EV)",
-                    "field_key": "valuation.transaction_cost_pct",
-                    "value": _get_current_value(
-                        "valuation.transaction_cost_pct",
-                        valuation_defaults["transaction_cost_pct"],
-                    ),
-                },
-                {
-                    "type": "select",
-                    "label": "Include Terminal Value",
-                    "options": ["Off", "On"],
-                    "index": 1
-                    if _get_current_value(
-                        "valuation.include_terminal_value",
-                        valuation_defaults["include_terminal_value"],
-                    )
-                    else 0,
-                    "field_key": "valuation.include_terminal_value",
-                },
-            ]
-            _render_inline_controls("Valuation Drivers", valuation_controls, columns=1)
-        if page == "Financing & Debt" and st.session_state.get(
-            "edit_financing_assumptions"
-        ):
-            st.markdown("## Financing Assumptions")
-            financing_defaults = _default_financing_assumptions(base_model)
+        assumptions_state = st.session_state["assumptions"]
 
-            financing_controls = [
+        def _sidebar_editor(title, key, df, column_config):
+            st.markdown(f"### {title}")
+            edited = st.data_editor(
+                df,
+                hide_index=True,
+                key=key,
+                column_config=column_config,
+                use_container_width=True,
+            )
+            return edited
+
+        if page == "Operating Model (P&L)":
+            revenue_df = pd.DataFrame(assumptions_state["revenue_drivers"])
+            auto_sync = st.session_state.get("assumptions.auto_sync", True)
+            base_label = (
+                "Base (Active)" if selected_scenario == "Base" else "Base"
+            )
+            best_label = (
+                "Best (Active)" if selected_scenario == "Best" else "Best"
+            )
+            worst_label = (
+                "Worst (Active)" if selected_scenario == "Worst" else "Worst"
+            )
+            revenue_df = revenue_df.rename(
+                columns={
+                    "Base": base_label,
+                    "Best": best_label,
+                    "Worst": worst_label,
+                }
+            )
+            edited_revenue = _sidebar_editor(
+                "Revenue Drivers",
+                "sidebar.revenue_drivers",
+                revenue_df,
                 {
-                    "type": "number",
-                    "label": "Initial Debt Amount at Close (EUR)",
-                    "field_key": "financing.initial_debt_eur",
-                    "value": _get_current_value(
-                        "financing.initial_debt_eur",
-                        financing_defaults["initial_debt_eur"],
+                    "Parameter": st.column_config.TextColumn(disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Description": st.column_config.TextColumn(disabled=True),
+                    base_label: st.column_config.NumberColumn(
+                        disabled=auto_sync and selected_scenario != "Base"
                     ),
-                    "step": 100000.0,
-                    "format": "%.0f",
-                },
-                {
-                    "type": "pct",
-                    "label": "Interest Rate (% fixed)",
-                    "field_key": "financing.interest_rate_pct",
-                    "value": _get_current_value(
-                        "financing.interest_rate_pct",
-                        financing_defaults["interest_rate_pct"],
+                    best_label: st.column_config.NumberColumn(
+                        disabled=auto_sync and selected_scenario != "Best"
                     ),
-                },
-                {
-                    "type": "int",
-                    "label": "Amortisation Period (years)",
-                    "field_key": "financing.amortization_period_years",
-                    "value": _get_current_value(
-                        "financing.amortization_period_years",
-                        financing_defaults["amortization_period_years"],
-                    ),
-                },
-                {
-                    "type": "number",
-                    "label": "Minimum DSCR",
-                    "field_key": "financing.minimum_dscr",
-                    "value": _get_current_value(
-                        "financing.minimum_dscr",
-                        financing_defaults["minimum_dscr"],
-                    ),
-                    "step": 0.05,
-                    "format": "%.2f",
-                },
-                {
-                    "type": "pct",
-                    "label": "Maintenance Capex (% of Revenue)",
-                    "field_key": "financing.maintenance_capex_pct_revenue",
-                    "value": _get_current_value(
-                        "financing.maintenance_capex_pct_revenue",
-                        financing_defaults["maintenance_capex_pct_revenue"],
+                    worst_label: st.column_config.NumberColumn(
+                        disabled=auto_sync and selected_scenario != "Worst"
                     ),
                 },
-            ]
-            _render_inline_controls("Financing Drivers", financing_controls, columns=1)
+            )
+            edited_revenue = edited_revenue.rename(
+                columns={
+                    base_label: "Base",
+                    best_label: "Best",
+                    worst_label: "Worst",
+                }
+            )
+            assumptions_state["revenue_drivers"] = edited_revenue.to_dict("records")
+
+            guarantees_df = pd.DataFrame(assumptions_state["revenue_guarantees"])
+            edited_guarantees = _sidebar_editor(
+                "Revenue Guarantees",
+                "sidebar.revenue_guarantees",
+                guarantees_df,
+                {
+                    "Year": st.column_config.TextColumn(disabled=True),
+                    "Description": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            assumptions_state["revenue_guarantees"] = edited_guarantees.to_dict("records")
+            _apply_assumptions_state()
+
+        if page == "Cashflow & Liquidity":
+            cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
+            edited_cashflow = _sidebar_editor(
+                "Cashflow Assumptions",
+                "sidebar.cashflow",
+                cashflow_df,
+                {
+                    "Parameter": st.column_config.TextColumn(disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Notes": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            assumptions_state["cashflow"] = edited_cashflow.to_dict("records")
+            _apply_assumptions_state()
+
+        if page == "Balance Sheet":
+            balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
+            edited_balance = _sidebar_editor(
+                "Balance Sheet Assumptions",
+                "sidebar.balance_sheet",
+                balance_df,
+                {
+                    "Parameter": st.column_config.TextColumn(disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Notes": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            assumptions_state["balance_sheet"] = edited_balance.to_dict("records")
+            _apply_assumptions_state()
+
+        if page == "Financing & Debt":
+            financing_df = pd.DataFrame(assumptions_state["financing"])
+            edited_financing = _sidebar_editor(
+                "Financing Assumptions",
+                "sidebar.financing",
+                financing_df,
+                {
+                    "Parameter": st.column_config.TextColumn(disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Notes": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            assumptions_state["financing"] = edited_financing.to_dict("records")
+            _apply_assumptions_state()
+
+        if page == "Valuation & Purchase Price":
+            valuation_df = pd.DataFrame(assumptions_state["valuation"])
+            edited_valuation = _sidebar_editor(
+                "Valuation Assumptions",
+                "sidebar.valuation",
+                valuation_df,
+                {
+                    "Parameter": st.column_config.TextColumn(disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Notes": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            assumptions_state["valuation"] = edited_valuation.to_dict("records")
+            _apply_assumptions_state()
+
+        if page == "Equity Case":
+            equity_df = pd.DataFrame(assumptions_state["equity"])
+            edited_equity = _sidebar_editor(
+                "Equity Assumptions",
+                "sidebar.equity",
+                equity_df,
+                {
+                    "Parameter": st.column_config.TextColumn(disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Notes": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            assumptions_state["equity"] = edited_equity.to_dict("records")
+            _apply_assumptions_state()
 
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
@@ -2118,9 +2039,148 @@ def run_app():
                 {"Parameter": "Exit Multiple (x EBITDA)", "Value": _default_equity_assumptions(base_model)["exit_multiple"], "Unit": "x", "Notes": "Exit multiple on EBITDA."},
                 {"Parameter": "Distribution Rule", "Value": "Pro-rata", "Unit": "", "Notes": "Fixed distribution rule."},
             ],
+            "cashflow": [
+                {"Parameter": "Tax Cash Rate", "Value": _default_cashflow_assumptions()["tax_cash_rate_pct"], "Unit": "%", "Notes": "Cash tax rate on EBT."},
+                {"Parameter": "Tax Payment Lag", "Value": _default_cashflow_assumptions()["tax_payment_lag_years"], "Unit": "Years", "Notes": "Timing lag for cash taxes."},
+                {"Parameter": "Capex (% of Revenue)", "Value": _default_cashflow_assumptions()["capex_pct_revenue"], "Unit": "%", "Notes": "Capex as % of revenue."},
+                {"Parameter": "Working Capital (% of Revenue)", "Value": _default_cashflow_assumptions()["working_capital_pct_revenue"], "Unit": "%", "Notes": "Working capital adjustment."},
+                {"Parameter": "Opening Cash Balance", "Value": _default_cashflow_assumptions()["opening_cash_balance_eur"], "Unit": "EUR", "Notes": "Opening cash balance."},
+            ],
+            "balance_sheet": [
+                {"Parameter": "Opening Equity", "Value": _default_balance_sheet_assumptions(base_model)["opening_equity_eur"], "Unit": "EUR", "Notes": "Opening equity value."},
+                {"Parameter": "Depreciation Rate", "Value": _default_balance_sheet_assumptions(base_model)["depreciation_rate_pct"], "Unit": "%", "Notes": "Fixed asset depreciation rate."},
+                {"Parameter": "Minimum Cash Balance", "Value": _default_balance_sheet_assumptions(base_model)["minimum_cash_balance_eur"], "Unit": "EUR", "Notes": "Minimum cash balance."},
+            ],
+            "valuation": [
+                {"Parameter": "Seller EBIT Multiple", "Value": _default_valuation_assumptions(base_model)["seller_ebit_multiple"], "Unit": "x", "Notes": "EBIT multiple for seller view."},
+                {"Parameter": "Reference Year", "Value": _default_valuation_assumptions(base_model)["reference_year"], "Unit": "Year", "Notes": "Reference year for multiple."},
+                {"Parameter": "Discount Rate (WACC)", "Value": _default_valuation_assumptions(base_model)["buyer_discount_rate"], "Unit": "%", "Notes": "DCF discount rate."},
+                {"Parameter": "Valuation Start Year", "Value": _default_valuation_assumptions(base_model)["valuation_start_year"], "Unit": "Year", "Notes": "DCF start year."},
+                {"Parameter": "Debt at Close", "Value": _default_valuation_assumptions(base_model)["debt_at_close_eur"], "Unit": "EUR", "Notes": "Net debt at close."},
+                {"Parameter": "Transaction Costs (%)", "Value": _default_valuation_assumptions(base_model)["transaction_cost_pct"], "Unit": "%", "Notes": "Fees as % of EV."},
+            ],
         }
 
     st.session_state.setdefault("assumptions", _seed_assumptions_state())
+    st.session_state.setdefault("assumptions.auto_sync", True)
+
+    def _apply_assumptions_state():
+        state = st.session_state["assumptions"]
+        for row in state["revenue_drivers"]:
+            param = row["Parameter"]
+            if param == "Utilization (%)":
+                st.session_state["scenario_parameters.utilization_rate.base"] = _clamp_pct(row["Base"])
+                st.session_state["scenario_parameters.utilization_rate.best"] = _clamp_pct(row["Best"])
+                st.session_state["scenario_parameters.utilization_rate.worst"] = _clamp_pct(row["Worst"])
+            elif param == "Day Rate (EUR)":
+                st.session_state["scenario_parameters.day_rate_eur.base"] = _non_negative(row["Base"])
+                st.session_state["scenario_parameters.day_rate_eur.best"] = _non_negative(row["Best"])
+                st.session_state["scenario_parameters.day_rate_eur.worst"] = _non_negative(row["Worst"])
+            elif param == "Consulting FTE":
+                st.session_state["operating_assumptions.consulting_fte_start"] = _non_negative(row["Base"])
+            elif param == "Workdays per Year":
+                st.session_state["operating_assumptions.work_days_per_year"] = _non_negative(row["Base"])
+            elif param == "Day Rate Growth (% p.a.)":
+                st.session_state["operating_assumptions.day_rate_growth_pct"] = _clamp_pct(row["Base"])
+
+        guarantee_map = {
+            "Year 1": "operating_assumptions.revenue_guarantee_pct_year_1",
+            "Year 2": "operating_assumptions.revenue_guarantee_pct_year_2",
+            "Year 3": "operating_assumptions.revenue_guarantee_pct_year_3",
+        }
+        for row in state["revenue_guarantees"]:
+            key = guarantee_map.get(row["Year"])
+            if key:
+                st.session_state[key] = _clamp_pct(row["Guarantee %"])
+
+        for row in state["personnel_costs"]:
+            role = row["Role"]
+            if role == "Consultant Base Salary":
+                st.session_state[
+                    "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year"
+                ] = _non_negative(row["Base Value (EUR)"])
+                st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
+            elif role == "Consultant Variable (% Revenue)":
+                st.session_state["personnel_cost_assumptions.bonus_pct_of_base"] = _clamp_pct(row["Base Value (EUR)"])
+            elif role == "Backoffice Cost per FTE":
+                st.session_state[
+                    "operating_assumptions.avg_backoffice_salary_eur_per_year"
+                ] = _non_negative(row["Base Value (EUR)"])
+                st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
+
+        for row in state["opex"]:
+            category = row["Category"]
+            if category == "External Consulting":
+                st.session_state["overhead_and_variable_costs.legal_audit_eur_per_year"] = _non_negative(row["Value"])
+            elif category == "IT":
+                st.session_state["overhead_and_variable_costs.it_and_software_eur_per_year"] = _non_negative(row["Value"])
+            elif category == "Office":
+                st.session_state["overhead_and_variable_costs.rent_eur_per_year"] = _non_negative(row["Value"])
+            elif category == "Other Services":
+                st.session_state["overhead_and_variable_costs.other_overhead_eur_per_year"] = _non_negative(row["Value"])
+
+        for row in state["financing"]:
+            parameter = row["Parameter"]
+            if parameter == "Senior Debt Amount":
+                st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = _non_negative(row["Value"])
+            elif parameter == "Interest Rate":
+                st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _clamp_pct(row["Value"])
+            elif parameter == "Amortisation Years":
+                st.session_state["financing.amortization_period_years"] = int(max(1, row["Value"]))
+            elif parameter == "Transaction Fees (%)":
+                st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
+
+        for row in state["equity"]:
+            parameter = row["Parameter"]
+            if parameter == "Sponsor Equity Contribution":
+                st.session_state["equity.sponsor_equity_eur"] = _non_negative(row["Value"])
+            elif parameter == "Investor Equity Contribution":
+                st.session_state["equity.investor_equity_eur"] = _non_negative(row["Value"])
+            elif parameter == "Investor Exit Year":
+                try:
+                    exit_val = int(float(row["Value"]))
+                except (TypeError, ValueError):
+                    exit_val = _default_equity_assumptions(base_model)["exit_year"]
+                st.session_state["equity.exit_year"] = int(max(3, min(7, exit_val)))
+            elif parameter == "Exit Multiple (x EBITDA)":
+                st.session_state["equity.exit_multiple"] = float(row["Value"])
+
+        for row in state["cashflow"]:
+            parameter = row["Parameter"]
+            if parameter == "Tax Cash Rate":
+                st.session_state["cashflow.tax_cash_rate_pct"] = _clamp_pct(row["Value"])
+            elif parameter == "Tax Payment Lag":
+                st.session_state["cashflow.tax_payment_lag_years"] = int(max(0, min(1, row["Value"])))
+            elif parameter == "Capex (% of Revenue)":
+                st.session_state["cashflow.capex_pct_revenue"] = _clamp_pct(row["Value"])
+            elif parameter == "Working Capital (% of Revenue)":
+                st.session_state["cashflow.working_capital_pct_revenue"] = _clamp_pct(row["Value"])
+            elif parameter == "Opening Cash Balance":
+                st.session_state["cashflow.opening_cash_balance_eur"] = _non_negative(row["Value"])
+
+        for row in state["balance_sheet"]:
+            parameter = row["Parameter"]
+            if parameter == "Opening Equity":
+                st.session_state["balance_sheet.opening_equity_eur"] = _non_negative(row["Value"])
+            elif parameter == "Depreciation Rate":
+                st.session_state["balance_sheet.depreciation_rate_pct"] = _clamp_pct(row["Value"])
+            elif parameter == "Minimum Cash Balance":
+                st.session_state["balance_sheet.minimum_cash_balance_eur"] = _non_negative(row["Value"])
+
+        for row in state["valuation"]:
+            parameter = row["Parameter"]
+            if parameter == "Seller EBIT Multiple":
+                st.session_state["valuation.seller_ebit_multiple"] = float(row["Value"])
+            elif parameter == "Reference Year":
+                st.session_state["valuation.reference_year"] = int(max(0, min(4, row["Value"])))
+            elif parameter == "Discount Rate (WACC)":
+                st.session_state["valuation.buyer_discount_rate"] = _clamp_pct(row["Value"])
+            elif parameter == "Valuation Start Year":
+                st.session_state["valuation.valuation_start_year"] = int(max(0, min(4, row["Value"])))
+            elif parameter == "Debt at Close":
+                st.session_state["valuation.debt_at_close_eur"] = _non_negative(row["Value"])
+            elif parameter == "Transaction Costs (%)":
+                st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
 
     if page == "Assumptions (Advanced)":
         st.header("Assumptions (Advanced)")
@@ -2143,7 +2203,9 @@ def run_app():
             key="assumptions.scenario",
         )
         auto_sync = info_cols[1].toggle(
-            "Auto-apply scenario values", value=True
+            "Auto-apply scenario values",
+            value=st.session_state.get("assumptions.auto_sync", True),
+            key="assumptions.auto_sync",
         )
         st.info("Changes here affect all pages instantly.")
         st.session_state["scenario_selection.selected_scenario"] = (
@@ -2360,6 +2422,87 @@ def run_app():
                 )
             elif parameter == "Exit Multiple (x EBITDA)":
                 st.session_state["equity.exit_multiple"] = float(row["Value"])
+
+        st.markdown("### Cashflow Assumptions")
+        cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
+        cashflow_edit = st.data_editor(
+            cashflow_df,
+            hide_index=True,
+            key="assumptions.cashflow",
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+            use_container_width=True,
+        )
+        assumptions_state["cashflow"] = cashflow_edit.to_dict("records")
+        for _, row in cashflow_edit.iterrows():
+            parameter = row["Parameter"]
+            if parameter == "Tax Cash Rate":
+                st.session_state["cashflow.tax_cash_rate_pct"] = _clamp_pct(row["Value"])
+            elif parameter == "Tax Payment Lag":
+                st.session_state["cashflow.tax_payment_lag_years"] = int(max(0, min(1, row["Value"])))
+            elif parameter == "Capex (% of Revenue)":
+                st.session_state["cashflow.capex_pct_revenue"] = _clamp_pct(row["Value"])
+            elif parameter == "Working Capital (% of Revenue)":
+                st.session_state["cashflow.working_capital_pct_revenue"] = _clamp_pct(row["Value"])
+            elif parameter == "Opening Cash Balance":
+                st.session_state["cashflow.opening_cash_balance_eur"] = _non_negative(row["Value"])
+
+        st.markdown("### Balance Sheet Assumptions")
+        balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
+        balance_edit = st.data_editor(
+            balance_df,
+            hide_index=True,
+            key="assumptions.balance_sheet",
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+            use_container_width=True,
+        )
+        assumptions_state["balance_sheet"] = balance_edit.to_dict("records")
+        for _, row in balance_edit.iterrows():
+            parameter = row["Parameter"]
+            if parameter == "Opening Equity":
+                st.session_state["balance_sheet.opening_equity_eur"] = _non_negative(row["Value"])
+            elif parameter == "Depreciation Rate":
+                st.session_state["balance_sheet.depreciation_rate_pct"] = _clamp_pct(row["Value"])
+            elif parameter == "Minimum Cash Balance":
+                st.session_state["balance_sheet.minimum_cash_balance_eur"] = _non_negative(row["Value"])
+
+        st.markdown("### Valuation Assumptions")
+        valuation_df = pd.DataFrame(assumptions_state["valuation"])
+        valuation_edit = st.data_editor(
+            valuation_df,
+            hide_index=True,
+            key="assumptions.valuation",
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+            use_container_width=True,
+        )
+        assumptions_state["valuation"] = valuation_edit.to_dict("records")
+        for _, row in valuation_edit.iterrows():
+            parameter = row["Parameter"]
+            if parameter == "Seller EBIT Multiple":
+                st.session_state["valuation.seller_ebit_multiple"] = float(row["Value"])
+            elif parameter == "Reference Year":
+                st.session_state["valuation.reference_year"] = int(max(0, min(4, row["Value"])))
+            elif parameter == "Discount Rate (WACC)":
+                st.session_state["valuation.buyer_discount_rate"] = _clamp_pct(row["Value"])
+            elif parameter == "Valuation Start Year":
+                st.session_state["valuation.valuation_start_year"] = int(max(0, min(4, row["Value"])))
+            elif parameter == "Debt at Close":
+                st.session_state["valuation.debt_at_close_eur"] = _non_negative(row["Value"])
+            elif parameter == "Transaction Costs (%)":
+                st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
+
+        _apply_assumptions_state()
 
     edited_values = {}
     for section_key, section_data in base_model.__dict__.items():
@@ -2858,12 +3001,6 @@ def run_app():
     if page == "Valuation & Purchase Price":
         st.header("Valuation & Purchase Price")
         st.write("Seller vs. buyer view (5-year plan)")
-        if st.button(
-            "Edit Valuation Assumptions",
-            key="edit_valuation_assumptions_button",
-            help="Open valuation assumptions in the sidebar",
-        ):
-            st.session_state["edit_valuation_assumptions"] = True
 
         valuation_assumptions = _default_valuation_assumptions(input_model)
         seller_multiple = st.session_state.get(
@@ -3189,14 +3326,6 @@ def run_app():
         )
 
         st.markdown("### P&L (GuV)")
-        if st.button(
-            "Edit P&L Assumptions",
-            key="edit_pnl_assumptions_button",
-            help="Open relevant P&L assumptions in the sidebar",
-        ):
-            st.session_state["edit_pnl_assumptions"] = True
-
-
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
         year_indexes = list(range(len(pnl_table)))
 
@@ -3971,13 +4100,6 @@ def run_app():
     if page == "Cashflow & Liquidity":
         st.header("Cashflow & Liquidity")
         st.write("Consolidated cashflow statement (5-year plan)")
-        if st.button(
-            "Edit Cashflow Assumptions",
-            key="edit_cashflow_assumptions_button",
-            help="Open cashflow assumptions in the sidebar",
-        ):
-            st.session_state["edit_cashflow_assumptions"] = True
-
         cashflow_line_items = {}
 
         def _set_cashflow_value(name, year_label, value):
@@ -4246,13 +4368,6 @@ def run_app():
     if page == "Balance Sheet":
         st.header("Balance Sheet")
         st.write("Simplified balance sheet (5-year plan)")
-        if st.button(
-            "Edit Balance Sheet Assumptions",
-            key="edit_balance_sheet_assumptions_button",
-            help="Open balance sheet assumptions in the sidebar",
-        ):
-            st.session_state["edit_balance_sheet_assumptions"] = True
-
         balance_line_items = {}
 
         def _set_balance_value(name, year_label, value):
@@ -4516,13 +4631,6 @@ def run_app():
     if page == "Financing & Debt":
         st.header("Financing & Debt")
         st.write("Debt structure, service and bankability (5-year plan)")
-        if st.button(
-            "Edit Financing Assumptions",
-            key="edit_financing_assumptions_button",
-            help="Open financing assumptions in the sidebar",
-        ):
-            st.session_state["edit_financing_assumptions"] = True
-
         financing_assumptions = input_model.financing_assumptions
         cashflow_by_year = {row["year"]: row for row in cashflow_result}
         maintenance_capex_pct = financing_assumptions[
