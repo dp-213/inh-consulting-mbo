@@ -254,7 +254,15 @@ def _render_pnl_html(pnl_statement, section_rows, bold_rows):
         for col in columns:
             value = row[col]
             if col != "Line Item":
-                if label in {"EBITDA Margin", "EBIT Margin", "Personnel Cost Ratio"}:
+                if label in {
+                    "EBITDA Margin",
+                    "EBIT Margin",
+                    "Personnel Cost Ratio",
+                    "Guaranteed Revenue %",
+                    "Non-Guaranteed Revenue %",
+                    "Net Margin",
+                    "Opex Ratio",
+                }:
                     value = format_pct(value)
                 else:
                     value = format_currency(value)
@@ -308,9 +316,7 @@ def run_app():
     st.title("Financial Model")
 
     base_model = create_demo_input_model()
-    st.session_state.setdefault("edit_guarantee", False)
-    st.session_state.setdefault("edit_consultant_comp", False)
-    st.session_state.setdefault("edit_operating_expenses", False)
+    st.session_state.setdefault("edit_pnl_assumptions", False)
 
     # Navigation for question-driven layout.
     with st.sidebar:
@@ -331,9 +337,9 @@ def run_app():
         )
         if page == "Operating Model (P&L)":
             st.markdown("## Quick Assumptions")
-            if st.session_state.get("edit_guarantee"):
-                if st.button("Close", key="hide_guarantee"):
-                    st.session_state["edit_guarantee"] = not st.session_state["edit_guarantee"]
+            if st.session_state.get("edit_pnl_assumptions"):
+                if st.button("Close", key="hide_pnl_assumptions"):
+                    st.session_state["edit_pnl_assumptions"] = not st.session_state["edit_pnl_assumptions"]
                 scenario_options = ["Base", "Best", "Worst"]
                 selected_scenario = st.session_state.get(
                     "scenario_selection.selected_scenario",
@@ -377,7 +383,47 @@ def run_app():
                     base_model.__dict__,
                     ["operating_assumptions", "revenue_guarantee_pct_year_3"],
                 )
-                guarantee_controls = [
+                base_cost_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["personnel_cost_assumptions", "avg_consultant_base_cost_eur_per_year"],
+                )
+                bonus_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["personnel_cost_assumptions", "bonus_pct_of_base"],
+                )
+                payroll_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["personnel_cost_assumptions", "payroll_burden_pct_of_comp"],
+                )
+                wage_inflation_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["personnel_cost_assumptions", "wage_inflation_pct"],
+                )
+                legal_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["overhead_and_variable_costs", "legal_audit_eur_per_year"],
+                )
+                it_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["overhead_and_variable_costs", "it_and_software_eur_per_year"],
+                )
+                rent_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["overhead_and_variable_costs", "rent_eur_per_year"],
+                )
+                other_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["overhead_and_variable_costs", "other_overhead_eur_per_year"],
+                )
+                insurance_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["overhead_and_variable_costs", "insurance_eur_per_year"],
+                )
+                overhead_inflation_field = _get_field_by_path(
+                    base_model.__dict__,
+                    ["overhead_and_variable_costs", "overhead_inflation_pct"],
+                )
+                pnl_controls = [
                     {
                         "type": "select",
                         "label": "Scenario",
@@ -459,29 +505,6 @@ def run_app():
                             guarantee_y3_field.value,
                         ),
                     },
-                ]
-                _render_inline_controls("Revenue Guarantees", guarantee_controls, columns=1)
-
-            if st.session_state.get("edit_consultant_comp"):
-                if st.button("Close", key="hide_consultant_comp"):
-                    st.session_state["edit_consultant_comp"] = not st.session_state["edit_consultant_comp"]
-                base_cost_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["personnel_cost_assumptions", "avg_consultant_base_cost_eur_per_year"],
-                )
-                bonus_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["personnel_cost_assumptions", "bonus_pct_of_base"],
-                )
-                payroll_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["personnel_cost_assumptions", "payroll_burden_pct_of_comp"],
-                )
-                wage_inflation_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["personnel_cost_assumptions", "wage_inflation_pct"],
-                )
-                comp_controls = [
                     {
                         "type": "number",
                         "label": "Consultant Base Cost (EUR)",
@@ -520,37 +543,6 @@ def run_app():
                             wage_inflation_field.value,
                         ),
                     },
-                ]
-                _render_inline_controls("Consultant Compensation", comp_controls, columns=1)
-
-            if st.session_state.get("edit_operating_expenses"):
-                if st.button("Close", key="hide_operating_expenses"):
-                    st.session_state["edit_operating_expenses"] = not st.session_state["edit_operating_expenses"]
-                legal_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "legal_audit_eur_per_year"],
-                )
-                it_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "it_and_software_eur_per_year"],
-                )
-                rent_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "rent_eur_per_year"],
-                )
-                other_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "other_overhead_eur_per_year"],
-                )
-                insurance_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "insurance_eur_per_year"],
-                )
-                overhead_inflation_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "overhead_inflation_pct"],
-                )
-                expense_controls = [
                     {
                         "type": "number",
                         "label": "External Advisors (EUR)",
@@ -616,7 +608,7 @@ def run_app():
                         ),
                     },
                 ]
-                _render_inline_controls("Operating Expenses", expense_controls, columns=1)
+                _render_inline_controls("P&L Drivers", pnl_controls, columns=1)
 
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
@@ -1230,9 +1222,7 @@ def run_app():
 
     if page == "Operating Model (P&L)":
         st.header("Operating Model (P&L)")
-        st.write(
-            "Classic consulting income statement built from operational drivers."
-        )
+        st.write("Consolidated income statement (5-year plan)")
         scenario_options = ["Base", "Best", "Worst"]
         selected_scenario = st.session_state.get(
             "scenario_selection.selected_scenario",
@@ -1278,26 +1268,12 @@ def run_app():
         )
 
         st.markdown("### P&L (GuV)")
-        edit_cols = st.columns([3, 1, 1, 1])
-        edit_cols[0].markdown("**Edit assumptions**")
-        if edit_cols[1].button(
-            "✎ Guarantees",
-            key="edit_guarantee_button",
-            help="Edit revenue guarantees",
+        if st.button(
+            "Edit P&L Assumptions",
+            key="edit_pnl_assumptions_button",
+            help="Open relevant P&L assumptions in the sidebar",
         ):
-            st.session_state["edit_guarantee"] = not st.session_state["edit_guarantee"]
-        if edit_cols[2].button(
-            "✎ Consultant",
-            key="edit_consultant_comp_button",
-            help="Edit consultant compensation",
-        ):
-            st.session_state["edit_consultant_comp"] = not st.session_state["edit_consultant_comp"]
-        if edit_cols[3].button(
-            "✎ Opex",
-            key="edit_operating_expenses_button",
-            help="Edit operating expenses",
-        ):
-            st.session_state["edit_operating_expenses"] = not st.session_state["edit_operating_expenses"]
+            st.session_state["edit_pnl_assumptions"] = not st.session_state["edit_pnl_assumptions"]
 
 
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
@@ -1488,6 +1464,10 @@ def run_app():
             "EBITDA Margin",
             "EBIT Margin",
             "Personnel Cost Ratio",
+            "Guaranteed Revenue %",
+            "Non-Guaranteed Revenue %",
+            "Net Margin",
+            "Opex Ratio",
         ]
 
         label_rows = []
@@ -1584,6 +1564,22 @@ def run_app():
             _set_line_value("EBITDA Margin", year_label, ebitda_margin)
             _set_line_value("EBIT Margin", year_label, ebit_margin)
             _set_line_value("Personnel Cost Ratio", year_label, personnel_cost_ratio)
+            guaranteed_pct = (
+                guaranteed_revenue / total_revenue if total_revenue else 0
+            )
+            non_guaranteed_pct = (
+                non_guaranteed_revenue / total_revenue if total_revenue else 0
+            )
+            net_margin = net_income / total_revenue if total_revenue else 0
+            opex_ratio = (
+                total_operating / total_revenue if total_revenue else 0
+            )
+            _set_line_value("Guaranteed Revenue %", year_label, guaranteed_pct)
+            _set_line_value(
+                "Non-Guaranteed Revenue %", year_label, non_guaranteed_pct
+            )
+            _set_line_value("Net Margin", year_label, net_margin)
+            _set_line_value("Opex Ratio", year_label, opex_ratio)
 
         # KPIs moved into dedicated lines within the P&L table.
 
