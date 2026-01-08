@@ -2788,14 +2788,18 @@ def run_app():
     }
 
     # Run model calculations in the standard order.
-    pnl_result = run_model.calculate_pnl(input_model)
-    pnl_list = _pnl_dict_to_list(pnl_result)
+    pnl_list = run_model.calculate_pnl(input_model)
     cashflow_result = run_model.calculate_cashflow(input_model, pnl_list)
+    depreciation_by_year = {
+        row["year"]: row.get("depreciation", 0.0) for row in cashflow_result
+    }
+    pnl_list = run_model.calculate_pnl(input_model, depreciation_by_year)
+    pnl_result = {f"Year {row['year']}": row for row in pnl_list}
     debt_schedule = run_model.calculate_debt_schedule(
         input_model, cashflow_result
     )
     balance_sheet = run_model.calculate_balance_sheet(
-        input_model, cashflow_result, debt_schedule, pnl_result
+        input_model, cashflow_result, debt_schedule, pnl_list
     )
     investment_result = run_model.calculate_investment(
         input_model, cashflow_result, pnl_result

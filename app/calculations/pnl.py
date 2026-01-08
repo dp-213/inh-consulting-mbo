@@ -1,4 +1,4 @@
-def calculate_pnl(input_model):
+def calculate_pnl(input_model, depreciation_by_year=None):
     """
     Calculate a 5-year plan P&L based strictly on InputModel inputs.
     Returns a list of yearly dictionaries with integer year indices.
@@ -93,11 +93,6 @@ def calculate_pnl(input_model):
         "marketing_pct_of_revenue"
     ].value
 
-    # Capex and working capital assumptions.
-    depreciation_eur_per_year = input_model.capex_and_working_capital[
-        "depreciation_eur_per_year"
-    ].value
-
     # Tax assumptions.
     tax_rate_pct = input_model.tax_and_distributions["tax_rate_pct"].value
 
@@ -190,7 +185,16 @@ def calculate_pnl(input_model):
 
         # EBITDA and EBIT.
         ebitda = revenue - total_personnel_costs - overhead_and_variable_costs
-        ebit = ebitda - depreciation_eur_per_year
+        if isinstance(depreciation_by_year, dict):
+            depreciation = depreciation_by_year.get(year_index, 0.0)
+        elif (
+            isinstance(depreciation_by_year, list)
+            and len(depreciation_by_year) > year_index
+        ):
+            depreciation = depreciation_by_year[year_index]
+        else:
+            depreciation = 0.0
+        ebit = ebitda - depreciation
 
         # Taxes apply to positive EBIT only.
         taxable_income = ebit if ebit > 0 else 0
@@ -204,7 +208,7 @@ def calculate_pnl(input_model):
                 "personnel_costs": total_personnel_costs,
                 "overhead_and_variable_costs": overhead_and_variable_costs,
                 "ebitda": ebitda,
-                "depreciation": depreciation_eur_per_year,
+                "depreciation": depreciation,
                 "ebit": ebit,
                 "taxes": taxes,
                 "net_income": net_income,

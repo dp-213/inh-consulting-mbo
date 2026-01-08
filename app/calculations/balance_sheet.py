@@ -9,7 +9,6 @@ def calculate_balance_sheet(
 
     balance_assumptions = getattr(input_model, "balance_sheet_assumptions", {})
     opening_equity = balance_assumptions.get("opening_equity_eur", 0.0)
-    depreciation_rate = balance_assumptions.get("depreciation_rate_pct", 0.0)
     equity_contribution = input_model.transaction_and_financing[
         "equity_contribution_eur"
     ].value
@@ -34,9 +33,9 @@ def calculate_balance_sheet(
         year = year_data["year"]
         cash_balance = year_data["cash_balance"]
         capex = year_data.get("capex", 0.0)
+        depreciation = year_data.get("depreciation", 0.0)
 
-        # Depreciate existing fixed assets; capex increases the base.
-        depreciation = (fixed_assets + capex) * depreciation_rate
+        # Fixed assets follow cashflow-derived capex and depreciation.
         fixed_assets = max(fixed_assets + capex - depreciation, 0.0)
 
         financial_debt = debt_by_year.get(year, 0.0)

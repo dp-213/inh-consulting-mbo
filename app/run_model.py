@@ -11,8 +11,12 @@ def run_model():
     input_model = InputModel()
 
     # Run the integrated model in the required order.
-    pnl_result = calculate_pnl(input_model)
-    cashflow_result = calculate_cashflow(input_model, pnl_result)
+    pnl_base = calculate_pnl(input_model)
+    cashflow_result = calculate_cashflow(input_model, pnl_base)
+    depreciation_by_year = {
+        row["year"]: row.get("depreciation", 0.0) for row in cashflow_result
+    }
+    pnl_result = calculate_pnl(input_model, depreciation_by_year)
     debt_schedule = calculate_debt_schedule(input_model, cashflow_result)
     balance_sheet = calculate_balance_sheet(
         input_model, cashflow_result, debt_schedule, pnl_result

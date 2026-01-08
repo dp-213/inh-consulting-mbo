@@ -47,6 +47,10 @@ def calculate_cashflow(input_model, pnl_result):
     cash_balance = opening_cash_balance
     taxes_due_by_year = []
     outstanding_principal = debt_amount
+    depreciation_rate = getattr(
+        input_model, "balance_sheet_assumptions", {}
+    ).get("depreciation_rate_pct", 0.0)
+    fixed_assets = 0.0
     amort_type = financing_assumptions.get("amortization_type", "Linear")
     amort_period = financing_assumptions.get("amortization_period_years", 5)
     grace_period = financing_assumptions.get("grace_period_years", 0)
@@ -58,7 +62,6 @@ def calculate_cashflow(input_model, pnl_result):
         year = year_data["year"]
         revenue = year_data.get("revenue", 0)
         ebitda = year_data.get("ebitda", 0)
-        ebit = year_data.get("ebit", 0)
 
         # Interest expense based on opening principal.
         interest = outstanding_principal * interest_rate
@@ -102,6 +105,13 @@ def calculate_cashflow(input_model, pnl_result):
         working_capital_change = revenue * working_capital_pct_revenue
         capex = revenue * capex_pct_revenue
 
+        # Depreciation is derived from capex and fixed asset roll-forward.
+        depreciation = (fixed_assets + capex) * depreciation_rate
+        fixed_assets = max(fixed_assets + capex - depreciation, 0.0)
+
+        # EBIT uses EBITDA and cashflow-derived depreciation.
+        ebit = ebitda - depreciation
+
         # Operating cash flow starts from EBITDA and adjusts for taxes and working capital.
         operating_cf = ebitda - taxes_paid - working_capital_change
 
@@ -127,6 +137,7 @@ def calculate_cashflow(input_model, pnl_result):
             {
                 "year": year,
                 "ebitda": ebitda,
+                "depreciation": depreciation,
                 "taxes_paid": taxes_paid,
                 "working_capital_change": working_capital_change,
                 "operating_cf": operating_cf,
