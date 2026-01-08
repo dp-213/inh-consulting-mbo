@@ -2714,10 +2714,16 @@ def run_app():
             max-width: 280px;
           }
           div[data-testid="stRadio"] label {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
             padding: 0.35rem 0.6rem 0.35rem 0.8rem;
             border-radius: 4px;
-            margin-bottom: 0.2rem;
+            margin-bottom: 0.15rem;
             color: #374151;
+          }
+          div[data-testid="stRadio"] label > div {
+            margin-left: 0 !important;
           }
           div[data-testid="stRadio"] label:hover {
             background: #eef2f7;
@@ -2744,6 +2750,7 @@ def run_app():
             text-transform: uppercase;
             color: #6b7280;
             margin: 0.9rem 0 0.35rem;
+            width: 100%;
           }
           div[data-testid="stRadio"] label:nth-child(1)::before {
             content: "OPERATING MODEL";
