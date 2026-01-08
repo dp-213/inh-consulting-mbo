@@ -99,6 +99,13 @@ def calculate_pnl(input_model, depreciation_by_year=None):
     pnl_by_year = []
 
     reference_volume_eur = 20_000_000
+    if isinstance(revenue_model, dict):
+        reference_volume_eur = revenue_model[
+            "reference_revenue_eur"
+        ].value
+
+    revenue_by_year = getattr(input_model, "revenue_by_year", None)
+    revenue_model = getattr(input_model, "revenue_model", None)
 
     for year_index in range(planning_horizon_years):
         # Grow FTEs and rates by their respective growth assumptions.
@@ -119,20 +126,28 @@ def calculate_pnl(input_model, depreciation_by_year=None):
             else utilization_rate
         )
 
-        # Revenue calculation based on scenario utilization and billable days.
-        total_revenue = (
-            consultants_fte
-            * current_utilization
-            * work_days_per_year
-            * current_daily_rate
-        )
+        # Revenue comes from the dedicated revenue model if present.
+        if isinstance(revenue_by_year, list) and len(revenue_by_year) > year_index:
+            total_revenue = revenue_by_year[year_index]
+        else:
+            total_revenue = (
+                consultants_fte
+                * current_utilization
+                * work_days_per_year
+                * current_daily_rate
+            )
         guarantee_pct = 0
-        if year_index == 0:
-            guarantee_pct = guarantee_year_1
-        elif year_index == 1:
-            guarantee_pct = guarantee_year_2
-        elif year_index == 2:
-            guarantee_pct = guarantee_year_3
+        if isinstance(revenue_model, dict):
+            guarantee_pct = revenue_model[
+                f"guarantee_pct_year_{year_index}"
+            ].value
+        else:
+            if year_index == 0:
+                guarantee_pct = guarantee_year_1
+            elif year_index == 1:
+                guarantee_pct = guarantee_year_2
+            elif year_index == 2:
+                guarantee_pct = guarantee_year_3
 
         # Revenue guarantees classify revenue; they do not change total revenue.
         guaranteed_revenue = min(

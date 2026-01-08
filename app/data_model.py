@@ -341,6 +341,106 @@ class InputModel:
             ),
         }
 
+        # Revenue model: guarantee floor and explicit revenue inputs.
+        self.revenue_model = {
+            "reference_revenue_eur": InputField(
+                value=20000000,
+                description="Reference revenue used for guarantee floor (EUR)",
+                excel_ref="Revenue_Model!B2",
+                editable=True,
+            ),
+            "guarantee_pct_year_0": InputField(
+                value=0.80,
+                description="Guarantee % for Year 0",
+                excel_ref="Revenue_Model!B3",
+                editable=True,
+            ),
+            "guarantee_pct_year_1": InputField(
+                value=0.60,
+                description="Guarantee % for Year 1",
+                excel_ref="Revenue_Model!B4",
+                editable=True,
+            ),
+            "guarantee_pct_year_2": InputField(
+                value=0.60,
+                description="Guarantee % for Year 2",
+                excel_ref="Revenue_Model!B5",
+                editable=True,
+            ),
+            "guarantee_pct_year_3": InputField(
+                value=0.00,
+                description="Guarantee % for Year 3",
+                excel_ref="Revenue_Model!B6",
+                editable=True,
+            ),
+            "guarantee_pct_year_4": InputField(
+                value=0.00,
+                description="Guarantee % for Year 4",
+                excel_ref="Revenue_Model!B7",
+                editable=True,
+            ),
+            "in_group_revenue_year_0": InputField(
+                value=0.0,
+                description="In-group revenue (Year 0, EUR)",
+                excel_ref="Revenue_Model!C3",
+                editable=True,
+            ),
+            "in_group_revenue_year_1": InputField(
+                value=0.0,
+                description="In-group revenue (Year 1, EUR)",
+                excel_ref="Revenue_Model!C4",
+                editable=True,
+            ),
+            "in_group_revenue_year_2": InputField(
+                value=0.0,
+                description="In-group revenue (Year 2, EUR)",
+                excel_ref="Revenue_Model!C5",
+                editable=True,
+            ),
+            "in_group_revenue_year_3": InputField(
+                value=0.0,
+                description="In-group revenue (Year 3, EUR)",
+                excel_ref="Revenue_Model!C6",
+                editable=True,
+            ),
+            "in_group_revenue_year_4": InputField(
+                value=0.0,
+                description="In-group revenue (Year 4, EUR)",
+                excel_ref="Revenue_Model!C7",
+                editable=True,
+            ),
+            "external_revenue_year_0": InputField(
+                value=0.0,
+                description="External revenue (Year 0, EUR)",
+                excel_ref="Revenue_Model!D3",
+                editable=True,
+            ),
+            "external_revenue_year_1": InputField(
+                value=0.0,
+                description="External revenue (Year 1, EUR)",
+                excel_ref="Revenue_Model!D4",
+                editable=True,
+            ),
+            "external_revenue_year_2": InputField(
+                value=0.0,
+                description="External revenue (Year 2, EUR)",
+                excel_ref="Revenue_Model!D5",
+                editable=True,
+            ),
+            "external_revenue_year_3": InputField(
+                value=0.0,
+                description="External revenue (Year 3, EUR)",
+                excel_ref="Revenue_Model!D6",
+                editable=True,
+            ),
+            "external_revenue_year_4": InputField(
+                value=0.0,
+                description="External revenue (Year 4, EUR)",
+                excel_ref="Revenue_Model!D7",
+                editable=True,
+            ),
+        }
+
         # Tax and distributions: tax rate and shareholder payouts.
         self.tax_and_distributions = {
             "tax_rate_pct": InputField(
@@ -516,6 +616,24 @@ def create_demo_input_model():
     input_model.overhead_and_variable_costs[
         "marketing_pct_of_revenue"
     ].value = 0.0
+
+    # Seed revenue model defaults to the operational baseline.
+    reference_revenue = input_model.revenue_model["reference_revenue_eur"].value
+    input_model.revenue_model["guarantee_pct_year_0"].value = (
+        input_model.operating_assumptions["revenue_guarantee_pct_year_1"].value
+    )
+    input_model.revenue_model["guarantee_pct_year_1"].value = (
+        input_model.operating_assumptions["revenue_guarantee_pct_year_2"].value
+    )
+    input_model.revenue_model["guarantee_pct_year_2"].value = (
+        input_model.operating_assumptions["revenue_guarantee_pct_year_3"].value
+    )
+    input_model.revenue_model["guarantee_pct_year_3"].value = 0.0
+    input_model.revenue_model["guarantee_pct_year_4"].value = 0.0
+    for year_index in range(5):
+        input_model.revenue_model[
+            f"external_revenue_year_{year_index}"
+        ].value = reference_revenue
 
     input_model.transaction_and_financing[
         "special_repayment_amount_eur"

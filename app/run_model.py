@@ -10,6 +10,30 @@ def run_model():
     # Create the central input model.
     input_model = InputModel()
 
+    # Build revenue by year from the revenue model inputs.
+    revenue_model = getattr(input_model, "revenue_model", {})
+    reference_revenue = revenue_model.get(
+        "reference_revenue_eur"
+    ).value
+    revenue_by_year = []
+    for year_index in range(5):
+        guarantee_pct = revenue_model.get(
+            f"guarantee_pct_year_{year_index}"
+        ).value
+        in_group = revenue_model.get(
+            f"in_group_revenue_year_{year_index}"
+        ).value
+        external = revenue_model.get(
+            f"external_revenue_year_{year_index}"
+        ).value
+        modeled_revenue = in_group + external
+        guaranteed = min(
+            modeled_revenue, guarantee_pct * reference_revenue
+        )
+        final_revenue = max(guaranteed, modeled_revenue)
+        revenue_by_year.append(final_revenue)
+    input_model.revenue_by_year = revenue_by_year
+
     # Run the integrated model in the required order.
     pnl_base = calculate_pnl(input_model)
     debt_schedule = calculate_debt_schedule(input_model)
