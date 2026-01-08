@@ -2587,6 +2587,7 @@ def _build_pnl_excel(input_model):
 
 def run_app():
     st.title("Financial Model")
+    st.warning("DEBUG: ACTIVE ENTRY-POINT")
     st.markdown(
         """
         <style>
