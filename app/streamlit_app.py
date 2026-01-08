@@ -2624,105 +2624,27 @@ def run_app():
 
     if page == "Overview":
         st.header("Overview")
-        st.write(
-            "Top-level view of operating performance, liquidity, and "
-            "equity outcomes."
-        )
-        scenario_options = ["Base", "Best", "Worst"]
-        selected_scenario = st.session_state.get(
-            "scenario_selection.selected_scenario",
-            input_model.scenario_selection["selected_scenario"].value,
-        )
-        scenario_index = (
-            scenario_options.index(selected_scenario)
-            if selected_scenario in scenario_options
-            else 0
-        )
-        scenario_key = selected_scenario.lower()
-        utilization_field = _get_field_by_path(
-            input_model.__dict__,
-            ["scenario_parameters", "utilization_rate", scenario_key],
-        )
-        utilization_by_year = getattr(
-            input_model, "utilization_by_year", [utilization_field.value] * 5
-        )
-        day_rate_field = _get_field_by_path(
-            input_model.__dict__,
-            ["scenario_parameters", "day_rate_eur", scenario_key],
-        )
-        purchase_price_field = _get_field_by_path(
-            input_model.__dict__,
-            ["transaction_and_financing", "purchase_price_eur"],
-        )
-        equity_field = _get_field_by_path(
-            input_model.__dict__,
-            ["transaction_and_financing", "equity_contribution_eur"],
-        )
-        debt_field = _get_field_by_path(
-            input_model.__dict__,
-            ["transaction_and_financing", "senior_term_loan_start_eur"],
-        )
-        interest_field = _get_field_by_path(
-            input_model.__dict__,
-            ["transaction_and_financing", "senior_interest_rate_pct"],
-        )
+        st.write("Decision-oriented executive summary.")
 
-        overview_controls = [
-            {
-                "type": "select",
-                "label": "Scenario",
-                "options": scenario_options,
-                "index": scenario_index,
-                "field_key": "scenario_selection.selected_scenario",
-            },
-            {
-                "type": "pct",
-                "label": "Utilization (%)",
-                "field_key": f"scenario_parameters.utilization_rate.{scenario_key}",
-                "value": utilization_field.value,
-            },
-            {
-                "type": "number",
-                "label": "Day Rate (EUR)",
-                "field_key": f"scenario_parameters.day_rate_eur.{scenario_key}",
-                "value": day_rate_field.value,
-                "step": 100.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Purchase Price (EUR)",
-                "field_key": "transaction_and_financing.purchase_price_eur",
-                "value": purchase_price_field.value,
-                "step": 100000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Equity Contribution (EUR)",
-                "field_key": "transaction_and_financing.equity_contribution_eur",
-                "value": equity_field.value,
-                "step": 100000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Debt Amount (EUR)",
-                "field_key": "transaction_and_financing.senior_term_loan_start_eur",
-                "value": debt_field.value,
-                "step": 100000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "pct",
-                "label": "Interest Rate (%)",
-                "field_key": "transaction_and_financing.senior_interest_rate_pct",
-                "value": interest_field.value,
-            },
+        revenue_values = [pnl_result[f"Year {i}"]["revenue"] for i in range(5)]
+        ebitda_values = [pnl_result[f"Year {i}"]["ebitda"] for i in range(5)]
+        ebit_values = [pnl_result[f"Year {i}"]["ebit"] for i in range(5)]
+        net_income_values = [
+            pnl_result[f"Year {i}"]["net_income"] for i in range(5)
         ]
-        _render_inline_controls("Key Inputs", overview_controls, columns=3)
-        pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
-        cashflow_table = pd.DataFrame(cashflow_result)
+        free_cashflow_values = [
+            cashflow_result[i]["free_cashflow"] for i in range(5)
+        ]
+        cash_balances = [cashflow_result[i]["cash_balance"] for i in range(5)]
+        min_cash_balance = min(cash_balances)
+        avg_revenue = sum(revenue_values) / len(revenue_values)
+        avg_ebitda = sum(ebitda_values) / len(ebitda_values)
+        avg_ebitda_margin = (
+            avg_ebitda / avg_revenue if avg_revenue else 0
+        )
+        avg_free_cashflow = sum(free_cashflow_values) / len(
+            free_cashflow_values
+        )
 
         purchase_price = input_model.transaction_and_financing[
             "purchase_price_eur"
@@ -2730,90 +2652,108 @@ def run_app():
         equity_contribution = input_model.transaction_and_financing[
             "equity_contribution_eur"
         ].value
-        initial_debt = input_model.transaction_and_financing[
-            "senior_term_loan_start_eur"
-        ].value
-        opening_cash = (
-            cashflow_table["cash_balance"].iloc[0]
-            if not cashflow_table.empty
-            else 0
-        )
-        net_debt = initial_debt - opening_cash
-        avg_ebitda = pnl_table["ebitda"].mean()
-        avg_free_cashflow = (
-            cashflow_table["operating_cf"].mean()
-            + cashflow_table["investing_cf"].mean()
-        )
-        min_cash_balance = cashflow_table["cash_balance"].min()
-        irr = investment_result["irr"]
+        debt_at_close = debt_schedule[0]["opening_debt"]
+        leverage_irr = investment_result["irr"]
 
-        kpi_row_1 = st.columns(3)
-        kpi_row_2 = st.columns(3)
-        kpi_row_3 = st.columns(1)
+        st.markdown("### A. Deal Snapshot")
+        deal_snapshot = pd.DataFrame(
+            [
+                {
+                    "Metric": "Purchase Price (EUR)",
+                    "Value": format_currency(purchase_price),
+                    "Explanation": "Enterprise value paid at close.",
+                },
+                {
+                    "Metric": "Equity Contribution (EUR)",
+                    "Value": format_currency(equity_contribution),
+                    "Explanation": "Equity funded by management / sponsor.",
+                },
+                {
+                    "Metric": "Debt at Close (EUR)",
+                    "Value": format_currency(debt_at_close),
+                    "Explanation": "Senior debt drawn at close.",
+                },
+                {
+                    "Metric": "Avg Revenue (EUR)",
+                    "Value": format_currency(avg_revenue),
+                    "Explanation": "Average annual revenue over plan.",
+                },
+                {
+                    "Metric": "Avg EBITDA & Margin",
+                    "Value": f"{format_currency(avg_ebitda)} / {format_pct(avg_ebitda_margin)}",
+                    "Explanation": "Average EBITDA and margin over plan.",
+                },
+                {
+                    "Metric": "Avg Free Cash Flow",
+                    "Value": format_currency(avg_free_cashflow),
+                    "Explanation": "Average annual free cashflow.",
+                },
+                {
+                    "Metric": "Levered Equity IRR",
+                    "Value": format_pct(leverage_irr),
+                    "Explanation": "Equity return from levered cashflows.",
+                },
+                {
+                    "Metric": "Minimum Cash Balance",
+                    "Value": format_currency(min_cash_balance),
+                    "Explanation": "Lowest cash balance over plan.",
+                },
+            ]
+        )
+        st.dataframe(deal_snapshot, use_container_width=True)
 
-        kpi_row_1[0].metric(
-            "Purchase Price",
-            format_currency(purchase_price),
-            help="Transaction assumption: Purchase price input (EUR).",
+        st.markdown("### B. Business Performance Summary")
+        performance_table = pd.DataFrame(
+            {
+                "Revenue": revenue_values,
+                "EBITDA": ebitda_values,
+                "EBIT": ebit_values,
+                "Net Income": net_income_values,
+            },
+            index=[f"Year {i}" for i in range(5)],
         )
-        kpi_row_1[0].caption("Headline transaction value.")
-        kpi_row_1[1].metric(
-            "Equity Contribution",
-            format_currency(equity_contribution),
-            help="Transaction assumption: Equity contribution input (EUR).",
-        )
-        kpi_row_1[1].caption("Sponsor equity invested at close.")
-        kpi_row_1[2].metric(
-            "Net Debt",
-            format_currency(net_debt),
-            help="Calculated as initial senior debt minus opening cash balance.",
-        )
-        kpi_row_1[2].caption("Leverage after closing cash position.")
+        performance_table = performance_table.applymap(format_currency)
+        st.dataframe(performance_table, use_container_width=True)
 
-        kpi_row_2[0].metric(
-            "Avg EBITDA",
-            format_currency(avg_ebitda),
-            help="Average EBITDA across the 5-year plan.",
+        st.markdown("### C. Financing & Risk Snapshot")
+        min_dscr_value = min(row["dscr"] for row in debt_schedule)
+        dscr_threshold = financing_assumptions["minimum_dscr"]
+        stress_years = [
+            f"Year {row['year']}"
+            for row in debt_schedule
+            if row["dscr"] < dscr_threshold
+        ]
+        financing_snapshot = pd.DataFrame(
+            [
+                {
+                    "Metric": "Minimum DSCR",
+                    "Value": f"{min_dscr_value:.2f}x",
+                },
+                {
+                    "Metric": "Covenant Headroom",
+                    "Value": "NO" if stress_years else "YES",
+                },
+                {
+                    "Metric": "Peak Debt",
+                    "Value": format_currency(
+                        max(row["opening_debt"] for row in debt_schedule)
+                    ),
+                },
+                {
+                    "Metric": "Years with Covenant Stress",
+                    "Value": ", ".join(stress_years) if stress_years else "None",
+                },
+            ]
         )
-        kpi_row_2[0].caption("Operating performance proxy.")
-        kpi_row_2[1].metric(
-            "Avg Free Cash Flow",
-            format_currency(avg_free_cashflow),
-            help="Average of Operating CF plus Investing CF across the plan.",
-        )
-        kpi_row_2[1].caption("Cash generation after capex.")
-        kpi_row_2[2].metric(
-            "Minimum Cash Balance",
-            format_currency(min_cash_balance),
-            help="Minimum cash balance observed across all years.",
-        )
-        kpi_row_2[2].caption("Liquidity low point.")
+        st.dataframe(financing_snapshot, use_container_width=True)
 
-        kpi_row_3[0].metric(
-            "Levered Equity IRR",
-            format_pct(irr),
-            help="IRR based on equity cashflows including exit value.",
+        st.markdown("### D. Equity Story")
+        st.info(
+            f"At a purchase price of {format_currency(purchase_price)} and equity of "
+            f"{format_currency(equity_contribution)}, the deal generates a levered "
+            f"IRR of {format_pct(leverage_irr)}, driven by operating cashflow and "
+            "deleveraging."
         )
-        kpi_row_3[0].caption("Return to equity after leverage.")
-
-        scenario_label = input_model.scenario_selection[
-            "selected_scenario"
-        ].value
-        st.markdown(f"**Scenario:** {scenario_label}")
-
-        st.markdown("### Operating Performance")
-        st.write(
-            "Revenue, EBITDA, and EBIT reflect the selected scenario and "
-            "operating assumptions."
-        )
-
-        st.markdown("### Financing Overview")
-        st.write(
-            "Debt service and cash balance trends summarize financing capacity."
-        )
-
-        st.markdown("### Equity Case")
-        st.write("IRR and equity cashflows summarize investor outcomes.")
 
     if page == "Valuation & Purchase Price":
         st.header("Valuation & Purchase Price")
