@@ -857,9 +857,10 @@ def _build_pnl_excel(input_model):
             elif year_index == 2:
                 guarantee_pct = assumption_cells["Guarantee % Year 3"]
 
-            guaranteed = f"={fte}*{workdays}*{day_rate}*{guarantee_pct}"
-            non_guaranteed = f"={fte}*{workdays}*{day_rate}*MAX({utilization}-{guarantee_pct},0)"
-            total_revenue = f"={col}3+{col}4"
+            total_revenue = f"={fte}*{workdays}*{utilization}*{day_rate}"
+            # Guarantees split total revenue for risk visibility only.
+            guaranteed = f"={col}5*{guarantee_pct}"
+            non_guaranteed = f"={col}5*(1-{guarantee_pct})"
 
             consultant_cost = (
                 f"={fte}*{assumption_cells['Consultant Base Cost (EUR)']}*"
@@ -3968,16 +3969,12 @@ def run_app():
             else:
                 guarantee_pct = 0
 
-            guaranteed_revenue = (
-                consultants_fte * billable_days * day_rate * guarantee_pct
+            total_revenue = (
+                consultants_fte * billable_days * utilization * day_rate
             )
-            non_guaranteed_revenue = (
-                consultants_fte
-                * billable_days
-                * day_rate
-                * max(utilization - guarantee_pct, 0)
-            )
-            total_revenue = guaranteed_revenue + non_guaranteed_revenue
+            # Guarantees split total revenue for risk transparency only.
+            guaranteed_revenue = total_revenue * guarantee_pct
+            non_guaranteed_revenue = total_revenue * (1 - guarantee_pct)
 
             # Consultant all-in cost per FTE drives compensation directly.
             consultant_cost_per_fte = consultant_base_cost

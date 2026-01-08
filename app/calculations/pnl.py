@@ -123,7 +123,7 @@ def calculate_pnl(input_model):
         )
 
         # Revenue calculation based on scenario utilization and billable days.
-        gross_revenue = (
+        total_revenue = (
             consultants_fte
             * current_utilization
             * work_days_per_year
@@ -137,20 +137,10 @@ def calculate_pnl(input_model):
         elif year_index == 2:
             guarantee_pct = guarantee_year_3
 
-        # Revenue guarantee acts as a minimum utilization floor.
-        guaranteed_revenue = (
-            consultants_fte
-            * work_days_per_year
-            * current_daily_rate
-            * guarantee_pct
-        )
-        non_guaranteed_revenue = (
-            consultants_fte
-            * work_days_per_year
-            * current_daily_rate
-            * max(current_utilization - guarantee_pct, 0)
-        )
-        revenue = guaranteed_revenue + non_guaranteed_revenue
+        # Revenue guarantees only split total revenue for risk visibility.
+        guaranteed_revenue = total_revenue * guarantee_pct
+        non_guaranteed_revenue = total_revenue * (1 - guarantee_pct)
+        revenue = total_revenue
 
         # Consultant personnel cost: base + bonus + payroll burden, inflated.
         # Consultant all-in cost per FTE drives compensation directly.
