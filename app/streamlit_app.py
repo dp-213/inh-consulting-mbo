@@ -2498,6 +2498,126 @@ def run_app():
         input_model, cashflow_result, pnl_result
     )
 
+    def _format_value(value, formatter):
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return "—"
+        return formatter(value)
+
+    def _build_ai_export_text():
+        scenario = input_model.scenario_selection["selected_scenario"].value
+        scenario_key = scenario.lower()
+        utilization_by_year = getattr(
+            input_model,
+            "utilization_by_year",
+            [
+                input_model.scenario_parameters["utilization_rate"][
+                    scenario_key
+                ].value
+            ]
+            * 5,
+        )
+        day_rate_base = input_model.scenario_parameters["day_rate_eur"][
+            scenario_key
+        ].value
+        day_rate_growth = input_model.operating_assumptions[
+            "day_rate_growth_pct"
+        ].value
+        guarantee_y1 = input_model.operating_assumptions[
+            "revenue_guarantee_pct_year_1"
+        ].value
+        guarantee_y2 = input_model.operating_assumptions[
+            "revenue_guarantee_pct_year_2"
+        ].value
+        guarantee_y3 = input_model.operating_assumptions[
+            "revenue_guarantee_pct_year_3"
+        ].value
+
+        pnl_lines = []
+        fcf_lines = []
+        dscr_lines = []
+        for year_index in range(5):
+            year_label = f"Year {year_index}"
+            pnl_data = pnl_result.get(year_label, {})
+            revenue = pnl_data.get("revenue")
+            ebitda = pnl_data.get("ebitda")
+            net_income = pnl_data.get("net_income")
+            pnl_lines.append(
+                f"{year_label}: Revenue {_format_value(revenue, format_currency)}, "
+                f"EBITDA {_format_value(ebitda, format_currency)}, "
+                f"Net Income {_format_value(net_income, format_currency)}"
+            )
+            fcf_value = cashflow_result[year_index].get("free_cashflow")
+            fcf_lines.append(
+                f"{year_label}: {_format_value(fcf_value, format_currency)}"
+            )
+            dscr_value = debt_schedule[year_index].get("dscr")
+            dscr_lines.append(
+                f"{year_label}: {_format_value(dscr_value, lambda v: f'{v:.2f}x')}"
+            )
+
+        text_lines = [
+            "A. Global setup",
+            f"Scenario: {scenario}",
+            "Currency: EUR",
+            "Planning horizon: 5 years (Year 0–Year 4)",
+            "",
+            "B. Operating assumptions",
+            f"Consulting FTE: {_format_value(input_model.operating_assumptions['consulting_fte_start'].value, format_int)}",
+            f"Workdays per year: {_format_value(input_model.operating_assumptions['work_days_per_year'].value, format_int)}",
+            "Utilization per year: "
+            + ", ".join(
+                f"Year {idx} {_format_value(value, format_pct)}"
+                for idx, value in enumerate(utilization_by_year)
+            ),
+            f"Day rate (base + growth): {_format_value(day_rate_base, format_int)} EUR, {_format_value(day_rate_growth, format_pct)} growth",
+            "Revenue guarantees (per year): "
+            f"Y1 {_format_value(guarantee_y1, format_pct)}, "
+            f"Y2 {_format_value(guarantee_y2, format_pct)}, "
+            f"Y3 {_format_value(guarantee_y3, format_pct)}",
+            "",
+            "C. Cost assumptions",
+            f"Consultant base cost: {_format_value(input_model.personnel_cost_assumptions['avg_consultant_base_cost_eur_per_year'].value, format_int)} EUR",
+            f"Backoffice cost (avg salary): {_format_value(input_model.operating_assumptions['avg_backoffice_salary_eur_per_year'].value, format_int)} EUR",
+            "Opex breakdown:",
+            f"- External Advisors: {_format_value(input_model.overhead_and_variable_costs['legal_audit_eur_per_year'].value, format_currency)}",
+            f"- IT: {_format_value(input_model.overhead_and_variable_costs['it_and_software_eur_per_year'].value, format_currency)}",
+            f"- Office: {_format_value(input_model.overhead_and_variable_costs['rent_eur_per_year'].value, format_currency)}",
+            f"- Other Services: {_format_value(input_model.overhead_and_variable_costs['other_overhead_eur_per_year'].value, format_currency)}",
+            "",
+            "D. Financing assumptions",
+            f"Purchase price: {_format_value(input_model.transaction_and_financing['purchase_price_eur'].value, format_currency)}",
+            f"Equity contribution: {_format_value(input_model.transaction_and_financing['equity_contribution_eur'].value, format_currency)}",
+            f"Debt amount: {_format_value(input_model.transaction_and_financing['senior_term_loan_start_eur'].value, format_currency)}",
+            f"Interest rate: {_format_value(input_model.transaction_and_financing['senior_interest_rate_pct'].value, format_pct)}",
+            f"Amortisation: Linear, {_format_value(input_model.financing_assumptions['amortization_period_years'], format_int)} years",
+            f"Minimum DSCR: {_format_value(input_model.financing_assumptions['minimum_dscr'], lambda v: f'{v:.2f}x')}",
+            "",
+            "E. Valuation assumptions",
+            f"Exit multiple: {_format_value(input_model.valuation_assumptions['multiple_valuation']['seller_multiple'].value, lambda v: f'{v:.2f}x')}",
+            f"Discount rate (DCF): {_format_value(input_model.valuation_assumptions['dcf_valuation']['discount_rate_wacc'].value, format_pct)}",
+            "",
+            "F. Key outputs",
+            "Revenue, EBITDA, Net Income (per year):",
+            *pnl_lines,
+            "Free Cash Flow (per year):",
+            *fcf_lines,
+            "DSCR (per year):",
+            *dscr_lines,
+            f"IRR: {_format_value(investment_result.get('irr'), format_pct)}",
+        ]
+        return "\n".join(text_lines)
+
+    with st.sidebar:
+        with st.expander("⚙️ Settings", expanded=False):
+            if st.button("Export Model Assumptions (AI)", key="export_ai"):
+                st.session_state["ai_export_text"] = _build_ai_export_text()
+            if st.session_state.get("ai_export_text"):
+                st.text_area(
+                    "Export",
+                    value=st.session_state["ai_export_text"],
+                    height=360,
+                )
+
     if page == "Overview":
         st.header("Overview")
         st.write(
