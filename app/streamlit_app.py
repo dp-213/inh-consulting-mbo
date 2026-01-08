@@ -30,6 +30,174 @@ def _format_section_title(section_key):
     return section_key.replace("_", " ").title()
 
 
+def render_revenue_model_assumptions(input_model):
+    st.header("Revenue Model")
+    st.write("Detailed revenue planning (5-year view).")
+
+    revenue_model = input_model.revenue_model
+    year_labels = [f"Year {i}" for i in range(5)]
+
+    st.markdown("### Group Revenue Guarantee (Floor)")
+    reference_df = pd.DataFrame(
+        [
+            {
+                "Parameter": "Reference Revenue (EUR)",
+                "Value": st.session_state.get(
+                    "revenue_model.reference_revenue_eur",
+                    revenue_model["reference_revenue_eur"].value,
+                ),
+            }
+        ]
+    )
+    reference_edit = st.data_editor(
+        reference_df,
+        hide_index=True,
+        key="revenue_model.reference_revenue",
+        column_config={
+            "Parameter": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    reference_revenue = float(reference_edit.loc[0, "Value"])
+    st.session_state["revenue_model.reference_revenue_eur"] = reference_revenue
+
+    guarantee_rows = []
+    for year_index in range(5):
+        guarantee_rows.append(
+            {
+                "Year": f"Year {year_index}",
+                "Guarantee %": st.session_state.get(
+                    f"revenue_model.guarantee_pct_year_{year_index}",
+                    revenue_model[f"guarantee_pct_year_{year_index}"].value,
+                ),
+            }
+        )
+    guarantee_df = pd.DataFrame(guarantee_rows)
+    guarantee_edit = st.data_editor(
+        guarantee_df,
+        hide_index=True,
+        key="revenue_model.guarantees",
+        column_config={
+            "Year": st.column_config.TextColumn(disabled=True),
+        },
+        use_container_width=True,
+    )
+    for year_index in range(5):
+        st.session_state[
+            f"revenue_model.guarantee_pct_year_{year_index}"
+        ] = float(guarantee_edit.loc[year_index, "Guarantee %"])
+
+    guaranteed_revenue_by_year = []
+    for year_index in range(5):
+        guarantee_pct = st.session_state[
+            f"revenue_model.guarantee_pct_year_{year_index}"
+        ]
+        guaranteed_revenue_by_year.append(
+            guarantee_pct * reference_revenue
+        )
+    guaranteed_df = pd.DataFrame(
+        {
+            "Year": year_labels,
+            "Guaranteed Revenue (EUR)": guaranteed_revenue_by_year,
+        }
+    )
+    guaranteed_df["Guaranteed Revenue (EUR)"] = guaranteed_df[
+        "Guaranteed Revenue (EUR)"
+    ].apply(format_currency)
+    st.dataframe(guaranteed_df, use_container_width=True)
+
+    st.markdown("### In-Group Revenue (Upside)")
+    in_group_rows = []
+    for year_index in range(5):
+        in_group_rows.append(
+            {
+                "Year": f"Year {year_index}",
+                "In-Group Revenue (EUR)": st.session_state.get(
+                    f"revenue_model.in_group_revenue_year_{year_index}",
+                    revenue_model[f"in_group_revenue_year_{year_index}"].value,
+                ),
+            }
+        )
+    in_group_df = pd.DataFrame(in_group_rows)
+    in_group_edit = st.data_editor(
+        in_group_df,
+        hide_index=True,
+        key="revenue_model.in_group",
+        column_config={"Year": st.column_config.TextColumn(disabled=True)},
+        use_container_width=True,
+    )
+    for year_index in range(5):
+        st.session_state[
+            f"revenue_model.in_group_revenue_year_{year_index}"
+        ] = float(in_group_edit.loc[year_index, "In-Group Revenue (EUR)"])
+
+    st.markdown("### External Revenue")
+    external_rows = []
+    for year_index in range(5):
+        external_rows.append(
+            {
+                "Year": f"Year {year_index}",
+                "External Revenue (EUR)": st.session_state.get(
+                    f"revenue_model.external_revenue_year_{year_index}",
+                    revenue_model[
+                        f"external_revenue_year_{year_index}"
+                    ].value,
+                ),
+            }
+        )
+    external_df = pd.DataFrame(external_rows)
+    external_edit = st.data_editor(
+        external_df,
+        hide_index=True,
+        key="revenue_model.external",
+        column_config={"Year": st.column_config.TextColumn(disabled=True)},
+        use_container_width=True,
+    )
+    for year_index in range(5):
+        st.session_state[
+            f"revenue_model.external_revenue_year_{year_index}"
+        ] = float(
+            external_edit.loc[year_index, "External Revenue (EUR)"]
+        )
+
+    st.markdown("### Revenue Bridge")
+    bridge_rows = []
+    for year_index in range(5):
+        guarantee_pct = st.session_state[
+            f"revenue_model.guarantee_pct_year_{year_index}"
+        ]
+        in_group = st.session_state[
+            f"revenue_model.in_group_revenue_year_{year_index}"
+        ]
+        external = st.session_state[
+            f"revenue_model.external_revenue_year_{year_index}"
+        ]
+        modeled_revenue = in_group + external
+        guaranteed_revenue = min(
+            modeled_revenue, guarantee_pct * reference_revenue
+        )
+        final_revenue = max(guaranteed_revenue, modeled_revenue)
+        bridge_rows.append(
+            {
+                "Year": f"Year {year_index}",
+                "Guaranteed Revenue": guaranteed_revenue,
+                "In-Group Revenue": in_group,
+                "External Revenue": external,
+                "Modeled Revenue": modeled_revenue,
+                "Final Revenue": final_revenue,
+            }
+        )
+    bridge_df = pd.DataFrame(bridge_rows)
+    for col in [
+        "Guaranteed Revenue",
+        "In-Group Revenue",
+        "External Revenue",
+        "Modeled Revenue",
+        "Final Revenue",
+    ]:
+        bridge_df[col] = bridge_df[col].apply(format_currency)
+    st.dataframe(bridge_df, use_container_width=True)
+
 def format_currency(value):
     if value is None or pd.isna(value):
         return ""
@@ -2143,7 +2311,6 @@ def run_app():
 
         st.markdown("<div class=\"nav-section\">OPERATING MODEL</div>", unsafe_allow_html=True)
         _nav_item("Operating Model (P&L)")
-        _nav_item("Revenue Model")
         _nav_item("Cashflow & Liquidity")
         _nav_item("Balance Sheet")
 
@@ -2163,6 +2330,17 @@ def run_app():
 
         page = st.session_state["current_page"]
         assumptions_state = st.session_state["assumptions"]
+
+        if page == "Assumptions (Advanced)":
+            st.markdown("### Assumptions")
+            st.session_state.setdefault(
+                "assumptions.sidebar_section", "Advanced"
+            )
+            st.selectbox(
+                "Section",
+                ["General", "Advanced", "Revenue Model"],
+                key="assumptions.sidebar_section",
+            )
 
         def _sidebar_editor(title, key, df, column_config):
             st.markdown(f"### {title}")
@@ -2313,6 +2491,12 @@ def run_app():
     if page == "Assumptions (Advanced)":
         st.header("Assumptions (Advanced)")
         st.write("Master input sheet – all model assumptions in one place")
+        section = st.session_state.get(
+            "assumptions.sidebar_section", "Advanced"
+        )
+        if section == "Revenue Model":
+            render_revenue_model_assumptions(input_model)
+            return
 
         scenario_options = ["Base", "Best", "Worst"]
         scenario_default = base_model.scenario_selection[
@@ -3486,176 +3670,6 @@ def run_app():
             f"and financing capacity. The key risks are {risk_text}. "
             f"Next steps should focus on {next_steps}."
         )
-
-    if page == "Revenue Model":
-        st.header("Revenue Model")
-        st.write("Detailed revenue planning (5-year view).")
-
-        revenue_model = input_model.revenue_model
-        year_labels = [f"Year {i}" for i in range(5)]
-
-        st.markdown("### Group Revenue Guarantee (Floor)")
-        reference_df = pd.DataFrame(
-            [
-                {
-                    "Parameter": "Reference Revenue (EUR)",
-                    "Value": st.session_state.get(
-                        "revenue_model.reference_revenue_eur",
-                        revenue_model["reference_revenue_eur"].value,
-                    ),
-                }
-            ]
-        )
-        reference_edit = st.data_editor(
-            reference_df,
-            hide_index=True,
-            key="revenue_model.reference_revenue",
-            column_config={
-                "Parameter": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        reference_revenue = float(reference_edit.loc[0, "Value"])
-        st.session_state["revenue_model.reference_revenue_eur"] = reference_revenue
-
-        guarantee_rows = []
-        for year_index in range(5):
-            guarantee_rows.append(
-                {
-                    "Year": f"Year {year_index}",
-                    "Guarantee %": st.session_state.get(
-                        f"revenue_model.guarantee_pct_year_{year_index}",
-                        revenue_model[
-                            f"guarantee_pct_year_{year_index}"
-                        ].value,
-                    ),
-                }
-            )
-        guarantee_df = pd.DataFrame(guarantee_rows)
-        guarantee_edit = st.data_editor(
-            guarantee_df,
-            hide_index=True,
-            key="revenue_model.guarantees",
-            column_config={
-                "Year": st.column_config.TextColumn(disabled=True),
-            },
-            use_container_width=True,
-        )
-        for year_index in range(5):
-            st.session_state[
-                f"revenue_model.guarantee_pct_year_{year_index}"
-            ] = float(guarantee_edit.loc[year_index, "Guarantee %"])
-
-        guaranteed_revenue_by_year = []
-        for year_index in range(5):
-            guarantee_pct = st.session_state[
-                f"revenue_model.guarantee_pct_year_{year_index}"
-            ]
-            guaranteed_revenue_by_year.append(
-                guarantee_pct * reference_revenue
-            )
-        guaranteed_df = pd.DataFrame(
-            {
-                "Year": year_labels,
-                "Guaranteed Revenue (EUR)": guaranteed_revenue_by_year,
-            }
-        )
-        guaranteed_df["Guaranteed Revenue (EUR)"] = guaranteed_df[
-            "Guaranteed Revenue (EUR)"
-        ].apply(format_currency)
-        st.dataframe(guaranteed_df, use_container_width=True)
-
-        st.markdown("### In-Group Revenue (Upside)")
-        in_group_rows = []
-        for year_index in range(5):
-            in_group_rows.append(
-                {
-                    "Year": f"Year {year_index}",
-                    "In-Group Revenue (EUR)": st.session_state.get(
-                        f"revenue_model.in_group_revenue_year_{year_index}",
-                        revenue_model[
-                            f"in_group_revenue_year_{year_index}"
-                        ].value,
-                    ),
-                }
-            )
-        in_group_df = pd.DataFrame(in_group_rows)
-        in_group_edit = st.data_editor(
-            in_group_df,
-            hide_index=True,
-            key="revenue_model.in_group",
-            column_config={"Year": st.column_config.TextColumn(disabled=True)},
-            use_container_width=True,
-        )
-        for year_index in range(5):
-            st.session_state[
-                f"revenue_model.in_group_revenue_year_{year_index}"
-            ] = float(in_group_edit.loc[year_index, "In-Group Revenue (EUR)"])
-
-        st.markdown("### External Revenue")
-        external_rows = []
-        for year_index in range(5):
-            external_rows.append(
-                {
-                    "Year": f"Year {year_index}",
-                    "External Revenue (EUR)": st.session_state.get(
-                        f"revenue_model.external_revenue_year_{year_index}",
-                        revenue_model[
-                            f"external_revenue_year_{year_index}"
-                        ].value,
-                    ),
-                }
-            )
-        external_df = pd.DataFrame(external_rows)
-        external_edit = st.data_editor(
-            external_df,
-            hide_index=True,
-            key="revenue_model.external",
-            column_config={"Year": st.column_config.TextColumn(disabled=True)},
-            use_container_width=True,
-        )
-        for year_index in range(5):
-            st.session_state[
-                f"revenue_model.external_revenue_year_{year_index}"
-            ] = float(external_edit.loc[year_index, "External Revenue (EUR)"])
-
-        st.markdown("### Revenue Bridge")
-        bridge_rows = []
-        for year_index in range(5):
-            guarantee_pct = st.session_state[
-                f"revenue_model.guarantee_pct_year_{year_index}"
-            ]
-            in_group = st.session_state[
-                f"revenue_model.in_group_revenue_year_{year_index}"
-            ]
-            external = st.session_state[
-                f"revenue_model.external_revenue_year_{year_index}"
-            ]
-            modeled_revenue = in_group + external
-            guaranteed_revenue = min(
-                modeled_revenue, guarantee_pct * reference_revenue
-            )
-            final_revenue = max(guaranteed_revenue, modeled_revenue)
-            bridge_rows.append(
-                {
-                    "Year": f"Year {year_index}",
-                    "Guaranteed Revenue": guaranteed_revenue,
-                    "In-Group Revenue": in_group,
-                    "External Revenue": external,
-                    "Modeled Revenue": modeled_revenue,
-                    "Final Revenue": final_revenue,
-                }
-            )
-        bridge_df = pd.DataFrame(bridge_rows)
-        for col in [
-            "Guaranteed Revenue",
-            "In-Group Revenue",
-            "External Revenue",
-            "Modeled Revenue",
-            "Final Revenue",
-        ]:
-            bridge_df[col] = bridge_df[col].apply(format_currency)
-        st.dataframe(bridge_df, use_container_width=True)
 
     if page == "Model Settings":
         st.header("Model Settings")
