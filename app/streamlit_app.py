@@ -1738,6 +1738,32 @@ def run_app():
           [data-testid="stSidebar"] {
             background-color: #f7f8fa !important;
           }
+          [data-testid="stSidebar"] * {
+            color: #111827 !important;
+          }
+          [data-testid="stMarkdownContainer"] * {
+            color: #111827 !important;
+          }
+          [data-testid="stTable"], [data-testid="stDataFrame"] {
+            background: #ffffff !important;
+          }
+          .stDataFrame, .stTable, table, thead, tbody, tr, th, td {
+            color: #111827 !important;
+            background-color: #ffffff !important;
+          }
+          button, .stButton > button {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            border-color: #d1d5db !important;
+          }
+          button:hover, .stButton > button:hover {
+            background-color: #f3f4f6 !important;
+          }
+          input, textarea, select {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            border-color: #d1d5db !important;
+          }
         </style>
         """,
         unsafe_allow_html=True,
