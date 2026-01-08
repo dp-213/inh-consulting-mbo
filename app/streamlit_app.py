@@ -17,129 +17,94 @@ def _pnl_dict_to_list(pnl_dict):
     return pnl_list
 
 
+def _format_section_title(section_key):
+    return section_key.replace("_", " ").title()
+
+
+def _render_input_field(input_field, widget_key):
+    label = input_field.description
+    help_text = f"Excel: {input_field.excel_ref}"
+    value = input_field.value
+
+    if isinstance(value, bool):
+        return st.checkbox(
+            label,
+            value=value,
+            help=help_text,
+            key=widget_key,
+            disabled=not input_field.editable,
+        )
+    if isinstance(value, (int, float)):
+        step = 1.0 if isinstance(value, int) and not isinstance(value, bool) else 0.01
+        return st.number_input(
+            label,
+            value=float(value),
+            step=step,
+            help=help_text,
+            key=widget_key,
+            disabled=not input_field.editable,
+        )
+    if value is None:
+        text_value = st.text_input(
+            label,
+            value="",
+            help=help_text,
+            key=widget_key,
+            disabled=not input_field.editable,
+        )
+        return None if text_value == "" else text_value
+
+    return st.text_input(
+        label,
+        value=str(value),
+        help=help_text,
+        key=widget_key,
+        disabled=not input_field.editable,
+    )
+
+
+def _render_section(section_data, section_key):
+    edited_values = {}
+    for key, value in section_data.items():
+        field_key = f"{section_key}.{key}"
+        if hasattr(value, "value") and hasattr(value, "editable"):
+            edited_values[key] = _render_input_field(value, field_key)
+        elif isinstance(value, dict):
+            st.markdown(f"**{_format_section_title(key)}**")
+            edited_values[key] = _render_section(value, field_key)
+    return edited_values
+
+
+def _apply_section_values(section_data, edited_values):
+    for key, value in edited_values.items():
+        if hasattr(section_data.get(key), "value"):
+            section_data[key].value = value
+        elif isinstance(section_data.get(key), dict):
+            _apply_section_values(section_data[key], value)
+
+
 def run_app():
     st.title("Financial Model")
 
-    # Build input model and apply sidebar overrides.
-    demo_model = create_demo_input_model()
+    # Build input model and collect editable values from the sidebar.
+    base_model = create_demo_input_model()
+    edited_values = {}
 
     st.sidebar.header("Assumptions")
-    scenario = st.sidebar.selectbox("Scenario", ["Base", "Best", "Worst"])
-
-    utilization_default = demo_model.scenario_parameters["utilization_rate"][
-        scenario.lower()
-    ].value
-    day_rate_default = demo_model.scenario_parameters["day_rate_eur"][
-        scenario.lower()
-    ].value
-    consultants_default = demo_model.operating_assumptions[
-        "consulting_fte_start"
-    ].value
-    working_days_default = demo_model.operating_assumptions[
-        "work_days_per_year"
-    ].value
-    purchase_price_default = demo_model.transaction_and_financing[
-        "purchase_price_eur"
-    ].value
-    debt_amount_default = demo_model.transaction_and_financing[
-        "senior_term_loan_start_eur"
-    ].value
-    interest_rate_default = demo_model.transaction_and_financing[
-        "senior_interest_rate_pct"
-    ].value
-    annual_repayment_default = demo_model.transaction_and_financing[
-        "senior_repayment_per_year_eur"
-    ].value
-
-    utilization_percent = st.sidebar.number_input(
-        "Utilization (%)",
-        value=float(utilization_default * 100),
-        step=1.0,
-        format="%.1f",
-    )
-    day_rate_override = st.sidebar.number_input(
-        "Day rate (EUR)",
-        value=float(day_rate_default),
-        step=100.0,
-        format="%.0f",
-    )
-    consultants_override = st.sidebar.number_input(
-        "Number of consultants (FTE)",
-        value=float(consultants_default),
-        step=1.0,
-        format="%.0f",
-    )
-    working_days_override = st.sidebar.number_input(
-        "Working days per year",
-        value=float(working_days_default),
-        step=1.0,
-        format="%.0f",
-    )
-    purchase_price_override = st.sidebar.number_input(
-        "Purchase price (EUR)",
-        value=float(purchase_price_default),
-        step=100000.0,
-        format="%.0f",
-    )
-    debt_amount_override = st.sidebar.number_input(
-        "Debt amount (EUR)",
-        value=float(debt_amount_default),
-        step=100000.0,
-        format="%.0f",
-    )
-    interest_rate_percent = st.sidebar.number_input(
-        "Interest rate (%)",
-        value=float(interest_rate_default * 100),
-        step=0.1,
-        format="%.1f",
-    )
-    annual_repayment_override = st.sidebar.number_input(
-        "Annual repayment (EUR)",
-        value=float(annual_repayment_default),
-        step=100000.0,
-        format="%.0f",
-    )
-
-    assumptions = {
-        "scenario": scenario,
-        "utilization_rate": utilization_percent / 100,
-        "day_rate_eur": day_rate_override,
-        "consulting_fte_start": consultants_override,
-        "work_days_per_year": working_days_override,
-        "purchase_price_eur": purchase_price_override,
-        "debt_amount_eur": debt_amount_override,
-        "interest_rate_pct": interest_rate_percent / 100,
-        "annual_repayment_eur": annual_repayment_override,
-    }
+    for section_key, section_data in base_model.__dict__.items():
+        if not isinstance(section_data, dict):
+            continue
+        section_title = _format_section_title(section_key)
+        with st.sidebar.expander(section_title, expanded=False):
+            edited_values[section_key] = _render_section(
+                section_data, section_key
+            )
 
     input_model = create_demo_input_model()
-    input_model.scenario_selection["selected_scenario"].value = assumptions[
-        "scenario"
-    ]
-    input_model.scenario_parameters["utilization_rate"][
-        assumptions["scenario"].lower()
-    ].value = assumptions["utilization_rate"]
-    input_model.scenario_parameters["day_rate_eur"][
-        assumptions["scenario"].lower()
-    ].value = assumptions["day_rate_eur"]
-    input_model.operating_assumptions["consulting_fte_start"].value = (
-        assumptions["consulting_fte_start"]
-    )
-    input_model.operating_assumptions["work_days_per_year"].value = (
-        assumptions["work_days_per_year"]
-    )
-    input_model.transaction_and_financing["purchase_price_eur"].value = (
-        assumptions["purchase_price_eur"]
-    )
-    input_model.transaction_and_financing["senior_term_loan_start_eur"].value = (
-        assumptions["debt_amount_eur"]
-    )
-    input_model.transaction_and_financing["senior_interest_rate_pct"].value = (
-        assumptions["interest_rate_pct"]
-    )
-    input_model.transaction_and_financing[
-        "senior_repayment_per_year_eur"
-    ].value = assumptions["annual_repayment_eur"]
+    for section_key, section_values in edited_values.items():
+        _apply_section_values(
+            getattr(input_model, section_key), section_values
+        )
 
     # Run model calculations in the standard order.
     pnl_result = run_model.calculate_pnl(input_model)
@@ -192,7 +157,10 @@ def run_app():
         kpi_col_4.metric("Minimum Cash", f"{min_cash_balance:,.0f} EUR")
         kpi_col_5.metric("IRR", f"{irr:.1%}")
 
-        st.markdown(f"**Scenario:** {scenario}")
+        scenario_label = input_model.scenario_selection[
+            "selected_scenario"
+        ].value
+        st.markdown(f"**Scenario:** {scenario_label}")
 
         st.markdown("### Operating Performance")
         st.write(
