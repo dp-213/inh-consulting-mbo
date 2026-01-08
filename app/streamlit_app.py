@@ -24,7 +24,7 @@ def _format_section_title(section_key):
 def format_currency(value):
     if value is None or pd.isna(value):
         return ""
-    return f"{value:,.0f} EUR"
+    return f"{value / 1000:,.0f} kEUR"
 
 
 def format_pct(value):
@@ -147,6 +147,81 @@ def _apply_section_values(section_data, edited_values):
             _apply_section_values(section_data[key], value)
 
 
+def _collect_values_from_session(section_data, section_key):
+    values = {}
+    for key, value in section_data.items():
+        field_key = f"{section_key}.{key}"
+        if hasattr(value, "value"):
+            if field_key in st.session_state:
+                values[key] = st.session_state[field_key]
+            else:
+                values[key] = value.value
+        elif isinstance(value, dict):
+            values[key] = _collect_values_from_session(value, field_key)
+    return values
+
+
+def _get_field_by_path(base_model, path_parts):
+    current = base_model
+    for part in path_parts:
+        if isinstance(current, dict):
+            current = current.get(part)
+        else:
+            return None
+    if hasattr(current, "value"):
+        return current
+    return None
+
+
+def _set_field_value(field_key, value):
+    st.session_state[field_key] = value
+
+
+def _render_inline_controls(title, controls, columns=3):
+    st.subheader(title)
+    cols = st.columns(columns)
+    for index, control in enumerate(controls):
+        col = cols[index % columns]
+        with col:
+            widget_key = f"inline.{title}.{control['field_key']}"
+            if control["type"] == "select":
+                selection = st.selectbox(
+                    control["label"],
+                    control["options"],
+                    index=control["index"],
+                    key=widget_key,
+                )
+                _set_field_value(control["field_key"], selection)
+            else:
+                if control["type"] == "pct":
+                    ui_value = st.number_input(
+                        control["label"],
+                        value=float(control["value"] * 100),
+                        step=0.1,
+                        format="%.1f",
+                        key=widget_key,
+                    )
+                    _set_field_value(control["field_key"], ui_value / 100)
+                elif control["type"] == "int":
+                    value = st.number_input(
+                        control["label"],
+                        value=float(control["value"]),
+                        step=1.0,
+                        format="%.0f",
+                        key=widget_key,
+                    )
+                    _set_field_value(control["field_key"], value)
+                else:
+                    value = st.number_input(
+                        control["label"],
+                        value=float(control["value"]),
+                        step=control.get("step", 1.0),
+                        format=control.get("format", "%.0f"),
+                        key=widget_key,
+                    )
+                    _set_field_value(control["field_key"], value)
+
+
 def run_app():
     st.title("Financial Model")
 
@@ -157,25 +232,27 @@ def run_app():
             "Go to",
             [
                 "Overview",
-                "Value & Purchase Price",
-                "Operating Model",
-                "Financing & Bankability",
+                "Operating Model (P&L)",
+                "Cashflow & Liquidity",
+                "Balance Sheet",
+                "Financing & Debt",
+                "Valuation & Purchase Price",
                 "Equity Case",
-                "Assumptions (Expert Mode)",
+                "Assumptions (Advanced)",
             ],
             key="nav_page",
         )
 
     # Build input model and collect editable values from the assumptions page.
     base_model = create_demo_input_model()
-    edited_values = st.session_state.get("edited_values", {})
     selected_scenario = st.session_state.get(
-        "selected_scenario",
+        "scenario_selection.selected_scenario",
         base_model.scenario_selection["selected_scenario"].value,
     )
+    scenario_key = selected_scenario.lower()
 
-    if page == "Assumptions (Expert Mode)":
-        st.header("Assumptions (Expert Mode)")
+    if page == "Assumptions (Advanced)":
+        st.header("Assumptions (Advanced)")
         st.write(
             "Review and adjust all input assumptions from the Excel sheet."
         )
@@ -194,6 +271,7 @@ def run_app():
             scenario_options,
             index=scenario_index,
         )
+        _set_field_value("scenario_selection.selected_scenario", selected_scenario)
         auto_sync = st.checkbox("Auto-update scenario inputs", value=True)
 
         previous_scenario = st.session_state.get(
@@ -212,6 +290,87 @@ def run_app():
                         scenario_key
                     ].value
         st.session_state["selected_scenario"] = selected_scenario
+
+        scenario_key = selected_scenario.lower()
+        utilization_field = _get_field_by_path(
+            base_model.__dict__,
+            ["scenario_parameters", "utilization_rate", scenario_key],
+        )
+        day_rate_field = _get_field_by_path(
+            base_model.__dict__,
+            ["scenario_parameters", "day_rate_eur", scenario_key],
+        )
+        purchase_price_field = _get_field_by_path(
+            base_model.__dict__,
+            ["transaction_and_financing", "purchase_price_eur"],
+        )
+        equity_field = _get_field_by_path(
+            base_model.__dict__,
+            ["transaction_and_financing", "equity_contribution_eur"],
+        )
+        debt_field = _get_field_by_path(
+            base_model.__dict__,
+            ["transaction_and_financing", "senior_term_loan_start_eur"],
+        )
+        interest_field = _get_field_by_path(
+            base_model.__dict__,
+            ["transaction_and_financing", "senior_interest_rate_pct"],
+        )
+
+        advanced_controls = [
+            {
+                "type": "select",
+                "label": "Scenario",
+                "options": scenario_options,
+                "index": scenario_index,
+                "field_key": "scenario_selection.selected_scenario",
+            },
+            {
+                "type": "pct",
+                "label": "Utilization (%)",
+                "field_key": f"scenario_parameters.utilization_rate.{scenario_key}",
+                "value": utilization_field.value,
+            },
+            {
+                "type": "number",
+                "label": "Day Rate (EUR)",
+                "field_key": f"scenario_parameters.day_rate_eur.{scenario_key}",
+                "value": day_rate_field.value,
+                "step": 100.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Purchase Price (EUR)",
+                "field_key": "transaction_and_financing.purchase_price_eur",
+                "value": purchase_price_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Equity Contribution (EUR)",
+                "field_key": "transaction_and_financing.equity_contribution_eur",
+                "value": equity_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Debt Amount (EUR)",
+                "field_key": "transaction_and_financing.senior_term_loan_start_eur",
+                "value": debt_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "pct",
+                "label": "Interest Rate (%)",
+                "field_key": "transaction_and_financing.senior_interest_rate_pct",
+                "value": interest_field.value,
+            },
+        ]
+        _render_inline_controls("Key Inputs", advanced_controls, columns=3)
 
         section_order = [
             "scenario_parameters",
@@ -264,10 +423,21 @@ def run_app():
                 )
         st.session_state["edited_values"] = edited_values
 
+    edited_values = {}
+    for section_key, section_data in base_model.__dict__.items():
+        if not isinstance(section_data, dict):
+            continue
+        edited_values[section_key] = _collect_values_from_session(
+            section_data, section_key
+        )
+
     input_model = create_demo_input_model()
     if "scenario_selection" in edited_values:
         edited_values["scenario_selection"]["selected_scenario"] = (
-            selected_scenario
+            st.session_state.get(
+                "scenario_selection.selected_scenario",
+                selected_scenario,
+            )
         )
     for section_key, section_values in edited_values.items():
         _apply_section_values(
@@ -294,6 +464,96 @@ def run_app():
             "Top-level view of operating performance, liquidity, and "
             "equity outcomes."
         )
+        scenario_options = ["Base", "Best", "Worst"]
+        selected_scenario = st.session_state.get(
+            "scenario_selection.selected_scenario",
+            input_model.scenario_selection["selected_scenario"].value,
+        )
+        scenario_index = (
+            scenario_options.index(selected_scenario)
+            if selected_scenario in scenario_options
+            else 0
+        )
+        scenario_key = selected_scenario.lower()
+        utilization_field = _get_field_by_path(
+            input_model.__dict__,
+            ["scenario_parameters", "utilization_rate", scenario_key],
+        )
+        day_rate_field = _get_field_by_path(
+            input_model.__dict__,
+            ["scenario_parameters", "day_rate_eur", scenario_key],
+        )
+        purchase_price_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "purchase_price_eur"],
+        )
+        equity_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "equity_contribution_eur"],
+        )
+        debt_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "senior_term_loan_start_eur"],
+        )
+        interest_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "senior_interest_rate_pct"],
+        )
+
+        overview_controls = [
+            {
+                "type": "select",
+                "label": "Scenario",
+                "options": scenario_options,
+                "index": scenario_index,
+                "field_key": "scenario_selection.selected_scenario",
+            },
+            {
+                "type": "pct",
+                "label": "Utilization (%)",
+                "field_key": f"scenario_parameters.utilization_rate.{scenario_key}",
+                "value": utilization_field.value,
+            },
+            {
+                "type": "number",
+                "label": "Day Rate (EUR)",
+                "field_key": f"scenario_parameters.day_rate_eur.{scenario_key}",
+                "value": day_rate_field.value,
+                "step": 100.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Purchase Price (EUR)",
+                "field_key": "transaction_and_financing.purchase_price_eur",
+                "value": purchase_price_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Equity Contribution (EUR)",
+                "field_key": "transaction_and_financing.equity_contribution_eur",
+                "value": equity_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Debt Amount (EUR)",
+                "field_key": "transaction_and_financing.senior_term_loan_start_eur",
+                "value": debt_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "pct",
+                "label": "Interest Rate (%)",
+                "field_key": "transaction_and_financing.senior_interest_rate_pct",
+                "value": interest_field.value,
+            },
+        ]
+        _render_inline_controls("Key Inputs", overview_controls, columns=3)
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
         cashflow_table = pd.DataFrame(cashflow_result)
 
@@ -388,12 +648,99 @@ def run_app():
         st.markdown("### Equity Case")
         st.write("IRR and equity cashflows summarize investor outcomes.")
 
-    if page == "Value & Purchase Price":
-        st.header("Value & Purchase Price")
+    if page == "Valuation & Purchase Price":
+        st.header("Valuation & Purchase Price")
         st.write(
             "Valuation perspective, purchase price context, and high-level "
             "deal view."
         )
+        scenario_options = ["Base", "Best", "Worst"]
+        selected_scenario = st.session_state.get(
+            "scenario_selection.selected_scenario",
+            input_model.scenario_selection["selected_scenario"].value,
+        )
+        scenario_index = (
+            scenario_options.index(selected_scenario)
+            if selected_scenario in scenario_options
+            else 0
+        )
+        seller_multiple_field = _get_field_by_path(
+            input_model.__dict__,
+            ["valuation_assumptions", "multiple_valuation", "seller_multiple"],
+        )
+        buyer_multiple_field = _get_field_by_path(
+            input_model.__dict__,
+            ["valuation_assumptions", "multiple_valuation", "buyer_multiple"],
+        )
+        wacc_field = _get_field_by_path(
+            input_model.__dict__,
+            ["valuation_assumptions", "dcf_valuation", "discount_rate_wacc"],
+        )
+        terminal_growth_field = _get_field_by_path(
+            input_model.__dict__,
+            ["valuation_assumptions", "dcf_valuation", "terminal_growth_rate"],
+        )
+        forecast_years_field = _get_field_by_path(
+            input_model.__dict__,
+            ["valuation_assumptions", "dcf_valuation", "explicit_forecast_years"],
+        )
+        purchase_price_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "purchase_price_eur"],
+        )
+
+        valuation_controls = [
+            {
+                "type": "select",
+                "label": "Scenario",
+                "options": scenario_options,
+                "index": scenario_index,
+                "field_key": "scenario_selection.selected_scenario",
+            },
+            {
+                "type": "number",
+                "label": "Seller Multiple (x)",
+                "field_key": "valuation_assumptions.multiple_valuation.seller_multiple",
+                "value": seller_multiple_field.value or 0,
+                "step": 0.1,
+                "format": "%.2f",
+            },
+            {
+                "type": "number",
+                "label": "Buyer Multiple (x)",
+                "field_key": "valuation_assumptions.multiple_valuation.buyer_multiple",
+                "value": buyer_multiple_field.value or 0,
+                "step": 0.1,
+                "format": "%.2f",
+            },
+            {
+                "type": "pct",
+                "label": "WACC (%)",
+                "field_key": "valuation_assumptions.dcf_valuation.discount_rate_wacc",
+                "value": wacc_field.value or 0,
+            },
+            {
+                "type": "pct",
+                "label": "Terminal Growth (%)",
+                "field_key": "valuation_assumptions.dcf_valuation.terminal_growth_rate",
+                "value": terminal_growth_field.value or 0,
+            },
+            {
+                "type": "int",
+                "label": "Forecast Years",
+                "field_key": "valuation_assumptions.dcf_valuation.explicit_forecast_years",
+                "value": forecast_years_field.value or 5,
+            },
+            {
+                "type": "number",
+                "label": "Purchase Price (EUR)",
+                "field_key": "transaction_and_financing.purchase_price_eur",
+                "value": purchase_price_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+        ]
+        _render_inline_controls("Key Inputs", valuation_controls, columns=3)
         st.markdown("### Seller View")
         st.write(
             "Seller view reflects upside valuation using a multiple and a "
@@ -507,11 +854,84 @@ def run_app():
         )
         st.caption(f"Valuation gap: {format_currency(valuation_gap)}")
 
-    if page == "Operating Model":
-        st.header("Operating Model")
+    if page == "Operating Model (P&L)":
+        st.header("Operating Model (P&L)")
         st.write(
             "Detailed revenue and cost build-up based on operating inputs."
         )
+        scenario_options = ["Base", "Best", "Worst"]
+        selected_scenario = st.session_state.get(
+            "scenario_selection.selected_scenario",
+            input_model.scenario_selection["selected_scenario"].value,
+        )
+        scenario_index = (
+            scenario_options.index(selected_scenario)
+            if selected_scenario in scenario_options
+            else 0
+        )
+        scenario_key = selected_scenario.lower()
+        utilization_field = _get_field_by_path(
+            input_model.__dict__,
+            ["scenario_parameters", "utilization_rate", scenario_key],
+        )
+        day_rate_field = _get_field_by_path(
+            input_model.__dict__,
+            ["scenario_parameters", "day_rate_eur", scenario_key],
+        )
+        fte_field = _get_field_by_path(
+            input_model.__dict__,
+            ["operating_assumptions", "consulting_fte_start"],
+        )
+        work_days_field = _get_field_by_path(
+            input_model.__dict__,
+            ["operating_assumptions", "work_days_per_year"],
+        )
+        wage_inflation_field = _get_field_by_path(
+            input_model.__dict__,
+            ["personnel_cost_assumptions", "wage_inflation_pct"],
+        )
+        operating_controls = [
+            {
+                "type": "select",
+                "label": "Scenario",
+                "options": scenario_options,
+                "index": scenario_index,
+                "field_key": "scenario_selection.selected_scenario",
+            },
+            {
+                "type": "pct",
+                "label": "Utilization (%)",
+                "field_key": f"scenario_parameters.utilization_rate.{scenario_key}",
+                "value": utilization_field.value,
+            },
+            {
+                "type": "number",
+                "label": "Day Rate (EUR)",
+                "field_key": f"scenario_parameters.day_rate_eur.{scenario_key}",
+                "value": day_rate_field.value,
+                "step": 100.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "int",
+                "label": "Consulting FTE",
+                "field_key": "operating_assumptions.consulting_fte_start",
+                "value": fte_field.value,
+            },
+            {
+                "type": "int",
+                "label": "Working Days per Year",
+                "field_key": "operating_assumptions.work_days_per_year",
+                "value": work_days_field.value,
+            },
+            {
+                "type": "pct",
+                "label": "Wage Inflation (%)",
+                "field_key": "personnel_cost_assumptions.wage_inflation_pct",
+                "value": wage_inflation_field.value,
+            },
+        ]
+        _render_inline_controls("Key Inputs", operating_controls, columns=3)
         explain_calculations = st.toggle("Explain calculations")
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
         total_revenue_avg = pnl_table["revenue"].mean()
@@ -542,33 +962,33 @@ def run_app():
         pnl_display.rename(
             columns={
                 "year": "Year",
-                "revenue": "Umsatz (EUR)",
-                "personnel_costs": "Personalkosten (EUR)",
-                "overhead_and_variable_costs": "Overhead & Variable Kosten (EUR)",
-                "ebitda": "EBITDA (EUR)",
-                "depreciation": "Abschreibungen (EUR)",
-                "ebit": "EBIT (EUR)",
-                "taxes": "Steuern (EUR)",
-                "net_income": "Jahresueberschuss (EUR)",
+                "revenue": "Umsatz (kEUR)",
+                "personnel_costs": "Personalkosten (kEUR)",
+                "overhead_and_variable_costs": "Overhead & Variable Kosten (kEUR)",
+                "ebitda": "EBITDA (kEUR)",
+                "depreciation": "Abschreibungen (kEUR)",
+                "ebit": "EBIT (kEUR)",
+                "taxes": "Steuern (kEUR)",
+                "net_income": "Jahresueberschuss (kEUR)",
             },
             inplace=True,
         )
 
         pnl_format_map = {
-            "Umsatz (EUR)": format_currency,
-            "Personalkosten (EUR)": format_currency,
-            "Overhead & Variable Kosten (EUR)": format_currency,
-            "EBITDA (EUR)": format_currency,
-            "Abschreibungen (EUR)": format_currency,
-            "EBIT (EUR)": format_currency,
-            "Steuern (EUR)": format_currency,
-            "Jahresueberschuss (EUR)": format_currency,
+            "Umsatz (kEUR)": format_currency,
+            "Personalkosten (kEUR)": format_currency,
+            "Overhead & Variable Kosten (kEUR)": format_currency,
+            "EBITDA (kEUR)": format_currency,
+            "Abschreibungen (kEUR)": format_currency,
+            "EBIT (kEUR)": format_currency,
+            "Steuern (kEUR)": format_currency,
+            "Jahresueberschuss (kEUR)": format_currency,
         }
         pnl_totals = [
-            "Umsatz (EUR)",
-            "EBITDA (EUR)",
-            "EBIT (EUR)",
-            "Jahresueberschuss (EUR)",
+            "Umsatz (kEUR)",
+            "EBITDA (kEUR)",
+            "EBIT (kEUR)",
+            "Jahresueberschuss (kEUR)",
         ]
         pnl_styled = _style_totals(pnl_display, pnl_totals).format(
             pnl_format_map
@@ -591,11 +1011,347 @@ def run_app():
                 "is calculated as a percentage of revenue."
             )
 
-    if page == "Financing & Bankability":
-        st.header("Financing & Bankability")
+    if page == "Cashflow & Liquidity":
+        st.header("Cashflow & Liquidity")
         st.write(
-            "Cash generation, debt service, and liquidity position."
+            "Cash generation, investment outflows, and liquidity runway."
         )
+        scenario_options = ["Base", "Best", "Worst"]
+        selected_scenario = st.session_state.get(
+            "scenario_selection.selected_scenario",
+            input_model.scenario_selection["selected_scenario"].value,
+        )
+        scenario_index = (
+            scenario_options.index(selected_scenario)
+            if selected_scenario in scenario_options
+            else 0
+        )
+        scenario_key = selected_scenario.lower()
+        capex_field = _get_field_by_path(
+            input_model.__dict__,
+            ["capex_and_working_capital", "capex_eur_per_year"],
+        )
+        depreciation_field = _get_field_by_path(
+            input_model.__dict__,
+            ["capex_and_working_capital", "depreciation_eur_per_year"],
+        )
+        dso_field = _get_field_by_path(
+            input_model.__dict__,
+            ["capex_and_working_capital", "dso_days"],
+        )
+        min_cash_field = _get_field_by_path(
+            input_model.__dict__,
+            ["capex_and_working_capital", "minimum_cash_balance_eur"],
+        )
+        tax_field = _get_field_by_path(
+            input_model.__dict__,
+            ["tax_and_distributions", "tax_rate_pct"],
+        )
+
+        cashflow_controls = [
+            {
+                "type": "select",
+                "label": "Scenario",
+                "options": scenario_options,
+                "index": scenario_index,
+                "field_key": "scenario_selection.selected_scenario",
+            },
+            {
+                "type": "number",
+                "label": "Capex (EUR)",
+                "field_key": "capex_and_working_capital.capex_eur_per_year",
+                "value": capex_field.value,
+                "step": 10000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Depreciation (EUR)",
+                "field_key": "capex_and_working_capital.depreciation_eur_per_year",
+                "value": depreciation_field.value,
+                "step": 10000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "int",
+                "label": "DSO (days)",
+                "field_key": "capex_and_working_capital.dso_days",
+                "value": dso_field.value,
+            },
+            {
+                "type": "number",
+                "label": "Minimum Cash (EUR)",
+                "field_key": "capex_and_working_capital.minimum_cash_balance_eur",
+                "value": min_cash_field.value,
+                "step": 50000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "pct",
+                "label": "Tax Rate (%)",
+                "field_key": "tax_and_distributions.tax_rate_pct",
+                "value": tax_field.value,
+            },
+        ]
+        _render_inline_controls("Key Inputs", cashflow_controls, columns=3)
+
+        cashflow_table = pd.DataFrame(cashflow_result)
+        min_cash_balance = cashflow_table["cash_balance"].min()
+        avg_operating_cf = cashflow_table["operating_cf"].mean()
+        cumulative_cashflow = cashflow_table["net_cashflow"].sum()
+
+        kpi_col_1, kpi_col_2, kpi_col_3 = st.columns(3)
+        kpi_col_1.metric("Minimum Cash", format_currency(min_cash_balance))
+        kpi_col_2.metric("Avg Operating CF", format_currency(avg_operating_cf))
+        kpi_col_3.metric(
+            "Cumulative CF", format_currency(cumulative_cashflow)
+        )
+
+        cashflow_display = cashflow_table.copy()
+        cashflow_display["year"] = cashflow_display["year"].map(
+            lambda x: f"Year {int(x)}" if pd.notna(x) else ""
+        )
+        cashflow_display.rename(
+            columns={
+                "year": "Year",
+                "operating_cf": "Operating CF (kEUR)",
+                "investing_cf": "Investing CF (kEUR)",
+                "financing_cf": "Financing CF (kEUR)",
+                "net_cashflow": "Net Cashflow (kEUR)",
+                "cash_balance": "Cash Balance (kEUR)",
+            },
+            inplace=True,
+        )
+        cashflow_format_map = {
+            "Operating CF (kEUR)": format_currency,
+            "Investing CF (kEUR)": format_currency,
+            "Financing CF (kEUR)": format_currency,
+            "Net Cashflow (kEUR)": format_currency,
+            "Cash Balance (kEUR)": format_currency,
+        }
+        cashflow_totals = ["Net Cashflow (kEUR)", "Cash Balance (kEUR)"]
+        cashflow_styled = _style_totals(
+            cashflow_display, cashflow_totals
+        ).format(cashflow_format_map)
+        st.dataframe(cashflow_styled, use_container_width=True)
+
+    if page == "Balance Sheet":
+        st.header("Balance Sheet")
+        st.write(
+            "Assets, liabilities, and equity position by year."
+        )
+        scenario_options = ["Base", "Best", "Worst"]
+        selected_scenario = st.session_state.get(
+            "scenario_selection.selected_scenario",
+            input_model.scenario_selection["selected_scenario"].value,
+        )
+        scenario_index = (
+            scenario_options.index(selected_scenario)
+            if selected_scenario in scenario_options
+            else 0
+        )
+        min_cash_field = _get_field_by_path(
+            input_model.__dict__,
+            ["capex_and_working_capital", "minimum_cash_balance_eur"],
+        )
+        dso_field = _get_field_by_path(
+            input_model.__dict__,
+            ["capex_and_working_capital", "dso_days"],
+        )
+        capex_field = _get_field_by_path(
+            input_model.__dict__,
+            ["capex_and_working_capital", "capex_eur_per_year"],
+        )
+        depreciation_field = _get_field_by_path(
+            input_model.__dict__,
+            ["capex_and_working_capital", "depreciation_eur_per_year"],
+        )
+        tax_field = _get_field_by_path(
+            input_model.__dict__,
+            ["tax_and_distributions", "tax_rate_pct"],
+        )
+
+        balance_controls = [
+            {
+                "type": "select",
+                "label": "Scenario",
+                "options": scenario_options,
+                "index": scenario_index,
+                "field_key": "scenario_selection.selected_scenario",
+            },
+            {
+                "type": "number",
+                "label": "Minimum Cash (EUR)",
+                "field_key": "capex_and_working_capital.minimum_cash_balance_eur",
+                "value": min_cash_field.value,
+                "step": 50000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "int",
+                "label": "DSO (days)",
+                "field_key": "capex_and_working_capital.dso_days",
+                "value": dso_field.value,
+            },
+            {
+                "type": "number",
+                "label": "Capex (EUR)",
+                "field_key": "capex_and_working_capital.capex_eur_per_year",
+                "value": capex_field.value,
+                "step": 10000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Depreciation (EUR)",
+                "field_key": "capex_and_working_capital.depreciation_eur_per_year",
+                "value": depreciation_field.value,
+                "step": 10000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "pct",
+                "label": "Tax Rate (%)",
+                "field_key": "tax_and_distributions.tax_rate_pct",
+                "value": tax_field.value,
+            },
+        ]
+        _render_inline_controls("Key Inputs", balance_controls, columns=3)
+
+        balance_table = pd.DataFrame(balance_sheet)
+        avg_assets = balance_table["assets"].mean()
+        avg_liabilities = balance_table["liabilities"].mean()
+        avg_equity = balance_table["equity"].mean()
+
+        kpi_col_1, kpi_col_2, kpi_col_3 = st.columns(3)
+        kpi_col_1.metric("Avg Assets", format_currency(avg_assets))
+        kpi_col_2.metric("Avg Liabilities", format_currency(avg_liabilities))
+        kpi_col_3.metric("Avg Equity", format_currency(avg_equity))
+
+        balance_display = balance_table.copy()
+        balance_display["year"] = balance_display["year"].map(
+            lambda x: f"Year {int(x)}" if pd.notna(x) else ""
+        )
+        balance_display.rename(
+            columns={
+                "year": "Year",
+                "assets": "Assets (kEUR)",
+                "liabilities": "Liabilities (kEUR)",
+                "equity": "Equity (kEUR)",
+                "working_capital": "Working Capital (kEUR)",
+                "retained_earnings": "Retained Earnings (kEUR)",
+            },
+            inplace=True,
+        )
+        balance_format_map = {
+            "Assets (kEUR)": format_currency,
+            "Liabilities (kEUR)": format_currency,
+            "Equity (kEUR)": format_currency,
+            "Working Capital (kEUR)": format_currency,
+            "Retained Earnings (kEUR)": format_currency,
+        }
+        balance_totals = ["Assets (kEUR)", "Equity (kEUR)"]
+        balance_styled = _style_totals(
+            balance_display, balance_totals
+        ).format(balance_format_map)
+        st.dataframe(balance_styled, use_container_width=True)
+
+    if page == "Financing & Debt":
+        st.header("Financing & Debt")
+        st.write(
+            "Debt structure, service capacity, and covenant compliance."
+        )
+        scenario_options = ["Base", "Best", "Worst"]
+        selected_scenario = st.session_state.get(
+            "scenario_selection.selected_scenario",
+            input_model.scenario_selection["selected_scenario"].value,
+        )
+        scenario_index = (
+            scenario_options.index(selected_scenario)
+            if selected_scenario in scenario_options
+            else 0
+        )
+        purchase_price_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "purchase_price_eur"],
+        )
+        equity_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "equity_contribution_eur"],
+        )
+        debt_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "senior_term_loan_start_eur"],
+        )
+        interest_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "senior_interest_rate_pct"],
+        )
+        repayment_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "senior_repayment_per_year_eur"],
+        )
+        revolver_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "revolver_limit_eur"],
+        )
+
+        financing_controls = [
+            {
+                "type": "select",
+                "label": "Scenario",
+                "options": scenario_options,
+                "index": scenario_index,
+                "field_key": "scenario_selection.selected_scenario",
+            },
+            {
+                "type": "number",
+                "label": "Purchase Price (EUR)",
+                "field_key": "transaction_and_financing.purchase_price_eur",
+                "value": purchase_price_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Equity Contribution (EUR)",
+                "field_key": "transaction_and_financing.equity_contribution_eur",
+                "value": equity_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Debt Amount (EUR)",
+                "field_key": "transaction_and_financing.senior_term_loan_start_eur",
+                "value": debt_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "pct",
+                "label": "Interest Rate (%)",
+                "field_key": "transaction_and_financing.senior_interest_rate_pct",
+                "value": interest_field.value,
+            },
+            {
+                "type": "number",
+                "label": "Annual Repayment (EUR)",
+                "field_key": "transaction_and_financing.senior_repayment_per_year_eur",
+                "value": repayment_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Revolver Limit (EUR)",
+                "field_key": "transaction_and_financing.revolver_limit_eur",
+                "value": revolver_field.value,
+                "step": 50000.0,
+                "format": "%.0f",
+            },
+        ]
+        _render_inline_controls("Key Inputs", financing_controls, columns=3)
         cashflow_table = pd.DataFrame(cashflow_result)
         min_cash_balance = cashflow_table["cash_balance"].min()
         avg_operating_cf = cashflow_table["operating_cf"].mean()
@@ -619,12 +1375,12 @@ def run_app():
         cashflow_display.rename(
             columns={
                 "year": "Year",
-                "cash_balance": "Cash Balance (EUR)",
+                "cash_balance": "Cash Balance (kEUR)",
             },
             inplace=True,
         )
         cashflow_display = cashflow_display[
-            ["Year", "Cash Balance (EUR)"]
+            ["Year", "Cash Balance (kEUR)"]
         ]
 
         debt_table = pd.DataFrame(debt_schedule)
@@ -657,10 +1413,10 @@ def run_app():
         debt_display.rename(
             columns={
                 "year": "Year",
-                "interest_expense": "Interest Expense (EUR)",
-                "principal_payment": "Debt Repayment (EUR)",
-                "debt_service": "Debt Service (EUR)",
-                "outstanding_principal": "Debt Outstanding (EUR)",
+                "interest_expense": "Interest Expense (kEUR)",
+                "principal_payment": "Debt Repayment (kEUR)",
+                "debt_service": "Debt Service (kEUR)",
+                "outstanding_principal": "Debt Outstanding (kEUR)",
                 "dscr": "DSCR (x)",
             },
             inplace=True,
@@ -668,9 +1424,9 @@ def run_app():
         debt_display = debt_display[
             [
                 "Year",
-                "Debt Outstanding (EUR)",
-                "Interest Expense (EUR)",
-                "Debt Service (EUR)",
+                "Debt Outstanding (kEUR)",
+                "Interest Expense (kEUR)",
+                "Debt Service (kEUR)",
                 "DSCR (x)",
             ]
         ]
@@ -685,7 +1441,7 @@ def run_app():
                 if col == "DSCR (x)" and pd.notna(row[col]) and row[col] < 1.3:
                     styles.append("background-color: #fdecea;")
                 elif (
-                    col == "Cash Balance (EUR)"
+                    col == "Cash Balance (kEUR)"
                     and pd.notna(row[col])
                     and row[col] < 0
                 ):
@@ -695,11 +1451,11 @@ def run_app():
             return styles
 
         bankability_format_map = {
-            "Debt Outstanding (EUR)": format_currency,
-            "Interest Expense (EUR)": format_currency,
-            "Debt Service (EUR)": format_currency,
+            "Debt Outstanding (kEUR)": format_currency,
+            "Interest Expense (kEUR)": format_currency,
+            "Debt Service (kEUR)": format_currency,
             "DSCR (x)": lambda x: f"{x:.2f}" if pd.notna(x) else "",
-            "Cash Balance (EUR)": format_currency,
+            "Cash Balance (kEUR)": format_currency,
         }
 
         bankability_styled = bankability_table.style.apply(
@@ -718,6 +1474,83 @@ def run_app():
         st.write(
             "Investor returns and exit value based on current assumptions."
         )
+        scenario_options = ["Base", "Best", "Worst"]
+        selected_scenario = st.session_state.get(
+            "scenario_selection.selected_scenario",
+            input_model.scenario_selection["selected_scenario"].value,
+        )
+        scenario_index = (
+            scenario_options.index(selected_scenario)
+            if selected_scenario in scenario_options
+            else 0
+        )
+        equity_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "equity_contribution_eur"],
+        )
+        debt_field = _get_field_by_path(
+            input_model.__dict__,
+            ["transaction_and_financing", "senior_term_loan_start_eur"],
+        )
+        seller_multiple_field = _get_field_by_path(
+            input_model.__dict__,
+            ["valuation_assumptions", "multiple_valuation", "seller_multiple"],
+        )
+        wacc_field = _get_field_by_path(
+            input_model.__dict__,
+            ["valuation_assumptions", "dcf_valuation", "discount_rate_wacc"],
+        )
+        dividend_field = _get_field_by_path(
+            input_model.__dict__,
+            ["tax_and_distributions", "dividend_payout_ratio_pct"],
+        )
+
+        equity_controls = [
+            {
+                "type": "select",
+                "label": "Scenario",
+                "options": scenario_options,
+                "index": scenario_index,
+                "field_key": "scenario_selection.selected_scenario",
+            },
+            {
+                "type": "number",
+                "label": "Equity Contribution (EUR)",
+                "field_key": "transaction_and_financing.equity_contribution_eur",
+                "value": equity_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Debt Amount (EUR)",
+                "field_key": "transaction_and_financing.senior_term_loan_start_eur",
+                "value": debt_field.value,
+                "step": 100000.0,
+                "format": "%.0f",
+            },
+            {
+                "type": "number",
+                "label": "Seller Multiple (x)",
+                "field_key": "valuation_assumptions.multiple_valuation.seller_multiple",
+                "value": seller_multiple_field.value or 0,
+                "step": 0.1,
+                "format": "%.2f",
+            },
+            {
+                "type": "pct",
+                "label": "WACC / Target IRR (%)",
+                "field_key": "valuation_assumptions.dcf_valuation.discount_rate_wacc",
+                "value": wacc_field.value or 0,
+            },
+            {
+                "type": "pct",
+                "label": "Dividend Payout (%)",
+                "field_key": "tax_and_distributions.dividend_payout_ratio_pct",
+                "value": dividend_field.value,
+            },
+        ]
+        _render_inline_controls("Key Inputs", equity_controls, columns=3)
         summary = {
             "initial_equity": investment_result["initial_equity"],
             "exit_value": investment_result["exit_value"],
@@ -748,18 +1581,18 @@ def run_app():
         summary_display = summary_table.copy()
         summary_display.rename(
             columns={
-                "initial_equity": "Eigenkapital (Start, EUR)",
-                "exit_value": "Exit Value (EUR)",
+                "initial_equity": "Eigenkapital (Start, kEUR)",
+                "exit_value": "Exit Value (kEUR)",
                 "irr": "IRR (%)",
             },
             inplace=True,
         )
         summary_format_map = {
-            "Eigenkapital (Start, EUR)": format_currency,
-            "Exit Value (EUR)": format_currency,
+            "Eigenkapital (Start, kEUR)": format_currency,
+            "Exit Value (kEUR)": format_currency,
             "IRR (%)": format_pct,
         }
-        summary_totals = ["Eigenkapital (Start, EUR)", "Exit Value (EUR)"]
+        summary_totals = ["Eigenkapital (Start, kEUR)", "Exit Value (kEUR)"]
         summary_styled = _style_totals(
             summary_display, summary_totals
         ).format(summary_format_map)
@@ -774,15 +1607,15 @@ def run_app():
         cashflows_display.rename(
             columns={
                 "year": "Year",
-                "equity_cashflows": "Equity Cashflows (EUR)",
+                "equity_cashflows": "Equity Cashflows (kEUR)",
             },
             inplace=True,
         )
         cashflows_format_map = {
-            "Equity Cashflows (EUR)": format_currency
+            "Equity Cashflows (kEUR)": format_currency
         }
         cashflows_styled = _style_totals(
-            cashflows_display, ["Equity Cashflows (EUR)"]
+            cashflows_display, ["Equity Cashflows (kEUR)"]
         ).format(cashflows_format_map)
 
         st.dataframe(summary_styled, use_container_width=True)
