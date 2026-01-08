@@ -17,44 +17,100 @@ def calculate_cashflow(input_model, pnl_result):
         "equity_contribution_eur"
     ].value
 
-    # Map operating inputs to Excel-equivalent capex and working capital fields.
-    capex = input_model.capex_and_working_capital["capex_eur_per_year"].value
-    # No explicit working capital change input in v1; keep as zero for now.
-    working_capital_change = 0.0
+    cashflow_assumptions = getattr(input_model, "cashflow_assumptions", {})
+    tax_cash_rate_pct = cashflow_assumptions.get(
+        "tax_cash_rate_pct",
+        input_model.tax_and_distributions["tax_rate_pct"].value,
+    )
+    tax_payment_lag_years = cashflow_assumptions.get(
+        "tax_payment_lag_years", 0
+    )
+    capex_pct_revenue = cashflow_assumptions.get(
+        "capex_pct_revenue", 0.0
+    )
+    working_capital_pct_revenue = cashflow_assumptions.get(
+        "working_capital_pct_revenue", 0.0
+    )
+    opening_cash_balance = cashflow_assumptions.get(
+        "opening_cash_balance_eur", 0.0
+    )
 
     cashflow = []
-    cash_balance = 0.0
+    cash_balance = opening_cash_balance
+    taxes_due_by_year = []
+    outstanding_principal = debt_amount
 
     # Step through each P&L year and derive cash flow lines.
     for i, year_data in enumerate(pnl_result):
         year = year_data["year"]
-        net_income = year_data["net_income"]
+        revenue = year_data.get("revenue", 0)
+        ebitda = year_data.get("ebitda", 0)
+        ebit = year_data.get("ebit", 0)
 
-        # Operating cash flow starts from net income and adjusts for working capital.
-        operating_cf = net_income - working_capital_change
+        # Interest expense based on outstanding principal.
+        interest = outstanding_principal * interest_rate
+        principal_repayment = (
+            min(annual_repayment, outstanding_principal)
+            if outstanding_principal > 0
+            else 0
+        )
+        debt_drawdown = debt_amount if i == 0 else 0.0
+        outstanding_principal = max(
+            outstanding_principal - principal_repayment, 0.0
+        )
+
+        # Taxes are cash-based on EBT, with an optional payment lag.
+        ebt = ebit - interest
+        taxes_due = max(ebt, 0) * tax_cash_rate_pct
+        taxes_due_by_year.append(taxes_due)
+        if tax_payment_lag_years == 0:
+            taxes_paid = taxes_due
+        elif tax_payment_lag_years == 1:
+            taxes_paid = taxes_due_by_year[i - 1] if i > 0 else 0.0
+        else:
+            taxes_paid = 0.0
+
+        # Working capital adjustment and capex are modeled as revenue percentages.
+        working_capital_change = revenue * working_capital_pct_revenue
+        capex = revenue * capex_pct_revenue
+
+        # Operating cash flow starts from EBITDA and adjusts for taxes and working capital.
+        operating_cf = ebitda - taxes_paid - working_capital_change
 
         # Investing cash flow is primarily capital expenditures.
         investing_cf = -capex
+        free_cashflow = operating_cf + investing_cf
 
         # Financing cash flow includes interest, debt repayment, and initial funding.
-        interest = debt_amount * interest_rate
-        principal_repayment = annual_repayment
-        financing_cf = -(interest + principal_repayment)
+        financing_cf = (
+            debt_drawdown
+            + equity_amount
+            - interest
+            - principal_repayment
+            if i == 0
+            else -(interest + principal_repayment)
+        )
 
-        # In the first year, add initial debt and equity funding.
-        if i == 0:
-            financing_cf += debt_amount + equity_amount
-
-        net_cashflow = operating_cf + investing_cf + financing_cf
+        net_cashflow = free_cashflow + financing_cf
+        opening_cash = cash_balance
         cash_balance += net_cashflow
 
         cashflow.append(
             {
                 "year": year,
+                "ebitda": ebitda,
+                "taxes_paid": taxes_paid,
+                "working_capital_change": working_capital_change,
                 "operating_cf": operating_cf,
+                "capex": capex,
+                "free_cashflow": free_cashflow,
+                "debt_drawdown": debt_drawdown,
+                "interest_paid": interest,
+                "debt_repayment": principal_repayment,
                 "investing_cf": investing_cf,
                 "financing_cf": financing_cf,
                 "net_cashflow": net_cashflow,
+                "opening_cash": opening_cash,
                 "cash_balance": cash_balance,
             }
         )

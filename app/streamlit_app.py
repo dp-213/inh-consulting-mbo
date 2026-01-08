@@ -55,6 +55,16 @@ def _style_totals(df, columns_to_bold):
     return df.style.apply(style_row, axis=1)
 
 
+def _default_cashflow_assumptions():
+    return {
+        "tax_cash_rate_pct": 0.30,
+        "tax_payment_lag_years": 1,
+        "capex_pct_revenue": 0.01,
+        "working_capital_pct_revenue": 0.02,
+        "opening_cash_balance_eur": 250000,
+    }
+
+
 def _seed_session_defaults(input_model):
     def _seed_section(section_data, prefix=""):
         for key, value in section_data.items():
@@ -84,6 +94,9 @@ def _seed_session_defaults(input_model):
             f"utilization_by_year.{year_index}",
             st.session_state["utilization_by_year"][year_index],
         )
+
+    for key, value in _default_cashflow_assumptions().items():
+        st.session_state.setdefault(f"cashflow.{key}", value)
 
 
 def _render_input_field(
@@ -345,9 +358,90 @@ def _render_pnl_html(pnl_statement, section_rows, bold_rows):
     st.markdown(table_html, unsafe_allow_html=True)
 
 
+def _render_cashflow_html(cashflow_statement, section_rows, bold_rows):
+    def escape(text):
+        return (
+            str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    columns = ["Line Item", "Year 0", "Year 1", "Year 2", "Year 3", "Year 4"]
+    header_cells = "".join(f"<th>{escape(col)}</th>" for col in columns)
+
+    body_rows = []
+    for _, row in cashflow_statement.iterrows():
+        label = row["Line Item"]
+        row_class = ""
+        if label in section_rows:
+            row_class = "section-row"
+        elif label in bold_rows:
+            row_class = "total-row"
+        cells = []
+        for col in columns:
+            value = row[col]
+            cell_class = ""
+            if col != "Line Item":
+                value = format_currency(value)
+                try:
+                    if float(row[col]) < 0:
+                        cell_class = "negative"
+                except (TypeError, ValueError):
+                    cell_class = ""
+            cell_value = "&nbsp;" if value in ("", None) else escape(value)
+            cells.append(f"<td class=\"{cell_class}\">{cell_value}</td>")
+        body_rows.append(f"<tr class=\"{row_class}\">{''.join(cells)}</tr>")
+
+    css = """
+    <style>
+      .cashflow-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .cashflow-table col.line-item { width: 42%; }
+      .cashflow-table col.year { width: 11.6%; }
+      .cashflow-table th, .cashflow-table td {
+        padding: 2px 6px;
+        white-space: nowrap;
+        line-height: 1.0;
+        border: 0;
+        font-size: 0.9rem;
+      }
+      .cashflow-table th { text-align: right; font-weight: 600; }
+      .cashflow-table th:first-child { text-align: left; }
+      .cashflow-table td { text-align: right; }
+      .cashflow-table td:first-child { text-align: left; }
+      .cashflow-table .section-row td {
+        font-weight: 700;
+        background: #f9fafb;
+      }
+      .cashflow-table .total-row td {
+        font-weight: 700;
+        background: #f3f4f6;
+        border-top: 1px solid #c7c7c7;
+      }
+      .cashflow-table td.negative { color: #b45309; }
+    </style>
+    """
+    colgroup = (
+        "<colgroup>"
+        "<col class=\"line-item\"/>"
+        "<col class=\"year\"/><col class=\"year\"/><col class=\"year\"/>"
+        "<col class=\"year\"/><col class=\"year\"/>"
+        "</colgroup>"
+    )
+    table_html = (
+        f"{css}<table class=\"cashflow-table\">{colgroup}"
+        f"<thead><tr>{header_cells}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody></table>"
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
 def _build_pnl_excel(input_model):
     scenario = input_model.scenario_selection["selected_scenario"].value
     scenario_key = scenario.lower()
+    cashflow_assumptions = getattr(
+        input_model, "cashflow_assumptions", _default_cashflow_assumptions()
+    )
 
     assumptions = [
         ("Consulting FTE", input_model.operating_assumptions["consulting_fte_start"].value),
@@ -375,7 +469,13 @@ def _build_pnl_excel(input_model):
         ("Depreciation (EUR)", input_model.capex_and_working_capital["depreciation_eur_per_year"].value),
         ("Debt Amount (EUR)", input_model.transaction_and_financing["senior_term_loan_start_eur"].value),
         ("Interest Rate %", input_model.transaction_and_financing["senior_interest_rate_pct"].value),
+        ("Annual Debt Repayment (EUR)", input_model.transaction_and_financing["senior_repayment_per_year_eur"].value),
         ("Tax Rate %", input_model.tax_and_distributions["tax_rate_pct"].value),
+        ("Tax Cash Rate (%)", cashflow_assumptions["tax_cash_rate_pct"]),
+        ("Tax Payment Lag (Years)", cashflow_assumptions["tax_payment_lag_years"]),
+        ("Capex (% of Revenue)", cashflow_assumptions["capex_pct_revenue"]),
+        ("Working Capital Adjustment (% of Revenue)", cashflow_assumptions["working_capital_pct_revenue"]),
+        ("Opening Cash Balance (EUR)", cashflow_assumptions["opening_cash_balance_eur"]),
     ]
     assumptions_df = pd.DataFrame(assumptions, columns=["Item", "Value"])
 
@@ -385,6 +485,7 @@ def _build_pnl_excel(input_model):
         wb = writer.book
         ws_pnl = wb.create_sheet("P&L")
         ws_kpi = wb.create_sheet("KPIs")
+        ws_cashflow = wb.create_sheet("Cashflow")
 
         assumption_cells = {
             name: f"Assumptions!B{idx + 2}" for idx, (name, _) in enumerate(assumptions)
@@ -519,6 +620,161 @@ def _build_pnl_excel(input_model):
             ws_kpi[f"{col}7"] = f"='P&L'!{col}23/'P&L'!{col}5"
             ws_kpi[f"{col}8"] = f"='P&L'!{col}3/'P&L'!{col}5"
 
+        ws_cashflow["A1"] = "Cashflow Assumptions"
+        cashflow_assumption_rows = [
+            ("Tax Cash Rate (%)", "Tax Cash Rate (%)"),
+            ("Tax Payment Lag (Years)", "Tax Payment Lag (Years)"),
+            ("Capex (% of Revenue)", "Capex (% of Revenue)"),
+            ("Working Capital Adjustment (% of Revenue)", "Working Capital Adjustment (% of Revenue)"),
+            ("Opening Cash Balance (EUR)", "Opening Cash Balance (EUR)"),
+        ]
+        for idx, (label, key) in enumerate(cashflow_assumption_rows, start=2):
+            ws_cashflow.cell(row=idx, column=1, value=label)
+            ws_cashflow.cell(
+                row=idx, column=2, value=f"={assumption_cells[key]}"
+            )
+
+        cashflow_table_start = 8
+        ws_cashflow.cell(row=cashflow_table_start, column=1, value="Line Item")
+        for idx, header in enumerate(year_headers, start=2):
+            ws_cashflow.cell(row=cashflow_table_start, column=idx, value=header)
+
+        cashflow_items = [
+            "OPERATING CASHFLOW",
+            "EBITDA",
+            "Taxes Paid",
+            "Working Capital Change",
+            "Operating Cashflow",
+            "INVESTING CASHFLOW",
+            "Capex",
+            "Free Cashflow",
+            "FINANCING CASHFLOW",
+            "Debt Drawdown",
+            "Interest Paid",
+            "Debt Repayment",
+            "Net Cashflow",
+            "LIQUIDITY",
+            "Opening Cash",
+            "Net Cashflow",
+            "Closing Cash",
+        ]
+        for row_idx, item in enumerate(
+            cashflow_items, start=cashflow_table_start + 1
+        ):
+            ws_cashflow.cell(row=row_idx, column=1, value=item)
+
+        tax_cash_cell = assumption_cells["Tax Cash Rate (%)"]
+        tax_lag_cell = assumption_cells["Tax Payment Lag (Years)"]
+        capex_pct_cell = assumption_cells["Capex (% of Revenue)"]
+        wc_pct_cell = assumption_cells["Working Capital Adjustment (% of Revenue)"]
+        opening_cash_cell = assumption_cells["Opening Cash Balance (EUR)"]
+        debt_amount_cell = assumption_cells["Debt Amount (EUR)"]
+        interest_rate_cell = assumption_cells["Interest Rate %"]
+        repayment_cell = assumption_cells["Annual Debt Repayment (EUR)"]
+
+        cashflow_row_map = {
+            "EBITDA": cashflow_table_start + 2,
+            "Taxes Paid": cashflow_table_start + 3,
+            "Working Capital Change": cashflow_table_start + 4,
+            "Operating Cashflow": cashflow_table_start + 5,
+            "Capex": cashflow_table_start + 7,
+            "Free Cashflow": cashflow_table_start + 8,
+            "Debt Drawdown": cashflow_table_start + 10,
+            "Interest Paid": cashflow_table_start + 11,
+            "Debt Repayment": cashflow_table_start + 12,
+            "Net Cashflow (Financing)": cashflow_table_start + 13,
+            "Opening Cash": cashflow_table_start + 15,
+            "Net Cashflow (Liquidity)": cashflow_table_start + 16,
+            "Closing Cash": cashflow_table_start + 17,
+        }
+
+        for year_index in range(5):
+            col = year_col(2 + year_index)
+            prev_col = year_col(1 + year_index) if year_index > 0 else None
+            ws_cashflow[f"{col}{cashflow_row_map['EBITDA']}"] = f"='P&L'!{col}17"
+
+            taxes_due = f"MAX('P&L'!{col}21,0)*{tax_cash_cell}"
+            if year_index == 0:
+                taxes_prev = "0"
+            else:
+                taxes_prev = f"MAX('P&L'!{prev_col}21,0)*{tax_cash_cell}"
+            ws_cashflow[f"{col}{cashflow_row_map['Taxes Paid']}"] = (
+                f"=IF({tax_lag_cell}=0,{taxes_due},IF({tax_lag_cell}=1,{taxes_prev},0))"
+            )
+
+            ws_cashflow[f"{col}{cashflow_row_map['Working Capital Change']}"] = (
+                f"='P&L'!{col}5*{wc_pct_cell}"
+            )
+            ws_cashflow[f"{col}{cashflow_row_map['Operating Cashflow']}"] = (
+                f"={col}{cashflow_row_map['EBITDA']}"
+                f"-{col}{cashflow_row_map['Taxes Paid']}"
+                f"-{col}{cashflow_row_map['Working Capital Change']}"
+            )
+            ws_cashflow[f"{col}{cashflow_row_map['Capex']}"] = (
+                f"='P&L'!{col}5*{capex_pct_cell}"
+            )
+            ws_cashflow[f"{col}{cashflow_row_map['Free Cashflow']}"] = (
+                f"={col}{cashflow_row_map['Operating Cashflow']}"
+                f"-{col}{cashflow_row_map['Capex']}"
+            )
+
+            if year_index == 0:
+                debt_drawdown = f"={debt_amount_cell}"
+            else:
+                debt_drawdown = "=0"
+            ws_cashflow[f"{col}{cashflow_row_map['Debt Drawdown']}"] = debt_drawdown
+
+            outstanding = f"MAX({debt_amount_cell}-{repayment_cell}*{year_index},0)"
+            ws_cashflow[f"{col}{cashflow_row_map['Interest Paid']}"] = (
+                f"={outstanding}*{interest_rate_cell}"
+            )
+            ws_cashflow[f"{col}{cashflow_row_map['Debt Repayment']}"] = (
+                f"=MIN({repayment_cell},{outstanding})"
+            )
+            net_cashflow_formula = (
+                f"={col}{cashflow_row_map['Free Cashflow']}"
+                f"+{col}{cashflow_row_map['Debt Drawdown']}"
+                f"-{col}{cashflow_row_map['Interest Paid']}"
+                f"-{col}{cashflow_row_map['Debt Repayment']}"
+            )
+            ws_cashflow[
+                f"{col}{cashflow_row_map['Net Cashflow (Financing)']}"
+            ] = net_cashflow_formula
+            ws_cashflow[
+                f"{col}{cashflow_row_map['Net Cashflow (Liquidity)']}"
+            ] = net_cashflow_formula
+
+            if year_index == 0:
+                ws_cashflow[f"{col}{cashflow_row_map['Opening Cash']}"] = (
+                    f"={opening_cash_cell}"
+                )
+            else:
+                ws_cashflow[f"{col}{cashflow_row_map['Opening Cash']}"] = (
+                    f"={prev_col}{cashflow_row_map['Closing Cash']}"
+                )
+            ws_cashflow[f"{col}{cashflow_row_map['Closing Cash']}"] = (
+                f"={col}{cashflow_row_map['Opening Cash']}"
+                f"+{col}{cashflow_row_map['Net Cashflow (Liquidity)']}"
+            )
+
+        notes_row = cashflow_table_start + len(cashflow_items) + 2
+        ws_cashflow.cell(row=notes_row, column=1, value="Notes")
+        ws_cashflow.cell(
+            row=notes_row + 1,
+            column=1,
+            value="Operating CF = EBITDA - Taxes Paid - Working Capital Change.",
+        )
+        ws_cashflow.cell(
+            row=notes_row + 2,
+            column=1,
+            value="Capex and Working Capital are modeled as % of revenue.",
+        )
+        ws_cashflow.cell(
+            row=notes_row + 3,
+            column=1,
+            value="Closing Cash = Opening Cash + Net Cashflow.",
+        )
+
         writer.close()
 
     output.seek(0)
@@ -530,6 +786,7 @@ def run_app():
 
     base_model = create_demo_input_model()
     st.session_state.setdefault("edit_pnl_assumptions", True)
+    st.session_state.setdefault("edit_cashflow_assumptions", False)
     if not st.session_state.get("defaults_initialized"):
         _seed_session_defaults(base_model)
         st.session_state["defaults_initialized"] = True
@@ -871,6 +1128,64 @@ def run_app():
                     )
                     for year_index in range(5)
                 ]
+        if page == "Cashflow & Liquidity" and st.session_state.get(
+            "edit_cashflow_assumptions"
+        ):
+            st.markdown("## Cashflow Assumptions")
+            cashflow_defaults = _default_cashflow_assumptions()
+            cashflow_controls = [
+                {
+                    "type": "pct",
+                    "label": "Tax Cash Rate (%)",
+                    "field_key": "cashflow.tax_cash_rate_pct",
+                    "value": _get_current_value(
+                        "cashflow.tax_cash_rate_pct",
+                        cashflow_defaults["tax_cash_rate_pct"],
+                    ),
+                },
+                {
+                    "type": "select",
+                    "label": "Tax Payment Lag (Years)",
+                    "options": [0, 1],
+                    "index": [0, 1].index(
+                        _get_current_value(
+                            "cashflow.tax_payment_lag_years",
+                            cashflow_defaults["tax_payment_lag_years"],
+                        )
+                    ),
+                    "field_key": "cashflow.tax_payment_lag_years",
+                },
+                {
+                    "type": "pct",
+                    "label": "Capex (% of Revenue)",
+                    "field_key": "cashflow.capex_pct_revenue",
+                    "value": _get_current_value(
+                        "cashflow.capex_pct_revenue",
+                        cashflow_defaults["capex_pct_revenue"],
+                    ),
+                },
+                {
+                    "type": "pct",
+                    "label": "Working Capital Adjustment (% of Revenue)",
+                    "field_key": "cashflow.working_capital_pct_revenue",
+                    "value": _get_current_value(
+                        "cashflow.working_capital_pct_revenue",
+                        cashflow_defaults["working_capital_pct_revenue"],
+                    ),
+                },
+                {
+                    "type": "number",
+                    "label": "Opening Cash Balance (EUR)",
+                    "field_key": "cashflow.opening_cash_balance_eur",
+                    "value": _get_current_value(
+                        "cashflow.opening_cash_balance_eur",
+                        cashflow_defaults["opening_cash_balance_eur"],
+                    ),
+                    "step": 50000.0,
+                    "format": "%.0f",
+                },
+            ]
+            _render_inline_controls("Cashflow Drivers", cashflow_controls, columns=1)
 
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
@@ -1080,6 +1395,30 @@ def run_app():
         utilization_by_year = [scenario_utilization] * 5
         st.session_state["utilization_by_year"] = utilization_by_year
     input_model.utilization_by_year = utilization_by_year
+
+    cashflow_defaults = _default_cashflow_assumptions()
+    input_model.cashflow_assumptions = {
+        "tax_cash_rate_pct": st.session_state.get(
+            "cashflow.tax_cash_rate_pct",
+            cashflow_defaults["tax_cash_rate_pct"],
+        ),
+        "tax_payment_lag_years": st.session_state.get(
+            "cashflow.tax_payment_lag_years",
+            cashflow_defaults["tax_payment_lag_years"],
+        ),
+        "capex_pct_revenue": st.session_state.get(
+            "cashflow.capex_pct_revenue",
+            cashflow_defaults["capex_pct_revenue"],
+        ),
+        "working_capital_pct_revenue": st.session_state.get(
+            "cashflow.working_capital_pct_revenue",
+            cashflow_defaults["working_capital_pct_revenue"],
+        ),
+        "opening_cash_balance_eur": st.session_state.get(
+            "cashflow.opening_cash_balance_eur",
+            cashflow_defaults["opening_cash_balance_eur"],
+        ),
+    }
 
     # Run model calculations in the standard order.
     pnl_result = run_model.calculate_pnl(input_model)
@@ -2323,127 +2662,278 @@ def run_app():
 
     if page == "Cashflow & Liquidity":
         st.header("Cashflow & Liquidity")
-        st.write(
-            "Cash generation, investment outflows, and liquidity runway."
-        )
-        scenario_options = ["Base", "Best", "Worst"]
-        selected_scenario = st.session_state.get(
-            "scenario_selection.selected_scenario",
-            input_model.scenario_selection["selected_scenario"].value,
-        )
-        scenario_index = (
-            scenario_options.index(selected_scenario)
-            if selected_scenario in scenario_options
-            else 0
-        )
-        scenario_key = selected_scenario.lower()
-        capex_field = _get_field_by_path(
-            input_model.__dict__,
-            ["capex_and_working_capital", "capex_eur_per_year"],
-        )
-        depreciation_field = _get_field_by_path(
-            input_model.__dict__,
-            ["capex_and_working_capital", "depreciation_eur_per_year"],
-        )
-        dso_field = _get_field_by_path(
-            input_model.__dict__,
-            ["capex_and_working_capital", "dso_days"],
-        )
-        min_cash_field = _get_field_by_path(
-            input_model.__dict__,
-            ["capex_and_working_capital", "minimum_cash_balance_eur"],
-        )
-        tax_field = _get_field_by_path(
-            input_model.__dict__,
-            ["tax_and_distributions", "tax_rate_pct"],
-        )
+        st.write("Consolidated cashflow statement (5-year plan)")
+        if st.button(
+            "Edit Cashflow Assumptions",
+            key="edit_cashflow_assumptions_button",
+            help="Open cashflow assumptions in the sidebar",
+        ):
+            st.session_state["edit_cashflow_assumptions"] = True
 
-        cashflow_controls = [
-            {
-                "type": "select",
-                "label": "Scenario",
-                "options": scenario_options,
-                "index": scenario_index,
-                "field_key": "scenario_selection.selected_scenario",
-            },
-            {
-                "type": "number",
-                "label": "Capex (EUR)",
-                "field_key": "capex_and_working_capital.capex_eur_per_year",
-                "value": capex_field.value,
-                "step": 10000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Depreciation (EUR)",
-                "field_key": "capex_and_working_capital.depreciation_eur_per_year",
-                "value": depreciation_field.value,
-                "step": 10000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "int",
-                "label": "DSO (days)",
-                "field_key": "capex_and_working_capital.dso_days",
-                "value": dso_field.value,
-            },
-            {
-                "type": "number",
-                "label": "Minimum Cash (EUR)",
-                "field_key": "capex_and_working_capital.minimum_cash_balance_eur",
-                "value": min_cash_field.value,
-                "step": 50000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "pct",
-                "label": "Tax Rate (%)",
-                "field_key": "tax_and_distributions.tax_rate_pct",
-                "value": tax_field.value,
-            },
+        cashflow_line_items = {}
+
+        def _set_cashflow_value(name, year_label, value):
+            if name not in cashflow_line_items:
+                cashflow_line_items[name] = {
+                    "Line Item": name,
+                    "Year 0": "",
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
+                }
+            cashflow_line_items[name][year_label] = value
+
+        for row in cashflow_result:
+            year_label = f"Year {row['year']}"
+            _set_cashflow_value("EBITDA", year_label, row["ebitda"])
+            _set_cashflow_value("Taxes Paid", year_label, row["taxes_paid"])
+            _set_cashflow_value(
+                "Working Capital Change",
+                year_label,
+                row["working_capital_change"],
+            )
+            _set_cashflow_value(
+                "Operating Cashflow", year_label, row["operating_cf"]
+            )
+            _set_cashflow_value("Capex", year_label, row["capex"])
+            _set_cashflow_value(
+                "Free Cashflow", year_label, row["free_cashflow"]
+            )
+            _set_cashflow_value(
+                "Debt Drawdown", year_label, row["debt_drawdown"]
+            )
+            _set_cashflow_value(
+                "Interest Paid", year_label, row["interest_paid"]
+            )
+            _set_cashflow_value(
+                "Debt Repayment", year_label, row["debt_repayment"]
+            )
+            _set_cashflow_value(
+                "Net Cashflow", year_label, row["net_cashflow"]
+            )
+            _set_cashflow_value(
+                "Opening Cash", year_label, row["opening_cash"]
+            )
+            _set_cashflow_value(
+                "Closing Cash", year_label, row["cash_balance"]
+            )
+
+        cashflow_row_order = [
+            "OPERATING CASHFLOW",
+            "EBITDA",
+            "Taxes Paid",
+            "Working Capital Change",
+            "Operating Cashflow",
+            "INVESTING CASHFLOW",
+            "Capex",
+            "Free Cashflow",
+            "FINANCING CASHFLOW",
+            "Debt Drawdown",
+            "Interest Paid",
+            "Debt Repayment",
+            "Net Cashflow",
+            "LIQUIDITY",
+            "Opening Cash",
+            "Net Cashflow",
+            "Closing Cash",
         ]
-        _render_inline_controls("Key Inputs", cashflow_controls, columns=3)
 
-        cashflow_table = pd.DataFrame(cashflow_result)
-        min_cash_balance = cashflow_table["cash_balance"].min()
-        avg_operating_cf = cashflow_table["operating_cf"].mean()
-        cumulative_cashflow = cashflow_table["net_cashflow"].sum()
+        cashflow_rows = []
+        for label in cashflow_row_order:
+            if label in (
+                "OPERATING CASHFLOW",
+                "INVESTING CASHFLOW",
+                "FINANCING CASHFLOW",
+                "LIQUIDITY",
+            ):
+                cashflow_rows.append(
+                    {
+                        "Line Item": label,
+                        "Year 0": "",
+                        "Year 1": "",
+                        "Year 2": "",
+                        "Year 3": "",
+                        "Year 4": "",
+                    }
+                )
+            else:
+                cashflow_rows.append(cashflow_line_items.get(label))
 
-        kpi_col_1, kpi_col_2, kpi_col_3 = st.columns(3)
-        kpi_col_1.metric("Minimum Cash", format_currency(min_cash_balance))
-        kpi_col_2.metric("Avg Operating CF", format_currency(avg_operating_cf))
-        kpi_col_3.metric(
-            "Cumulative CF", format_currency(cumulative_cashflow)
-        )
-
-        cashflow_display = cashflow_table.copy()
-        cashflow_display["year"] = cashflow_display["year"].map(
-            lambda x: f"Year {int(x)}" if pd.notna(x) else ""
-        )
-        cashflow_display.rename(
-            columns={
-                "year": "Year",
-                "operating_cf": "Operating CF (m EUR)",
-                "investing_cf": "Investing CF (m EUR)",
-                "financing_cf": "Financing CF (m EUR)",
-                "net_cashflow": "Net Cashflow (m EUR)",
-                "cash_balance": "Cash Balance (m EUR)",
-            },
-            inplace=True,
-        )
-        cashflow_format_map = {
-            "Operating CF (m EUR)": format_currency,
-            "Investing CF (m EUR)": format_currency,
-            "Financing CF (m EUR)": format_currency,
-            "Net Cashflow (m EUR)": format_currency,
-            "Cash Balance (m EUR)": format_currency,
+        cashflow_statement = pd.DataFrame(cashflow_rows)
+        cashflow_section_rows = {
+            "OPERATING CASHFLOW",
+            "INVESTING CASHFLOW",
+            "FINANCING CASHFLOW",
+            "LIQUIDITY",
         }
-        cashflow_totals = ["Net Cashflow (m EUR)", "Cash Balance (m EUR)"]
-        cashflow_styled = _style_totals(
-            cashflow_display, cashflow_totals
-        ).format(cashflow_format_map)
-        st.dataframe(cashflow_styled, use_container_width=True)
+        cashflow_total_rows = {
+            "Operating Cashflow",
+            "Free Cashflow",
+            "Net Cashflow",
+            "Closing Cash",
+        }
+        _render_cashflow_html(
+            cashflow_statement, cashflow_section_rows, cashflow_total_rows
+        )
+
+        cashflow_years = [f"Year {i}" for i in range(5)]
+        kpi_metrics = {
+            "Operating Cashflow": {},
+            "Free Cashflow": {},
+            "Cash Conversion": {},
+        }
+        for year_label in cashflow_years:
+            ebitda = cashflow_line_items["EBITDA"][year_label]
+            free_cf = cashflow_line_items["Free Cashflow"][year_label]
+            operating_cf = cashflow_line_items["Operating Cashflow"][year_label]
+            kpi_metrics["Operating Cashflow"][year_label] = operating_cf
+            kpi_metrics["Free Cashflow"][year_label] = free_cf
+            kpi_metrics["Cash Conversion"][year_label] = (
+                free_cf / ebitda if ebitda else 0
+            )
+
+        kpi_table = pd.DataFrame.from_dict(kpi_metrics, orient="index")
+        kpi_table = kpi_table[cashflow_years]
+        for metric in kpi_table.index:
+            formatter = (
+                format_pct if metric == "Cash Conversion" else format_currency
+            )
+            kpi_table.loc[metric] = kpi_table.loc[metric].apply(formatter)
+        st.markdown("### KPI Summary")
+        st.dataframe(kpi_table, use_container_width=True)
+
+        cash_balances = [
+            row["cash_balance"] for row in cashflow_result
+        ]
+        min_cash = min(cash_balances) if cash_balances else 0
+        max_cash = max(cash_balances) if cash_balances else 0
+        negative_years = [
+            f"Year {row['year']}"
+            for row in cashflow_result
+            if row["cash_balance"] < 0
+        ]
+        summary_table = pd.DataFrame(
+            [
+                {
+                    "Metric": "Minimum Cash Balance",
+                    "Value": format_currency(min_cash),
+                },
+                {
+                    "Metric": "Cash Volatility (Max - Min)",
+                    "Value": format_currency(max_cash - min_cash),
+                },
+                {
+                    "Metric": "Years with Negative Cash",
+                    "Value": ", ".join(negative_years) if negative_years else "None",
+                },
+            ]
+        )
+        st.dataframe(summary_table, use_container_width=True)
+
+        explain_cashflow = st.toggle("Explain Cashflow Logic")
+        if explain_cashflow:
+            cashflow_assumptions = input_model.cashflow_assumptions
+            st.markdown("### Operating Cashflow Logic")
+            st.write(
+                "Operating cashflow starts from EBITDA and adjusts for cash "
+                "taxes and the working capital timing proxy."
+            )
+            st.write(
+                "Cash taxes differ from tax expense because they are based on "
+                "EBT and can be paid with a lag."
+            )
+            operating_table = pd.DataFrame.from_dict(
+                {
+                    "EBITDA": cashflow_line_items["EBITDA"],
+                    "Taxes Paid": cashflow_line_items["Taxes Paid"],
+                    "Working Capital Change": cashflow_line_items[
+                        "Working Capital Change"
+                    ],
+                    "Operating Cashflow": cashflow_line_items[
+                        "Operating Cashflow"
+                    ],
+                },
+                orient="index",
+            )
+            operating_table = operating_table[cashflow_years].applymap(
+                format_currency
+            )
+            st.dataframe(operating_table, use_container_width=True)
+            st.caption(
+                "Operating Cashflow = EBITDA - Taxes Paid - Working Capital Change."
+            )
+            st.caption(
+                "Taxes Paid = max(EBT, 0) × "
+                f"{format_pct(cashflow_assumptions['tax_cash_rate_pct'])} "
+                f"with a {cashflow_assumptions['tax_payment_lag_years']}-year lag."
+            )
+            st.caption(
+                "Working Capital Change = Revenue × "
+                f"{format_pct(cashflow_assumptions['working_capital_pct_revenue'])}."
+            )
+
+            st.markdown("### Investing Cashflow Logic")
+            st.write(
+                "Capex is modeled as a stable percentage of revenue, which "
+                "is typical for consulting businesses with limited fixed assets."
+            )
+            investing_table = pd.DataFrame.from_dict(
+                {
+                    "Capex": cashflow_line_items["Capex"],
+                    "Free Cashflow": cashflow_line_items["Free Cashflow"],
+                },
+                orient="index",
+            )
+            investing_table = investing_table[cashflow_years].applymap(
+                format_currency
+            )
+            st.dataframe(investing_table, use_container_width=True)
+            st.caption("Free Cashflow = Operating Cashflow - Capex.")
+            st.caption(
+                "Capex = Revenue × "
+                f"{format_pct(cashflow_assumptions['capex_pct_revenue'])}."
+            )
+
+            st.markdown("### Financing Cashflow Logic")
+            st.write(
+                "Financing cashflow reflects initial debt funding and annual "
+                "debt service. Interest paid is based on outstanding principal."
+            )
+            financing_table = pd.DataFrame.from_dict(
+                {
+                    "Debt Drawdown": cashflow_line_items["Debt Drawdown"],
+                    "Interest Paid": cashflow_line_items["Interest Paid"],
+                    "Debt Repayment": cashflow_line_items["Debt Repayment"],
+                    "Net Cashflow": cashflow_line_items["Net Cashflow"],
+                },
+                orient="index",
+            )
+            financing_table = financing_table[cashflow_years].applymap(
+                format_currency
+            )
+            st.dataframe(financing_table, use_container_width=True)
+            st.caption(
+                "Net Cashflow = Free Cashflow + Financing Cashflow."
+            )
+
+            st.markdown("### Liquidity Logic")
+            st.write(
+                "Closing cash is the opening balance plus net cashflow, "
+                "highlighting years with potential liquidity pressure."
+            )
+            liquidity_table = pd.DataFrame.from_dict(
+                {
+                    "Opening Cash": cashflow_line_items["Opening Cash"],
+                    "Net Cashflow": cashflow_line_items["Net Cashflow"],
+                    "Closing Cash": cashflow_line_items["Closing Cash"],
+                },
+                orient="index",
+            )
+            liquidity_table = liquidity_table[cashflow_years].applymap(
+                format_currency
+            )
+            st.dataframe(liquidity_table, use_container_width=True)
 
     if page == "Balance Sheet":
         st.header("Balance Sheet")
