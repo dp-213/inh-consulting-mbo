@@ -42,6 +42,7 @@ def calculate_cashflow(input_model, pnl_result, debt_schedule):
         input_model, "balance_sheet_assumptions", {}
     ).get("depreciation_rate_pct", 0.0)
     fixed_assets = 0.0
+    working_capital_balance = 0.0
     # Step through each P&L year and derive cash flow lines.
     for i, year_data in enumerate(pnl_result):
         year = year_data["year"]
@@ -54,8 +55,12 @@ def calculate_cashflow(input_model, pnl_result, debt_schedule):
         principal_repayment = debt_row.get("total_repayment", 0.0)
         debt_drawdown = debt_row.get("debt_drawdown", 0.0)
 
-        # Working capital adjustment and capex are modeled as revenue percentages.
-        working_capital_change = revenue * working_capital_pct_revenue
+        # Working capital is a balance; cash impact is the year-over-year change.
+        working_capital_current = revenue * working_capital_pct_revenue
+        working_capital_change = (
+            working_capital_current - working_capital_balance
+        )
+        working_capital_balance = working_capital_current
         capex = revenue * capex_pct_revenue
 
         # Depreciation is derived from capex and fixed asset roll-forward.
@@ -104,6 +109,7 @@ def calculate_cashflow(input_model, pnl_result, debt_schedule):
                 "depreciation": depreciation,
                 "taxes_paid": taxes_paid,
                 "working_capital_change": working_capital_change,
+                "working_capital_balance": working_capital_balance,
                 "operating_cf": operating_cf,
                 "capex": capex,
                 "free_cashflow": free_cashflow,

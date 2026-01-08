@@ -28,12 +28,16 @@ def calculate_balance_sheet(
 
     equity_start = opening_equity
     fixed_assets = 0.0
+    working_capital_balance = 0.0
 
     for year_data in cashflow_result:
         year = year_data["year"]
         cash_balance = year_data["cash_balance"]
         capex = year_data.get("capex", 0.0)
         depreciation = year_data.get("depreciation", 0.0)
+        working_capital_balance = year_data.get(
+            "working_capital_balance", working_capital_balance
+        )
 
         # Fixed assets follow cashflow-derived capex and depreciation.
         fixed_assets = max(fixed_assets + capex - depreciation, 0.0)
@@ -52,7 +56,7 @@ def calculate_balance_sheet(
             - equity_buyback
         )
 
-        total_assets = cash_balance + fixed_assets
+        total_assets = cash_balance + fixed_assets + working_capital_balance
         total_liabilities = financial_debt
         total_liabilities_equity = total_liabilities + equity_end
         balance_check = total_assets - total_liabilities_equity
@@ -62,6 +66,7 @@ def calculate_balance_sheet(
                 "year": year,
                 "cash": cash_balance,
                 "fixed_assets": fixed_assets,
+                "working_capital": working_capital_balance,
                 "total_assets": total_assets,
                 "financial_debt": financial_debt,
                 "total_liabilities": total_liabilities,
