@@ -140,7 +140,6 @@ def _default_equity_assumptions(input_model):
         "exit_year": 4,
         "exit_method": "Exit Multiple",
         "exit_multiple": default_multiple,
-        "exit_equity_value_eur": None,
     }
 
 
@@ -623,7 +622,11 @@ def _render_balance_sheet_html(balance_statement, section_rows, bold_rows):
 
 
 def _render_custom_table_html(
-    statement, section_rows, bold_rows, row_formatters=None
+    statement,
+    section_rows,
+    bold_rows,
+    row_formatters=None,
+    year_labels=None,
 ):
     def escape(text):
         return (
@@ -633,7 +636,9 @@ def _render_custom_table_html(
             .replace(">", "&gt;")
         )
 
-    columns = ["Line Item", "Year 0", "Year 1", "Year 2", "Year 3", "Year 4"]
+    if year_labels is None:
+        year_labels = ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"]
+    columns = ["Line Item"] + year_labels
     header_cells = "".join(f"<th>{escape(col)}</th>" for col in columns)
     row_formatters = row_formatters or {}
 
@@ -667,11 +672,13 @@ def _render_custom_table_html(
             cells.append(f"<td class=\"{cell_class}\">{cell_value}</td>")
         body_rows.append(f"<tr class=\"{row_class}\">{''.join(cells)}</tr>")
 
-    css = """
+    line_item_width = 35
+    year_width = (100 - line_item_width) / max(len(year_labels), 1)
+    css = f"""
     <style>
       .custom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      .custom-table col.line-item { width: 42%; }
-      .custom-table col.year { width: 11.6%; }
+      .custom-table col.line-item {{ width: {line_item_width}%; }}
+      .custom-table col.year {{ width: {year_width:.2f}%; }}
       .custom-table th, .custom-table td {
         padding: 2px 6px;
         white-space: nowrap;
@@ -695,13 +702,9 @@ def _render_custom_table_html(
       .custom-table td.negative { color: #b45309; }
     </style>
     """
-    colgroup = (
-        "<colgroup>"
-        "<col class=\"line-item\"/>"
-        "<col class=\"year\"/><col class=\"year\"/><col class=\"year\"/>"
-        "<col class=\"year\"/><col class=\"year\"/>"
-        "</colgroup>"
-    )
+    colgroup = "<colgroup><col class=\"line-item\"/>"
+    colgroup += "".join("<col class=\"year\"/>" for _ in year_labels)
+    colgroup += "</colgroup>"
     table_html = (
         f"{css}<table class=\"custom-table\">{colgroup}"
         f"<thead><tr>{header_cells}</tr></thead>"
@@ -780,7 +783,6 @@ def _build_pnl_excel(input_model):
         ("Exit Year", equity_assumptions["exit_year"]),
         ("Exit Method", equity_assumptions["exit_method"]),
         ("Exit Multiple (x)", equity_assumptions["exit_multiple"]),
-        ("Exit Equity Value (EUR)", equity_assumptions["exit_equity_value_eur"] or 0),
     ]
     assumptions_df = pd.DataFrame(assumptions, columns=["Item", "Value"])
 
@@ -1567,7 +1569,6 @@ def _build_pnl_excel(input_model):
             ("Exit Year", "Exit Year"),
             ("Exit Method", "Exit Method"),
             ("Exit Multiple (x)", "Exit Multiple (x)"),
-            ("Exit Equity Value (EUR)", "Exit Equity Value (EUR)"),
         ]
         for idx, (label, key) in enumerate(equity_rows, start=2):
             ws_equity.cell(row=idx, column=1, value=label)
@@ -1585,7 +1586,6 @@ def _build_pnl_excel(input_model):
         exit_year_cell = "B4"
         exit_method_cell = "B5"
         exit_multiple_cell = "B6"
-        exit_equity_cell = "B7"
 
         ws_equity.cell(row=equity_calc_start + 2, column=1, value="Total Equity")
         ws_equity.cell(
@@ -1607,39 +1607,41 @@ def _build_pnl_excel(input_model):
         ws_equity.cell(
             row=equity_calc_start + 5,
             column=2,
-            value=f"=INDEX('P&L'!B17:F17,1,{exit_year_cell}+1)",
+            value=f"=INDEX('P&L'!B17:F17,1,MIN({exit_year_cell},4)+1)",
         )
         ws_equity.cell(row=equity_calc_start + 6, column=1, value="Net Debt at Exit")
         ws_equity.cell(
             row=equity_calc_start + 6,
             column=2,
-            value=f"=INDEX('Balance Sheet'!B14:F14,1,{exit_year_cell}+1)-INDEX('Balance Sheet'!B10:F10,1,{exit_year_cell}+1)",
+            value=f"=INDEX('Balance Sheet'!B14:F14,1,MIN({exit_year_cell},4)+1)-INDEX('Balance Sheet'!B10:F10,1,MIN({exit_year_cell},4)+1)",
         )
         ws_equity.cell(row=equity_calc_start + 7, column=1, value="Enterprise Value Exit")
         ws_equity.cell(
             row=equity_calc_start + 7,
             column=2,
-            value=(
-                f"=IF({exit_method_cell}=\"Exit Equity Value\","
-                f"{exit_equity_cell}+B{equity_calc_start + 6},"
-                f"{exit_multiple_cell}*B{equity_calc_start + 5})"
-            ),
+            value=f"={exit_multiple_cell}*B{equity_calc_start + 5}",
         )
         ws_equity.cell(row=equity_calc_start + 8, column=1, value="Equity Value Exit")
         ws_equity.cell(
             row=equity_calc_start + 8,
             column=2,
-            value=(
-                f"=IF({exit_method_cell}=\"Exit Equity Value\","
-                f"{exit_equity_cell},"
-                f"B{equity_calc_start + 7}-B{equity_calc_start + 6})"
-            ),
+            value=f"=B{equity_calc_start + 7}-B{equity_calc_start + 6}",
         )
 
         cashflow_start = equity_calc_start + 11
         ws_equity.cell(row=cashflow_start, column=1, value="Equity Cashflows")
         ws_equity.cell(row=cashflow_start + 1, column=1, value="Line Item")
-        for idx, header in enumerate(year_headers, start=2):
+        equity_year_headers = [
+            "Year 0",
+            "Year 1",
+            "Year 2",
+            "Year 3",
+            "Year 4",
+            "Year 5",
+            "Year 6",
+            "Year 7",
+        ]
+        for idx, header in enumerate(equity_year_headers, start=2):
             ws_equity.cell(row=cashflow_start + 1, column=idx, value=header)
 
         ws_equity.cell(row=cashflow_start + 2, column=1, value="Sponsor Cashflow")
@@ -1649,7 +1651,7 @@ def _build_pnl_excel(input_model):
         investor_pct_cell = f"B{equity_calc_start + 4}"
         equity_value_exit_cell = f"B{equity_calc_start + 8}"
 
-        for year_index in range(5):
+        for year_index in range(8):
             col = year_col(2 + year_index)
             ws_equity[f"{col}{cashflow_start + 2}"] = (
                 f"=IF({year_index}=0,-{sponsor_cell},"
@@ -1696,12 +1698,12 @@ def _build_pnl_excel(input_model):
         ws_equity.cell(
             row=kpi_start + 2,
             column=5,
-            value=f"=IRR(B{cashflow_start + 2}:F{cashflow_start + 2})",
+            value=f"=IRR(B{cashflow_start + 2}:I{cashflow_start + 2})",
         )
         ws_equity.cell(
             row=kpi_start + 3,
             column=5,
-            value=f"=IRR(B{cashflow_start + 3}:F{cashflow_start + 3})",
+            value=f"=IRR(B{cashflow_start + 3}:I{cashflow_start + 3})",
         )
 
         writer.close()
@@ -1786,15 +1788,14 @@ def run_app():
 
         st.markdown("<div class=\"nav-section\">FINANCING</div>", unsafe_allow_html=True)
         _nav_item("Financing & Debt")
+        _nav_item("Equity Case")
 
         st.markdown("<div class=\"nav-section\">VALUATION</div>", unsafe_allow_html=True)
         _nav_item("Valuation & Purchase Price")
 
-        st.markdown("<div class=\"nav-section\">EQUITY</div>", unsafe_allow_html=True)
-        _nav_item("Equity Case")
-
         st.markdown("<div class=\"nav-section\">SETTINGS</div>", unsafe_allow_html=True)
         _nav_item("Assumptions (Advanced)")
+        _nav_item("Settings")
 
         page = st.session_state["nav_page"]
         if page == "Operating Model (P&L)":
@@ -2390,50 +2391,34 @@ def run_app():
             )
             exit_year = st.selectbox(
                 "Exit Year",
-                ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"],
-                index=_get_current_value(
-                    "equity.exit_year",
-                    equity_defaults["exit_year"],
+                ["Year 3", "Year 4", "Year 5", "Year 6", "Year 7"],
+                index=[
+                    "Year 3",
+                    "Year 4",
+                    "Year 5",
+                    "Year 6",
+                    "Year 7",
+                ].index(
+                    f"Year {_get_current_value('equity.exit_year', equity_defaults['exit_year'])}"
+                    if _get_current_value(
+                        "equity.exit_year", equity_defaults["exit_year"]
+                    )
+                    >= 3
+                    else "Year 3"
                 ),
             )
             st.session_state["equity.exit_year"] = int(exit_year.split()[-1])
-            exit_method = st.selectbox(
-                "Exit Method",
-                ["Exit Multiple", "Exit Equity Value"],
-                index=0
-                if _get_current_value(
-                    "equity.exit_method",
-                    equity_defaults["exit_method"],
-                )
-                == "Exit Multiple"
-                else 1,
+            st.session_state["equity.exit_method"] = "Exit Multiple"
+            exit_multiple = st.number_input(
+                "Exit Multiple (x EBITDA)",
+                value=_get_current_value(
+                    "equity.exit_multiple",
+                    equity_defaults["exit_multiple"],
+                ),
+                step=0.1,
+                format="%.2f",
             )
-            st.session_state["equity.exit_method"] = exit_method
-            if exit_method == "Exit Multiple":
-                exit_multiple = st.number_input(
-                    "Exit Multiple (x)",
-                    value=_get_current_value(
-                        "equity.exit_multiple",
-                        equity_defaults["exit_multiple"],
-                    ),
-                    step=0.1,
-                    format="%.2f",
-                )
-                st.session_state["equity.exit_multiple"] = exit_multiple
-            else:
-                exit_equity_value = st.number_input(
-                    "Exit Equity Value (EUR)",
-                    value=_get_current_value(
-                        "equity.exit_equity_value_eur",
-                        equity_defaults["exit_equity_value_eur"],
-                    )
-                    or 0.0,
-                    step=100000.0,
-                    format="%.0f",
-                )
-                st.session_state[
-                    "equity.exit_equity_value_eur"
-                ] = exit_equity_value
+            st.session_state["equity.exit_multiple"] = exit_multiple
             st.caption("Distribution Rule: Pro-rata to ownership.")
 
     # Build input model and collect editable values from the assumptions page.
@@ -2769,10 +2754,6 @@ def run_app():
             "equity.exit_multiple",
             equity_defaults["exit_multiple"],
         ),
-        "exit_equity_value_eur": st.session_state.get(
-            "equity.exit_equity_value_eur",
-            equity_defaults["exit_equity_value_eur"],
-        ),
     }
 
     # Run model calculations in the standard order.
@@ -2944,7 +2925,9 @@ def run_app():
             "equity_contribution_eur"
         ].value
         debt_at_close = debt_schedule[0]["opening_debt"]
-        leverage_irr = investment_result["irr"]
+        leverage_irr = st.session_state.get(
+            "equity.sponsor_irr", investment_result["irr"]
+        )
 
         st.markdown("### A. Deal Snapshot")
         deal_snapshot = pd.DataFrame(
@@ -3044,6 +3027,13 @@ def run_app():
             f"{format_currency(equity_contribution)}, the deal generates a levered "
             f"IRR of {format_pct(leverage_irr)}, driven by operating cashflow and "
             "deleveraging."
+        )
+
+    if page == "Settings":
+        st.header("Settings")
+        st.write(
+            "Model utilities and exports are available in the sidebar "
+            "Settings panel."
         )
 
     if page == "Valuation & Purchase Price":
@@ -4872,7 +4862,7 @@ def run_app():
 
     if page == "Equity Case":
         st.header("Equity Case")
-        st.write("Equity sponsor and investor economics (5-year plan).")
+        st.write("Sponsor and investor economics with explicit entry and exit.")
         if st.button(
             "Edit Equity Assumptions",
             key="edit_equity_assumptions_button",
@@ -4896,48 +4886,55 @@ def run_app():
             "equity.exit_year",
             equity_defaults["exit_year"],
         )
-        exit_method = st.session_state.get(
-            "equity.exit_method",
-            equity_defaults["exit_method"],
-        )
         exit_multiple = st.session_state.get(
             "equity.exit_multiple",
             equity_defaults["exit_multiple"],
         )
-        exit_equity_value = st.session_state.get(
-            "equity.exit_equity_value_eur",
-            equity_defaults["exit_equity_value_eur"],
-        )
-
-        ebitda_exit = pnl_result[f"Year {exit_year}"]["ebitda"]
+        exit_year = min(max(exit_year, 3), 7)
+        exit_year_index = min(exit_year, 4)
+        ebitda_exit = pnl_result[f"Year {exit_year_index}"]["ebitda"]
         net_debt_exit = (
-            balance_sheet[exit_year]["financial_debt"]
-            - balance_sheet[exit_year]["cash"]
+            balance_sheet[exit_year_index]["financial_debt"]
+            - balance_sheet[exit_year_index]["cash"]
         )
-        if exit_method == "Exit Equity Value" and exit_equity_value:
-            equity_value_exit = exit_equity_value
-            enterprise_value_exit = equity_value_exit + net_debt_exit
-        else:
-            enterprise_value_exit = ebitda_exit * exit_multiple
-            equity_value_exit = enterprise_value_exit - net_debt_exit
+        enterprise_value_exit = ebitda_exit * exit_multiple
+        equity_value_exit = enterprise_value_exit - net_debt_exit
 
-        kpi_row = st.columns(4)
-        kpi_row[0].metric(
-            "Sponsor Equity",
-            format_currency(sponsor_equity),
-        )
-        kpi_row[1].metric(
-            "Investor Equity",
-            format_currency(investor_equity),
-        )
-        kpi_row[2].metric(
+        sponsor_cashflows = []
+        investor_cashflows = []
+        for year_index in range(8):
+            if year_index == 0:
+                sponsor_cf = -sponsor_equity
+                investor_cf = -investor_equity
+            elif year_index == exit_year:
+                sponsor_cf = equity_value_exit * sponsor_pct
+                investor_cf = equity_value_exit * investor_pct
+            else:
+                sponsor_cf = 0.0
+                investor_cf = 0.0
+            sponsor_cashflows.append(sponsor_cf)
+            investor_cashflows.append(investor_cf)
+
+        sponsor_irr = _calculate_irr(sponsor_cashflows)
+        investor_irr = _calculate_irr(investor_cashflows)
+        st.session_state["equity.sponsor_irr"] = sponsor_irr
+        st.session_state["equity.investor_irr"] = investor_irr
+
+        kpi_row_1 = st.columns(3)
+        kpi_row_2 = st.columns(3)
+        kpi_row_1[0].metric("Sponsor Equity (EUR)", format_currency(sponsor_equity))
+        kpi_row_1[1].metric("Investor Equity (EUR)", format_currency(investor_equity))
+        kpi_row_1[2].metric(
             "Ownership Split",
             f"{format_pct(sponsor_pct)} / {format_pct(investor_pct)}",
         )
-        kpi_row[3].metric(
-            "Exit Equity Value",
-            format_currency(equity_value_exit),
+        kpi_row_2[0].metric(
+            "Exit Equity Value (EUR)", format_currency(equity_value_exit)
         )
+        kpi_row_2[1].metric(
+            "Levered Sponsor IRR", format_pct(sponsor_irr)
+        )
+        kpi_row_2[2].metric("Investor IRR", format_pct(investor_irr))
 
         st.markdown("### Sources & Uses")
         purchase_price = input_model.transaction_and_financing[
@@ -5049,27 +5046,18 @@ def run_app():
             [
                 {
                     "Line Item": "Sponsor Equity",
-                    "Year 0": sponsor_equity,
-                    "Year 1": format_pct(sponsor_pct),
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
+                    "Equity (EUR)": sponsor_equity,
+                    "Ownership (%)": format_pct(sponsor_pct),
                 },
                 {
                     "Line Item": "Investor Equity",
-                    "Year 0": investor_equity,
-                    "Year 1": format_pct(investor_pct),
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
+                    "Equity (EUR)": investor_equity,
+                    "Ownership (%)": format_pct(investor_pct),
                 },
                 {
                     "Line Item": "Total Equity",
-                    "Year 0": total_equity,
-                    "Year 1": format_pct(1.0),
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
+                    "Equity (EUR)": total_equity,
+                    "Ownership (%)": format_pct(1.0),
                 },
             ]
         )
@@ -5077,57 +5065,51 @@ def run_app():
             ownership_table,
             set(),
             {"Total Equity"},
-            {"Sponsor Equity": format_currency, "Investor Equity": format_currency, "Total Equity": format_currency},
+            {
+                "Sponsor Equity": lambda value: format_currency(value)
+                if isinstance(value, (int, float))
+                else value,
+                "Investor Equity": lambda value: format_currency(value)
+                if isinstance(value, (int, float))
+                else value,
+                "Total Equity": lambda value: format_currency(value)
+                if isinstance(value, (int, float))
+                else value,
+            },
+            year_labels=["Equity (EUR)", "Ownership (%)"],
         )
 
         st.markdown("### Equity Cashflows")
-        sponsor_cashflows = []
-        investor_cashflows = []
-        for year_index in range(exit_year + 1):
-            if year_index == 0:
-                sponsor_cf = -sponsor_equity
-                investor_cf = -investor_equity
-            elif year_index == exit_year:
-                sponsor_cf = equity_value_exit * sponsor_pct
-                investor_cf = equity_value_exit * investor_pct
-            else:
-                sponsor_cf = 0.0
-                investor_cf = 0.0
-            sponsor_cashflows.append(sponsor_cf)
-            investor_cashflows.append(investor_cf)
-
         cashflow_rows = [
             {
                 "Line Item": "Sponsor Cashflow",
-                **{f"Year {i}": sponsor_cashflows[i] for i in range(exit_year + 1)},
+                **{f"Year {i}": sponsor_cashflows[i] for i in range(8)},
             },
             {
                 "Line Item": "Investor Cashflow",
-                **{f"Year {i}": investor_cashflows[i] for i in range(exit_year + 1)},
+                **{f"Year {i}": investor_cashflows[i] for i in range(8)},
             },
         ]
         cashflow_table = pd.DataFrame(cashflow_rows)
-        for year_index in range(exit_year + 1, 5):
-            cashflow_table[f"Year {year_index}"] = ""
-        cashflow_table = cashflow_table[
-            ["Line Item"] + [f"Year {i}" for i in range(5)]
-        ]
+        year_labels = [f"Year {i}" for i in range(8)]
+        cashflow_table = cashflow_table[["Line Item"] + year_labels]
         _render_custom_table_html(
             cashflow_table,
             set(),
             set(),
             {},
+            year_labels=year_labels,
         )
 
-        sponsor_irr = _calculate_irr(sponsor_cashflows)
-        investor_irr = _calculate_irr(investor_cashflows)
+        sponsor_exit_proceeds = equity_value_exit * sponsor_pct
+        investor_exit_proceeds = equity_value_exit * investor_pct
         sponsor_moic = (
-            (sponsor_cashflows[-1] / abs(sponsor_equity))
+            (sponsor_exit_proceeds / abs(sponsor_equity))
             if sponsor_equity
             else 0
         )
         investor_moic = (
-            (investor_cashflows[-1] / abs(investor_equity))
+            (investor_exit_proceeds / abs(investor_equity))
             if investor_equity
             else 0
         )
@@ -5138,14 +5120,14 @@ def run_app():
                 {
                     "Investor": "Sponsor",
                     "Invested Equity": format_currency(sponsor_equity),
-                    "Exit Proceeds": format_currency(sponsor_cashflows[-1]),
+                    "Exit Proceeds": format_currency(sponsor_exit_proceeds),
                     "MOIC": f"{sponsor_moic:.2f}x",
                     "IRR": format_pct(sponsor_irr),
                 },
                 {
                     "Investor": "Investor",
                     "Invested Equity": format_currency(investor_equity),
-                    "Exit Proceeds": format_currency(investor_cashflows[-1]),
+                    "Exit Proceeds": format_currency(investor_exit_proceeds),
                     "MOIC": f"{investor_moic:.2f}x",
                     "IRR": format_pct(investor_irr),
                 },
@@ -5157,9 +5139,11 @@ def run_app():
         if explain_equity:
             st.markdown("### Explanation")
             st.write(
-                f"Equity is split between sponsor ({format_pct(sponsor_pct)}) "
-                f"and investor ({format_pct(investor_pct)}), based on their "
-                "contributions at close."
+                f"Management contributes {format_currency(sponsor_equity)} of equity, "
+                "which is insufficient to fund the transaction alone. "
+                f"An investor contributes {format_currency(investor_equity)}, "
+                f"resulting in an initial ownership split of "
+                f"{format_pct(sponsor_pct)} sponsor and {format_pct(investor_pct)} investor."
             )
             st.write(
                 f"The purchase price of {format_currency(purchase_price)} is "
@@ -5167,17 +5151,19 @@ def run_app():
                 f"{format_currency(total_equity)} of equity."
             )
             st.write(
-                f"Exit value is determined using {exit_method}. At exit year "
-                f"{exit_year}, equity value is {format_currency(equity_value_exit)}, "
-                "distributed pro-rata to ownership."
+                f"At exit year {exit_year}, the business is valued using an "
+                f"EBITDA multiple of {exit_multiple:.2f}x. This yields an equity "
+                f"value of {format_currency(equity_value_exit)}, distributed "
+                "pro-rata to ownership."
             )
             st.write(
-                "Sponsor and investor returns are driven by the exit value, "
-                "the equity split, and the leverage level over the hold period."
+                "During the holding period, no interim distributions are modeled. "
+                "The investor exits fully in the exit year and does not receive "
+                "cashflows thereafter. Management retains 100% ownership post-exit."
             )
             st.write(
-                "Key sensitivities are the exit multiple, net debt at exit, "
-                "and the level of leverage at close."
+                "Returns are driven primarily by the exit multiple, leverage at "
+                "close, and the level of net debt at exit."
             )
 
 
