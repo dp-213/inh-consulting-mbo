@@ -12,9 +12,6 @@ def calculate_cashflow(input_model, pnl_result, debt_schedule):
             "senior_term_loan_start_eur"
         ].value,
     )
-    equity_amount = input_model.transaction_and_financing[
-        "equity_contribution_eur"
-    ].value
 
     cashflow_assumptions = getattr(input_model, "cashflow_assumptions", {})
     tax_cash_rate_pct = cashflow_assumptions.get(
@@ -88,12 +85,9 @@ def calculate_cashflow(input_model, pnl_result, debt_schedule):
         investing_cf = -capex
         free_cashflow = operating_cf + investing_cf
 
-        # Financing cash flow includes interest, debt repayment, and initial funding.
+        # Financing cash flow includes only debt drawdown and debt service.
         financing_cf = (
-            debt_drawdown
-            + equity_amount
-            - interest
-            - principal_repayment
+            debt_drawdown - interest - principal_repayment
             if i == 0
             else -(interest + principal_repayment)
         )
