@@ -1801,326 +1801,6 @@ def run_app():
         _nav_item("Settings")
 
         page = st.session_state["nav_page"]
-        if page == "Operating Model (P&L)":
-            st.markdown("## Quick Assumptions")
-            st.session_state["edit_pnl_assumptions"] = True
-            if st.session_state.get("edit_pnl_assumptions"):
-                scenario_options = ["Base", "Best", "Worst"]
-                selected_scenario = st.session_state.get(
-                    "scenario_selection.selected_scenario",
-                    base_model.scenario_selection["selected_scenario"].value,
-                )
-                scenario_index = (
-                    scenario_options.index(selected_scenario)
-                    if selected_scenario in scenario_options
-                    else 0
-                )
-                scenario_key = selected_scenario.lower()
-                utilization_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["scenario_parameters", "utilization_rate", scenario_key],
-                )
-                day_rate_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["scenario_parameters", "day_rate_eur", scenario_key],
-                )
-                fte_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["operating_assumptions", "consulting_fte_start"],
-                )
-                work_days_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["operating_assumptions", "work_days_per_year"],
-                )
-                day_rate_growth_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["operating_assumptions", "day_rate_growth_pct"],
-                )
-                guarantee_y1_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["operating_assumptions", "revenue_guarantee_pct_year_1"],
-                )
-                guarantee_y2_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["operating_assumptions", "revenue_guarantee_pct_year_2"],
-                )
-                guarantee_y3_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["operating_assumptions", "revenue_guarantee_pct_year_3"],
-                )
-                base_cost_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["personnel_cost_assumptions", "avg_consultant_base_cost_eur_per_year"],
-                )
-                bonus_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["personnel_cost_assumptions", "bonus_pct_of_base"],
-                )
-                payroll_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["personnel_cost_assumptions", "payroll_burden_pct_of_comp"],
-                )
-                wage_inflation_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["personnel_cost_assumptions", "wage_inflation_pct"],
-                )
-                legal_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "legal_audit_eur_per_year"],
-                )
-                it_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "it_and_software_eur_per_year"],
-                )
-                rent_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "rent_eur_per_year"],
-                )
-                other_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "other_overhead_eur_per_year"],
-                )
-                insurance_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "insurance_eur_per_year"],
-                )
-                overhead_inflation_field = _get_field_by_path(
-                    base_model.__dict__,
-                    ["overhead_and_variable_costs", "overhead_inflation_pct"],
-                )
-                utilization_defaults = st.session_state.get(
-                    "utilization_by_year",
-                    [utilization_field.value] * 5,
-                )
-                pnl_controls = [
-                    {
-                        "type": "select",
-                        "label": "Scenario",
-                        "options": scenario_options,
-                        "index": scenario_index,
-                        "field_key": "scenario_selection.selected_scenario",
-                    },
-                    {
-                        "type": "int",
-                        "label": "Consulting FTE",
-                        "field_key": "operating_assumptions.consulting_fte_start",
-                        "value": _get_current_value(
-                            "operating_assumptions.consulting_fte_start",
-                            fte_field.value,
-                        ),
-                    },
-                    {
-                        "type": "int",
-                        "label": "Workdays per Year",
-                        "field_key": "operating_assumptions.work_days_per_year",
-                        "value": _get_current_value(
-                            "operating_assumptions.work_days_per_year",
-                            work_days_field.value,
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Utilization Year 0 (%)",
-                        "field_key": "utilization_by_year.0",
-                        "value": _get_current_value(
-                            "utilization_by_year.0",
-                            utilization_defaults[0],
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Utilization Year 1 (%)",
-                        "field_key": "utilization_by_year.1",
-                        "value": _get_current_value(
-                            "utilization_by_year.1",
-                            utilization_defaults[1],
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Utilization Year 2 (%)",
-                        "field_key": "utilization_by_year.2",
-                        "value": _get_current_value(
-                            "utilization_by_year.2",
-                            utilization_defaults[2],
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Utilization Year 3 (%)",
-                        "field_key": "utilization_by_year.3",
-                        "value": _get_current_value(
-                            "utilization_by_year.3",
-                            utilization_defaults[3],
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Utilization Year 4 (%)",
-                        "field_key": "utilization_by_year.4",
-                        "value": _get_current_value(
-                            "utilization_by_year.4",
-                            utilization_defaults[4],
-                        ),
-                    },
-                    {
-                        "type": "number",
-                        "label": "Day Rate (EUR)",
-                        "field_key": f"scenario_parameters.day_rate_eur.{scenario_key}",
-                        "value": _get_current_value(
-                            f"scenario_parameters.day_rate_eur.{scenario_key}",
-                            day_rate_field.value,
-                        ),
-                        "step": 100.0,
-                        "format": "%.0f",
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Day Rate Growth (%)",
-                        "field_key": "operating_assumptions.day_rate_growth_pct",
-                        "value": _get_current_value(
-                            "operating_assumptions.day_rate_growth_pct",
-                            day_rate_growth_field.value,
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Guarantee Year 1 (%)",
-                        "field_key": "operating_assumptions.revenue_guarantee_pct_year_1",
-                        "value": _get_current_value(
-                            "operating_assumptions.revenue_guarantee_pct_year_1",
-                            guarantee_y1_field.value,
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Guarantee Year 2 (%)",
-                        "field_key": "operating_assumptions.revenue_guarantee_pct_year_2",
-                        "value": _get_current_value(
-                            "operating_assumptions.revenue_guarantee_pct_year_2",
-                            guarantee_y2_field.value,
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Guarantee Year 3 (%)",
-                        "field_key": "operating_assumptions.revenue_guarantee_pct_year_3",
-                        "value": _get_current_value(
-                            "operating_assumptions.revenue_guarantee_pct_year_3",
-                            guarantee_y3_field.value,
-                        ),
-                    },
-                    {
-                        "type": "number",
-                        "label": "Consultant Base Cost (EUR)",
-                        "field_key": "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year",
-                        "value": _get_current_value(
-                            "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year",
-                            base_cost_field.value,
-                        ),
-                        "step": 1000.0,
-                        "format": "%.0f",
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Bonus (%)",
-                        "field_key": "personnel_cost_assumptions.bonus_pct_of_base",
-                        "value": _get_current_value(
-                            "personnel_cost_assumptions.bonus_pct_of_base",
-                            bonus_field.value,
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Payroll Burden (%)",
-                        "field_key": "personnel_cost_assumptions.payroll_burden_pct_of_comp",
-                        "value": _get_current_value(
-                            "personnel_cost_assumptions.payroll_burden_pct_of_comp",
-                            payroll_field.value,
-                        ),
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Wage Inflation (%)",
-                        "field_key": "personnel_cost_assumptions.wage_inflation_pct",
-                        "value": _get_current_value(
-                            "personnel_cost_assumptions.wage_inflation_pct",
-                            wage_inflation_field.value,
-                        ),
-                    },
-                    {
-                        "type": "number",
-                        "label": "External Advisors (EUR)",
-                        "field_key": "overhead_and_variable_costs.legal_audit_eur_per_year",
-                        "value": _get_current_value(
-                            "overhead_and_variable_costs.legal_audit_eur_per_year",
-                            legal_field.value,
-                        ),
-                        "step": 10000.0,
-                        "format": "%.0f",
-                    },
-                    {
-                        "type": "number",
-                        "label": "IT (EUR)",
-                        "field_key": "overhead_and_variable_costs.it_and_software_eur_per_year",
-                        "value": _get_current_value(
-                            "overhead_and_variable_costs.it_and_software_eur_per_year",
-                            it_field.value,
-                        ),
-                        "step": 10000.0,
-                        "format": "%.0f",
-                    },
-                    {
-                        "type": "number",
-                        "label": "Office (EUR)",
-                        "field_key": "overhead_and_variable_costs.rent_eur_per_year",
-                        "value": _get_current_value(
-                            "overhead_and_variable_costs.rent_eur_per_year",
-                            rent_field.value,
-                        ),
-                        "step": 10000.0,
-                        "format": "%.0f",
-                    },
-                    {
-                        "type": "number",
-                        "label": "Other Services (EUR)",
-                        "field_key": "overhead_and_variable_costs.other_overhead_eur_per_year",
-                        "value": _get_current_value(
-                            "overhead_and_variable_costs.other_overhead_eur_per_year",
-                            other_field.value,
-                        ),
-                        "step": 10000.0,
-                        "format": "%.0f",
-                    },
-                    {
-                        "type": "number",
-                        "label": "Insurance (EUR)",
-                        "field_key": "overhead_and_variable_costs.insurance_eur_per_year",
-                        "value": _get_current_value(
-                            "overhead_and_variable_costs.insurance_eur_per_year",
-                            insurance_field.value,
-                        ),
-                        "step": 10000.0,
-                        "format": "%.0f",
-                    },
-                    {
-                        "type": "pct",
-                        "label": "Overhead Inflation (%)",
-                        "field_key": "overhead_and_variable_costs.overhead_inflation_pct",
-                        "value": _get_current_value(
-                            "overhead_and_variable_costs.overhead_inflation_pct",
-                            overhead_inflation_field.value,
-                        ),
-                    },
-                ]
-                _render_inline_controls("P&L Drivers", pnl_controls, columns=1)
-                st.session_state["utilization_by_year"] = [
-                    st.session_state.get(
-                        f"utilization_by_year.{year_index}",
-                        utilization_defaults[year_index],
-                    )
-                    for year_index in range(5)
-                ]
         if page == "Cashflow & Liquidity" and st.session_state.get(
             "edit_cashflow_assumptions"
         ):
@@ -2356,75 +2036,6 @@ def run_app():
                 },
             ]
             _render_inline_controls("Financing Drivers", financing_controls, columns=1)
-        if page == "Equity Case":
-            with st.expander("Equity Assumptions", expanded=True):
-                equity_defaults = _default_equity_assumptions(base_model)
-                st.markdown("**Entry**")
-                sponsor_equity = st.number_input(
-                    "Sponsor Equity Contribution (EUR)",
-                    value=_get_current_value(
-                        "equity.sponsor_equity_eur",
-                        equity_defaults["sponsor_equity_eur"],
-                    ),
-                    step=100000.0,
-                    format="%.0f",
-                )
-                st.session_state["equity.sponsor_equity_eur"] = sponsor_equity
-                investor_equity = st.number_input(
-                    "Investor Equity Contribution (EUR)",
-                    value=_get_current_value(
-                        "equity.investor_equity_eur",
-                        equity_defaults["investor_equity_eur"],
-                    ),
-                    step=100000.0,
-                    format="%.0f",
-                )
-                st.session_state["equity.investor_equity_eur"] = investor_equity
-                total_equity = sponsor_equity + investor_equity
-                sponsor_pct = (
-                    sponsor_equity / total_equity if total_equity else 0.0
-                )
-                investor_pct = (
-                    investor_equity / total_equity if total_equity else 0.0
-                )
-                st.caption(
-                    f"Ownership Split: Sponsor {format_pct(sponsor_pct)}, "
-                    f"Investor {format_pct(investor_pct)}"
-                )
-                st.markdown("**Investor Exit**")
-                exit_year = st.selectbox(
-                    "Exit Year",
-                    ["Year 3", "Year 4", "Year 5", "Year 6", "Year 7"],
-                    index=[
-                        "Year 3",
-                        "Year 4",
-                        "Year 5",
-                        "Year 6",
-                        "Year 7",
-                    ].index(
-                        f"Year {_get_current_value('equity.exit_year', equity_defaults['exit_year'])}"
-                        if _get_current_value(
-                            "equity.exit_year", equity_defaults["exit_year"]
-                        )
-                        >= 3
-                        else "Year 3"
-                    ),
-                )
-                st.session_state["equity.exit_year"] = int(
-                    exit_year.split()[-1]
-                )
-                exit_multiple = st.number_input(
-                    "Exit Multiple (x EBITDA)",
-                    value=_get_current_value(
-                        "equity.exit_multiple",
-                        equity_defaults["exit_multiple"],
-                    ),
-                    step=0.1,
-                    format="%.2f",
-                )
-                st.session_state["equity.exit_multiple"] = exit_multiple
-                st.markdown("**Distribution Logic**")
-                st.caption("Distribution Rule: Pro-rata to ownership.")
 
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
@@ -2435,9 +2046,7 @@ def run_app():
 
     if page == "Assumptions (Advanced)":
         st.header("Assumptions (Advanced)")
-        st.write(
-            "Review and adjust all input assumptions from the Excel sheet."
-        )
+        st.write("Master input sheet – all model assumptions in one place")
 
         scenario_options = ["Base", "Best", "Worst"]
         scenario_default = base_model.scenario_selection[
@@ -2448,162 +2057,466 @@ def run_app():
             if scenario_default in scenario_options
             else 0
         )
-        selected_scenario = st.selectbox(
-            "Scenario (controls scenario-driven fields)",
+        info_cols = st.columns([1, 1])
+        selected_scenario = info_cols[0].selectbox(
+            "Scenario",
             scenario_options,
             index=scenario_index,
+            key="assumptions.scenario",
         )
-        _set_field_value("scenario_selection.selected_scenario", selected_scenario)
-        auto_sync = st.checkbox("Auto-update scenario inputs", value=True)
-
-        previous_scenario = st.session_state.get(
-            "selected_scenario", selected_scenario
+        auto_sync = info_cols[1].toggle(
+            "Auto-apply scenario values", value=True
         )
-        if auto_sync and selected_scenario != previous_scenario:
-            scenario_key = selected_scenario.lower()
-            for metric_key, scenario_map in (
-                base_model.scenario_parameters.items()
-            ):
-                if scenario_key in scenario_map:
-                    widget_key = (
-                        f"scenario_parameters.{metric_key}.{scenario_key}"
-                    )
-                    st.session_state[widget_key] = scenario_map[
-                        scenario_key
-                    ].value
-        st.session_state["selected_scenario"] = selected_scenario
-
+        st.info("Changes here affect all pages instantly.")
+        st.session_state["scenario_selection.selected_scenario"] = (
+            selected_scenario
+        )
         scenario_key = selected_scenario.lower()
-        utilization_field = _get_field_by_path(
-            base_model.__dict__,
-            ["scenario_parameters", "utilization_rate", scenario_key],
-        )
-        day_rate_field = _get_field_by_path(
-            base_model.__dict__,
-            ["scenario_parameters", "day_rate_eur", scenario_key],
-        )
-        purchase_price_field = _get_field_by_path(
-            base_model.__dict__,
-            ["transaction_and_financing", "purchase_price_eur"],
-        )
-        equity_field = _get_field_by_path(
-            base_model.__dict__,
-            ["transaction_and_financing", "equity_contribution_eur"],
-        )
-        debt_field = _get_field_by_path(
-            base_model.__dict__,
-            ["transaction_and_financing", "senior_term_loan_start_eur"],
-        )
-        interest_field = _get_field_by_path(
-            base_model.__dict__,
-            ["transaction_and_financing", "senior_interest_rate_pct"],
-        )
 
-        advanced_controls = [
-            {
-                "type": "select",
-                "label": "Scenario",
-                "options": scenario_options,
-                "index": scenario_index,
-                "field_key": "scenario_selection.selected_scenario",
-            },
-            {
-                "type": "pct",
-                "label": "Utilization (%)",
-                "field_key": f"scenario_parameters.utilization_rate.{scenario_key}",
-                "value": utilization_field.value,
-            },
-            {
-                "type": "number",
-                "label": "Day Rate (EUR)",
-                "field_key": f"scenario_parameters.day_rate_eur.{scenario_key}",
-                "value": day_rate_field.value,
-                "step": 100.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Purchase Price (EUR)",
-                "field_key": "transaction_and_financing.purchase_price_eur",
-                "value": purchase_price_field.value,
-                "step": 100000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Equity Contribution (EUR)",
-                "field_key": "transaction_and_financing.equity_contribution_eur",
-                "value": equity_field.value,
-                "step": 100000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "number",
-                "label": "Debt Amount (EUR)",
-                "field_key": "transaction_and_financing.senior_term_loan_start_eur",
-                "value": debt_field.value,
-                "step": 100000.0,
-                "format": "%.0f",
-            },
-            {
-                "type": "pct",
-                "label": "Interest Rate (%)",
-                "field_key": "transaction_and_financing.senior_interest_rate_pct",
-                "value": interest_field.value,
-            },
-        ]
-        _render_inline_controls("Key Inputs", advanced_controls, columns=3)
+        def _clamp_pct(value):
+            if value is None or pd.isna(value):
+                return 0.0
+            return max(0.0, min(float(value), 1.0))
 
-        section_order = [
-            "scenario_parameters",
-            "operating_assumptions",
-            "personnel_cost_assumptions",
-            "overhead_and_variable_costs",
-            "capex_and_working_capital",
-            "transaction_and_financing",
-            "tax_and_distributions",
-            "valuation_assumptions",
-        ]
-        section_labels = {
-            "scenario_parameters": "Scenario Parameters",
-            "operating_assumptions": "Operating Assumptions",
-            "personnel_cost_assumptions": "Personnel Costs",
-            "overhead_and_variable_costs": "Overhead & Variable Costs",
-            "capex_and_working_capital": "Capex & Working Capital",
-            "transaction_and_financing": "Transaction & Financing",
-            "tax_and_distributions": "Tax & Valuation",
-            "valuation_assumptions": "Tax & Valuation",
-        }
-        section_help = {
-            "scenario_parameters": "Scenario-specific utilization and day-rate inputs.",
-            "operating_assumptions": "Headcount and delivery capacity assumptions.",
-            "personnel_cost_assumptions": "Compensation, bonus, and payroll drivers.",
-            "overhead_and_variable_costs": "Fixed overhead and revenue-linked costs.",
-            "capex_and_working_capital": "Capex, depreciation, and liquidity settings.",
-            "transaction_and_financing": "Purchase price and debt structure inputs.",
-            "tax_and_distributions": "Tax rates and payout assumptions.",
-            "valuation_assumptions": "Buyer/seller valuation and DCF parameters.",
-        }
+        def _non_negative(value):
+            if value is None or pd.isna(value):
+                return 0.0
+            return max(0.0, float(value))
 
-        edited_values = {}
-        for section_key in section_order:
-            if section_key not in base_model.__dict__:
-                continue
-            section_data = base_model.__dict__[section_key]
-            if not isinstance(section_data, dict):
-                continue
-            section_title = section_labels.get(
-                section_key, _format_section_title(section_key)
+        if auto_sync:
+            util_value = st.session_state.get(
+                f"scenario_parameters.utilization_rate.{scenario_key}",
+                base_model.scenario_parameters["utilization_rate"][
+                    scenario_key
+                ].value,
             )
-            with st.expander(section_title, expanded=False):
-                st.caption(section_help.get(section_key, ""))
-                edited_values[section_key] = _render_section(
-                    section_data,
-                    section_key,
-                    selected_scenario=selected_scenario.lower(),
-                    is_scenario_section=section_key == "scenario_parameters",
-                )
-        st.session_state["edited_values"] = edited_values
+            st.session_state["utilization_by_year"] = [util_value] * 5
+            for i in range(5):
+                st.session_state[f"utilization_by_year.{i}"] = util_value
+
+        revenue_rows = [
+            {
+                "Parameter": "Consulting FTE",
+                "Unit": "FTE",
+                "Base": st.session_state.get(
+                    "operating_assumptions.consulting_fte_start",
+                    base_model.operating_assumptions["consulting_fte_start"].value,
+                ),
+                "Best": st.session_state.get(
+                    "operating_assumptions.consulting_fte_start",
+                    base_model.operating_assumptions["consulting_fte_start"].value,
+                ),
+                "Worst": st.session_state.get(
+                    "operating_assumptions.consulting_fte_start",
+                    base_model.operating_assumptions["consulting_fte_start"].value,
+                ),
+                "Description": "Starting consulting headcount.",
+            },
+            {
+                "Parameter": "Workdays per Year",
+                "Unit": "Days",
+                "Base": st.session_state.get(
+                    "operating_assumptions.work_days_per_year",
+                    base_model.operating_assumptions["work_days_per_year"].value,
+                ),
+                "Best": st.session_state.get(
+                    "operating_assumptions.work_days_per_year",
+                    base_model.operating_assumptions["work_days_per_year"].value,
+                ),
+                "Worst": st.session_state.get(
+                    "operating_assumptions.work_days_per_year",
+                    base_model.operating_assumptions["work_days_per_year"].value,
+                ),
+                "Description": "Standard workdays per consultant.",
+            },
+            {
+                "Parameter": "Utilization (%)",
+                "Unit": "%",
+                "Base": st.session_state.get(
+                    "scenario_parameters.utilization_rate.base",
+                    base_model.scenario_parameters["utilization_rate"]["base"].value,
+                ),
+                "Best": st.session_state.get(
+                    "scenario_parameters.utilization_rate.best",
+                    base_model.scenario_parameters["utilization_rate"]["best"].value,
+                ),
+                "Worst": st.session_state.get(
+                    "scenario_parameters.utilization_rate.worst",
+                    base_model.scenario_parameters["utilization_rate"]["worst"].value,
+                ),
+                "Description": "Billable utilization rate.",
+            },
+            {
+                "Parameter": "Day Rate (EUR)",
+                "Unit": "EUR",
+                "Base": st.session_state.get(
+                    "scenario_parameters.day_rate_eur.base",
+                    base_model.scenario_parameters["day_rate_eur"]["base"].value,
+                ),
+                "Best": st.session_state.get(
+                    "scenario_parameters.day_rate_eur.best",
+                    base_model.scenario_parameters["day_rate_eur"]["best"].value,
+                ),
+                "Worst": st.session_state.get(
+                    "scenario_parameters.day_rate_eur.worst",
+                    base_model.scenario_parameters["day_rate_eur"]["worst"].value,
+                ),
+                "Description": "Base daily billing rate.",
+            },
+            {
+                "Parameter": "Day Rate Growth (% p.a.)",
+                "Unit": "%",
+                "Base": st.session_state.get(
+                    "operating_assumptions.day_rate_growth_pct",
+                    base_model.operating_assumptions["day_rate_growth_pct"].value,
+                ),
+                "Best": st.session_state.get(
+                    "operating_assumptions.day_rate_growth_pct",
+                    base_model.operating_assumptions["day_rate_growth_pct"].value,
+                ),
+                "Worst": st.session_state.get(
+                    "operating_assumptions.day_rate_growth_pct",
+                    base_model.operating_assumptions["day_rate_growth_pct"].value,
+                ),
+                "Description": "Annual pricing growth.",
+            },
+        ]
+        st.markdown("### Revenue Drivers")
+        revenue_df = pd.DataFrame(revenue_rows)
+        revenue_edit = st.data_editor(
+            revenue_df,
+            hide_index=True,
+            key="assumptions.revenue_drivers",
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Description": st.column_config.TextColumn(disabled=True),
+            },
+            use_container_width=True,
+        )
+        for _, row in revenue_edit.iterrows():
+            param = row["Parameter"]
+            if param == "Utilization (%)":
+                st.session_state["scenario_parameters.utilization_rate.base"] = _clamp_pct(row["Base"])
+                st.session_state["scenario_parameters.utilization_rate.best"] = _clamp_pct(row["Best"])
+                st.session_state["scenario_parameters.utilization_rate.worst"] = _clamp_pct(row["Worst"])
+            elif param == "Day Rate (EUR)":
+                st.session_state["scenario_parameters.day_rate_eur.base"] = _non_negative(row["Base"])
+                st.session_state["scenario_parameters.day_rate_eur.best"] = _non_negative(row["Best"])
+                st.session_state["scenario_parameters.day_rate_eur.worst"] = _non_negative(row["Worst"])
+            elif param == "Consulting FTE":
+                st.session_state["operating_assumptions.consulting_fte_start"] = _non_negative(row["Base"])
+            elif param == "Workdays per Year":
+                st.session_state["operating_assumptions.work_days_per_year"] = _non_negative(row["Base"])
+            elif param == "Day Rate Growth (% p.a.)":
+                st.session_state["operating_assumptions.day_rate_growth_pct"] = _clamp_pct(row["Base"])
+
+        st.markdown("### Revenue Guarantees")
+        guarantee_df = pd.DataFrame(
+            [
+                {"Year": "Year 1", "Guarantee %": st.session_state.get("operating_assumptions.revenue_guarantee_pct_year_1", base_model.operating_assumptions["revenue_guarantee_pct_year_1"].value), "Description": "Guaranteed share of revenue in Year 1."},
+                {"Year": "Year 2", "Guarantee %": st.session_state.get("operating_assumptions.revenue_guarantee_pct_year_2", base_model.operating_assumptions["revenue_guarantee_pct_year_2"].value), "Description": "Guaranteed share of revenue in Year 2."},
+                {"Year": "Year 3", "Guarantee %": st.session_state.get("operating_assumptions.revenue_guarantee_pct_year_3", base_model.operating_assumptions["revenue_guarantee_pct_year_3"].value), "Description": "Guaranteed share of revenue in Year 3."},
+            ]
+        )
+        guarantee_edit = st.data_editor(
+            guarantee_df,
+            hide_index=True,
+            key="assumptions.revenue_guarantees",
+            column_config={
+                "Year": st.column_config.TextColumn(disabled=True),
+                "Description": st.column_config.TextColumn(disabled=True),
+            },
+            use_container_width=True,
+        )
+        guarantee_map = {
+            "Year 1": "operating_assumptions.revenue_guarantee_pct_year_1",
+            "Year 2": "operating_assumptions.revenue_guarantee_pct_year_2",
+            "Year 3": "operating_assumptions.revenue_guarantee_pct_year_3",
+        }
+        for _, row in guarantee_edit.iterrows():
+            key = guarantee_map.get(row["Year"])
+            if key:
+                st.session_state[key] = _clamp_pct(row["Guarantee %"])
+
+        st.markdown("### Personnel Costs")
+        personnel_df = pd.DataFrame(
+            [
+                {
+                    "Role": "Consultant Base Salary",
+                    "Cost Type": "Fixed",
+                    "Base Value (EUR)": st.session_state.get(
+                        "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year",
+                        base_model.personnel_cost_assumptions["avg_consultant_base_cost_eur_per_year"].value,
+                    ),
+                    "Growth (%)": st.session_state.get(
+                        "personnel_cost_assumptions.wage_inflation_pct",
+                        base_model.personnel_cost_assumptions["wage_inflation_pct"].value,
+                    ),
+                    "Notes": "Base salary per consultant.",
+                },
+                {
+                    "Role": "Consultant Variable (% Revenue)",
+                    "Cost Type": "Percent of Base",
+                    "Base Value (EUR)": st.session_state.get(
+                        "personnel_cost_assumptions.bonus_pct_of_base",
+                        base_model.personnel_cost_assumptions["bonus_pct_of_base"].value,
+                    ),
+                    "Growth (%)": "",
+                    "Notes": "Bonus as % of base salary.",
+                },
+                {
+                    "Role": "Backoffice Cost per FTE",
+                    "Cost Type": "Fixed",
+                    "Base Value (EUR)": st.session_state.get(
+                        "operating_assumptions.avg_backoffice_salary_eur_per_year",
+                        base_model.operating_assumptions["avg_backoffice_salary_eur_per_year"].value,
+                    ),
+                    "Growth (%)": st.session_state.get(
+                        "personnel_cost_assumptions.wage_inflation_pct",
+                        base_model.personnel_cost_assumptions["wage_inflation_pct"].value,
+                    ),
+                    "Notes": "Average backoffice salary.",
+                },
+                {
+                    "Role": "Management / MD Cost",
+                    "Cost Type": "Fixed",
+                    "Base Value (EUR)": st.session_state.get(
+                        "assumptions.management_md_cost_eur",
+                        0.0,
+                    ),
+                    "Growth (%)": "",
+                    "Notes": "Not modeled in v1.",
+                },
+            ]
+        )
+        personnel_edit = st.data_editor(
+            personnel_df,
+            hide_index=True,
+            key="assumptions.personnel_costs",
+            column_config={
+                "Role": st.column_config.TextColumn(disabled=True),
+                "Cost Type": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+            use_container_width=True,
+        )
+        for _, row in personnel_edit.iterrows():
+            role = row["Role"]
+            if role == "Consultant Base Salary":
+                st.session_state[
+                    "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year"
+                ] = _non_negative(row["Base Value (EUR)"])
+                st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
+            elif role == "Consultant Variable (% Revenue)":
+                st.session_state["personnel_cost_assumptions.bonus_pct_of_base"] = _clamp_pct(row["Base Value (EUR)"])
+            elif role == "Backoffice Cost per FTE":
+                st.session_state[
+                    "operating_assumptions.avg_backoffice_salary_eur_per_year"
+                ] = _non_negative(row["Base Value (EUR)"])
+                st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
+            elif role == "Management / MD Cost":
+                st.session_state["assumptions.management_md_cost_eur"] = _non_negative(row["Base Value (EUR)"])
+
+        st.markdown("### Operating Expenses (Opex)")
+        opex_df = pd.DataFrame(
+            [
+                {
+                    "Category": "External Consulting",
+                    "Cost Type": "Fixed",
+                    "Value": st.session_state.get(
+                        "overhead_and_variable_costs.legal_audit_eur_per_year",
+                        base_model.overhead_and_variable_costs["legal_audit_eur_per_year"].value,
+                    ),
+                    "Unit": "EUR",
+                    "Notes": "External advisors.",
+                },
+                {
+                    "Category": "IT",
+                    "Cost Type": "Fixed",
+                    "Value": st.session_state.get(
+                        "overhead_and_variable_costs.it_and_software_eur_per_year",
+                        base_model.overhead_and_variable_costs["it_and_software_eur_per_year"].value,
+                    ),
+                    "Unit": "EUR",
+                    "Notes": "IT and software.",
+                },
+                {
+                    "Category": "Office",
+                    "Cost Type": "Fixed",
+                    "Value": st.session_state.get(
+                        "overhead_and_variable_costs.rent_eur_per_year",
+                        base_model.overhead_and_variable_costs["rent_eur_per_year"].value,
+                    ),
+                    "Unit": "EUR",
+                    "Notes": "Office rent.",
+                },
+                {
+                    "Category": "Other Services",
+                    "Cost Type": "Fixed",
+                    "Value": st.session_state.get(
+                        "overhead_and_variable_costs.other_overhead_eur_per_year",
+                        base_model.overhead_and_variable_costs["other_overhead_eur_per_year"].value,
+                    ),
+                    "Unit": "EUR",
+                    "Notes": "Other services (excludes insurance).",
+                },
+            ]
+        )
+        opex_edit = st.data_editor(
+            opex_df,
+            hide_index=True,
+            key="assumptions.opex",
+            column_config={
+                "Category": st.column_config.TextColumn(disabled=True),
+                "Cost Type": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+            use_container_width=True,
+        )
+        for _, row in opex_edit.iterrows():
+            category = row["Category"]
+            if category == "External Consulting":
+                st.session_state["overhead_and_variable_costs.legal_audit_eur_per_year"] = _non_negative(row["Value"])
+            elif category == "IT":
+                st.session_state["overhead_and_variable_costs.it_and_software_eur_per_year"] = _non_negative(row["Value"])
+            elif category == "Office":
+                st.session_state["overhead_and_variable_costs.rent_eur_per_year"] = _non_negative(row["Value"])
+            elif category == "Other Services":
+                st.session_state["overhead_and_variable_costs.other_overhead_eur_per_year"] = _non_negative(row["Value"])
+
+        st.markdown("### Financing Assumptions")
+        financing_df = pd.DataFrame(
+            [
+                {
+                    "Parameter": "Senior Debt Amount",
+                    "Value": st.session_state.get(
+                        "transaction_and_financing.senior_term_loan_start_eur",
+                        base_model.transaction_and_financing["senior_term_loan_start_eur"].value,
+                    ),
+                    "Unit": "EUR",
+                    "Notes": "Opening senior term loan.",
+                },
+                {
+                    "Parameter": "Interest Rate",
+                    "Value": st.session_state.get(
+                        "transaction_and_financing.senior_interest_rate_pct",
+                        base_model.transaction_and_financing["senior_interest_rate_pct"].value,
+                    ),
+                    "Unit": "%",
+                    "Notes": "Fixed interest rate.",
+                },
+                {
+                    "Parameter": "Amortisation Years",
+                    "Value": st.session_state.get(
+                        "financing.amortization_period_years",
+                        _default_financing_assumptions(base_model)["amortization_period_years"],
+                    ),
+                    "Unit": "Years",
+                    "Notes": "Linear amortisation period.",
+                },
+                {
+                    "Parameter": "Transaction Fees (%)",
+                    "Value": st.session_state.get(
+                        "valuation.transaction_cost_pct",
+                        _default_valuation_assumptions(base_model)["transaction_cost_pct"],
+                    ),
+                    "Unit": "%",
+                    "Notes": "Fees as % of EV.",
+                },
+            ]
+        )
+        financing_edit = st.data_editor(
+            financing_df,
+            hide_index=True,
+            key="assumptions.financing",
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+            use_container_width=True,
+        )
+        for _, row in financing_edit.iterrows():
+            parameter = row["Parameter"]
+            if parameter == "Senior Debt Amount":
+                st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = _non_negative(row["Value"])
+            elif parameter == "Interest Rate":
+                st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _clamp_pct(row["Value"])
+            elif parameter == "Amortisation Years":
+                st.session_state["financing.amortization_period_years"] = int(max(1, row["Value"]))
+            elif parameter == "Transaction Fees (%)":
+                st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
+
+        st.markdown("### Equity & Investor Assumptions")
+        equity_df = pd.DataFrame(
+            [
+                {
+                    "Parameter": "Sponsor Equity Contribution",
+                    "Value": st.session_state.get(
+                        "equity.sponsor_equity_eur",
+                        _default_equity_assumptions(base_model)["sponsor_equity_eur"],
+                    ),
+                    "Unit": "EUR",
+                    "Notes": "Management equity contribution.",
+                },
+                {
+                    "Parameter": "Investor Equity Contribution",
+                    "Value": st.session_state.get(
+                        "equity.investor_equity_eur",
+                        _default_equity_assumptions(base_model)["investor_equity_eur"],
+                    ),
+                    "Unit": "EUR",
+                    "Notes": "External investor contribution.",
+                },
+                {
+                    "Parameter": "Investor Exit Year",
+                    "Value": st.session_state.get(
+                        "equity.exit_year",
+                        _default_equity_assumptions(base_model)["exit_year"],
+                    ),
+                    "Unit": "Year",
+                    "Notes": "Exit year for investor.",
+                },
+                {
+                    "Parameter": "Exit Multiple (x EBITDA)",
+                    "Value": st.session_state.get(
+                        "equity.exit_multiple",
+                        _default_equity_assumptions(base_model)["exit_multiple"],
+                    ),
+                    "Unit": "x",
+                    "Notes": "Exit multiple on EBITDA.",
+                },
+                {
+                    "Parameter": "Distribution Rule",
+                    "Value": "Pro-rata",
+                    "Unit": "",
+                    "Notes": "Fixed distribution rule.",
+                },
+            ]
+        )
+        equity_edit = st.data_editor(
+            equity_df,
+            hide_index=True,
+            key="assumptions.equity",
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+            use_container_width=True,
+        )
+        for _, row in equity_edit.iterrows():
+            parameter = row["Parameter"]
+            if parameter == "Sponsor Equity Contribution":
+                st.session_state["equity.sponsor_equity_eur"] = _non_negative(row["Value"])
+            elif parameter == "Investor Equity Contribution":
+                st.session_state["equity.investor_equity_eur"] = _non_negative(row["Value"])
+            elif parameter == "Investor Exit Year":
+                st.session_state["equity.exit_year"] = int(max(3, min(7, row["Value"])))
+            elif parameter == "Exit Multiple (x EBITDA)":
+                st.session_state["equity.exit_multiple"] = float(row["Value"])
 
     edited_values = {}
     for section_key, section_data in base_model.__dict__.items():
