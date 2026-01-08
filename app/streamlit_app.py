@@ -1734,6 +1734,7 @@ def run_app():
           :root, html, body, [data-testid="stAppViewContainer"] {
             color: #111827 !important;
             background-color: #ffffff !important;
+            color-scheme: light !important;
           }
           [data-testid="stSidebar"] {
             background-color: #f7f8fa !important;
@@ -1764,22 +1765,25 @@ def run_app():
             color: #111827 !important;
             border-color: #d1d5db !important;
           }
-          .stDataEditor, .stDataEditor [role="grid"] {
+          [data-testid="stDataEditor"], .stDataEditor, .stDataEditor [role="grid"] {
             background-color: #ffffff !important;
             color: #111827 !important;
           }
-          .stDataEditor .rdg {
+          [data-testid="stDataEditor"] .rdg, .stDataEditor .rdg {
             background-color: #ffffff !important;
             color: #111827 !important;
           }
-          .stDataEditor .rdg-cell {
+          [data-testid="stDataEditor"] .rdg-cell, .stDataEditor .rdg-cell {
             background-color: #ffffff !important;
             color: #111827 !important;
           }
+          [data-testid="stDataEditor"] .rdg-cell[aria-readonly="true"],
           .stDataEditor .rdg-cell[aria-readonly="true"] {
             background: #f3f4f6 !important;
             color: #6b7280 !important;
           }
+          [data-testid="stDataEditor"] .rdg-header-row,
+          [data-testid="stDataEditor"] .rdg-header-row .rdg-cell,
           .stDataEditor .rdg-header-row,
           .stDataEditor .rdg-header-row .rdg-cell {
             background-color: #f9fafb !important;
