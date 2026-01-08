@@ -2174,7 +2174,23 @@ def run_app():
             ],
         }
 
+    def _ensure_assumptions_schema():
+        defaults = _seed_assumptions_state()
+        assumptions = st.session_state.get("assumptions", {})
+        if isinstance(assumptions.get("revenue_model"), dict):
+            if "reference" in assumptions["revenue_model"]:
+                assumptions["revenue_model"] = defaults["revenue_model"]
+        for key, value in defaults.items():
+            if key not in assumptions:
+                assumptions[key] = value
+            elif isinstance(value, dict) and isinstance(assumptions.get(key), dict):
+                for sub_key, sub_val in value.items():
+                    if sub_key not in assumptions[key]:
+                        assumptions[key][sub_key] = sub_val
+        st.session_state["assumptions"] = assumptions
+
     st.session_state.setdefault("assumptions", _seed_assumptions_state())
+    _ensure_assumptions_schema()
     st.session_state.setdefault("assumptions.auto_sync", True)
 
     def _apply_assumptions_state():
