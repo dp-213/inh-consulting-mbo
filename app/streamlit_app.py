@@ -857,7 +857,7 @@ def run_app():
     if page == "Operating Model (P&L)":
         st.header("Operating Model (P&L)")
         st.write(
-            "Detailed revenue and cost build-up based on operating inputs."
+            "Bottom-up consulting P&L built from operational drivers."
         )
         scenario_options = ["Base", "Best", "Worst"]
         selected_scenario = st.session_state.get(
@@ -870,6 +870,7 @@ def run_app():
             else 0
         )
         scenario_key = selected_scenario.lower()
+
         utilization_field = _get_field_by_path(
             input_model.__dict__,
             ["scenario_parameters", "utilization_rate", scenario_key],
@@ -882,21 +883,44 @@ def run_app():
             input_model.__dict__,
             ["operating_assumptions", "consulting_fte_start"],
         )
+        fte_growth_field = _get_field_by_path(
+            input_model.__dict__,
+            ["operating_assumptions", "consulting_fte_growth_pct"],
+        )
         work_days_field = _get_field_by_path(
             input_model.__dict__,
             ["operating_assumptions", "work_days_per_year"],
         )
-        wage_inflation_field = _get_field_by_path(
+        day_rate_growth_field = _get_field_by_path(
             input_model.__dict__,
-            ["personnel_cost_assumptions", "wage_inflation_pct"],
+            ["operating_assumptions", "day_rate_growth_pct"],
         )
+        guarantee_y1_field = _get_field_by_path(
+            input_model.__dict__,
+            ["operating_assumptions", "revenue_guarantee_pct_year_1"],
+        )
+        guarantee_y2_field = _get_field_by_path(
+            input_model.__dict__,
+            ["operating_assumptions", "revenue_guarantee_pct_year_2"],
+        )
+        guarantee_y3_field = _get_field_by_path(
+            input_model.__dict__,
+            ["operating_assumptions", "revenue_guarantee_pct_year_3"],
+        )
+
+        st.markdown("### Section 1 – Revenue Drivers")
         operating_controls = [
             {
-                "type": "select",
-                "label": "Scenario",
-                "options": scenario_options,
-                "index": scenario_index,
-                "field_key": "scenario_selection.selected_scenario",
+                "type": "int",
+                "label": "Consulting FTE",
+                "field_key": "operating_assumptions.consulting_fte_start",
+                "value": fte_field.value,
+            },
+            {
+                "type": "int",
+                "label": "Workdays per Year",
+                "field_key": "operating_assumptions.work_days_per_year",
+                "value": work_days_field.value,
             },
             {
                 "type": "pct",
@@ -913,102 +937,254 @@ def run_app():
                 "format": "%.0f",
             },
             {
-                "type": "int",
-                "label": "Consulting FTE",
-                "field_key": "operating_assumptions.consulting_fte_start",
-                "value": fte_field.value,
-            },
-            {
-                "type": "int",
-                "label": "Working Days per Year",
-                "field_key": "operating_assumptions.work_days_per_year",
-                "value": work_days_field.value,
+                "type": "pct",
+                "label": "Annual Day Rate Growth (%)",
+                "field_key": "operating_assumptions.day_rate_growth_pct",
+                "value": day_rate_growth_field.value,
             },
             {
                 "type": "pct",
-                "label": "Wage Inflation (%)",
-                "field_key": "personnel_cost_assumptions.wage_inflation_pct",
-                "value": wage_inflation_field.value,
+                "label": "Revenue Guarantee % Year 1",
+                "field_key": "operating_assumptions.revenue_guarantee_pct_year_1",
+                "value": guarantee_y1_field.value,
+            },
+            {
+                "type": "pct",
+                "label": "Revenue Guarantee % Year 2",
+                "field_key": "operating_assumptions.revenue_guarantee_pct_year_2",
+                "value": guarantee_y2_field.value,
+            },
+            {
+                "type": "pct",
+                "label": "Revenue Guarantee % Year 3",
+                "field_key": "operating_assumptions.revenue_guarantee_pct_year_3",
+                "value": guarantee_y3_field.value,
             },
         ]
-        _render_inline_controls("Key Inputs", operating_controls, columns=3)
+        _render_inline_controls("Revenue Drivers", operating_controls, columns=4)
+
         explain_calculations = st.toggle("Explain calculations")
+
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
-        total_revenue_avg = pnl_table["revenue"].mean()
-        ebitda_margin = (
-            pnl_table["ebitda"].sum() / pnl_table["revenue"].sum()
-            if pnl_table["revenue"].sum() != 0
-            else 0
-        )
-        ebit_avg = pnl_table["ebit"].mean()
-        net_income_avg = pnl_table["net_income"].mean()
+        year_indexes = list(range(len(pnl_table)))
 
-        kpi_col_1, kpi_col_2, kpi_col_3, kpi_col_4 = st.columns(4)
-        kpi_col_1.metric("Avg Revenue", format_currency(total_revenue_avg))
-        kpi_col_2.metric("EBITDA Margin", format_pct(ebitda_margin))
-        kpi_col_3.metric("Avg EBIT", format_currency(ebit_avg))
-        kpi_col_4.metric("Avg Net Income", format_currency(net_income_avg))
+        revenue_rows = []
+        fte_growth_pct = fte_growth_field.value
+        for year_index in year_indexes:
+            consultants_fte = fte_field.value * (
+                (1 + fte_growth_pct) ** year_index
+            )
+            billable_days = work_days_field.value
+            utilization = utilization_field.value
+            day_rate = day_rate_field.value * (
+                (1 + day_rate_growth_field.value) ** year_index
+            )
+            gross_revenue = (
+                consultants_fte
+                * billable_days
+                * utilization
+                * day_rate
+            )
+            if year_index == 0:
+                guarantee_pct = guarantee_y1_field.value
+            elif year_index == 1:
+                guarantee_pct = guarantee_y2_field.value
+            elif year_index == 2:
+                guarantee_pct = guarantee_y3_field.value
+            else:
+                guarantee_pct = 0
 
-        pnl_display = pnl_table.copy()
-        year_labels = []
-        for year_label in pnl_display.index:
-            try:
-                year_index = int(str(year_label).split()[-1])
-                year_labels.append(f"Year {year_index}")
-            except (ValueError, IndexError):
-                year_labels.append(str(year_label))
-        pnl_display.insert(0, "year", year_labels)
+            guaranteed_revenue = (
+                consultants_fte * billable_days * day_rate * guarantee_pct
+            )
+            non_guaranteed_revenue = (
+                consultants_fte
+                * billable_days
+                * day_rate
+                * max(utilization - guarantee_pct, 0)
+            )
+            total_revenue = guaranteed_revenue + non_guaranteed_revenue
+            revenue_per_consultant = (
+                total_revenue / consultants_fte
+                if consultants_fte
+                else 0
+            )
+            revenue_rows.append(
+                {
+                    "Year": f"Year {year_index}",
+                    "Gross Theoretical Revenue (kEUR)": gross_revenue,
+                    "Guaranteed Revenue (kEUR)": guaranteed_revenue,
+                    "Non-Guaranteed Revenue (kEUR)": non_guaranteed_revenue,
+                    "Total Revenue (kEUR)": total_revenue,
+                    "Revenue per Consultant (kEUR)": revenue_per_consultant,
+                }
+            )
 
-        pnl_display.rename(
-            columns={
-                "year": "Year",
-                "revenue": "Umsatz (kEUR)",
-                "personnel_costs": "Personalkosten (kEUR)",
-                "overhead_and_variable_costs": "Overhead & Variable Kosten (kEUR)",
-                "ebitda": "EBITDA (kEUR)",
-                "depreciation": "Abschreibungen (kEUR)",
-                "ebit": "EBIT (kEUR)",
-                "taxes": "Steuern (kEUR)",
-                "net_income": "Jahresueberschuss (kEUR)",
-            },
-            inplace=True,
-        )
-
-        pnl_format_map = {
-            "Umsatz (kEUR)": format_currency,
-            "Personalkosten (kEUR)": format_currency,
-            "Overhead & Variable Kosten (kEUR)": format_currency,
-            "EBITDA (kEUR)": format_currency,
-            "Abschreibungen (kEUR)": format_currency,
-            "EBIT (kEUR)": format_currency,
-            "Steuern (kEUR)": format_currency,
-            "Jahresueberschuss (kEUR)": format_currency,
+        st.markdown("### Section 2 – Revenue Build-up")
+        revenue_table = pd.DataFrame(revenue_rows)
+        revenue_format_map = {
+            "Gross Theoretical Revenue (kEUR)": format_currency,
+            "Guaranteed Revenue (kEUR)": format_currency,
+            "Non-Guaranteed Revenue (kEUR)": format_currency,
+            "Total Revenue (kEUR)": format_currency,
+            "Revenue per Consultant (kEUR)": format_currency,
         }
-        pnl_totals = [
-            "Umsatz (kEUR)",
-            "EBITDA (kEUR)",
+        revenue_totals = ["Total Revenue (kEUR)"]
+        revenue_styled = _style_totals(
+            revenue_table, revenue_totals
+        ).format(revenue_format_map)
+        st.dataframe(revenue_styled, use_container_width=True)
+
+        st.markdown("### Section 3 – Cost Structure")
+        wage_inflation = input_model.personnel_cost_assumptions[
+            "wage_inflation_pct"
+        ].value
+        consultant_base_cost = input_model.personnel_cost_assumptions[
+            "avg_consultant_base_cost_eur_per_year"
+        ].value
+        bonus_pct = input_model.personnel_cost_assumptions[
+            "bonus_pct_of_base"
+        ].value
+        payroll_pct = input_model.personnel_cost_assumptions[
+            "payroll_burden_pct_of_comp"
+        ].value
+        backoffice_fte_start = input_model.operating_assumptions[
+            "backoffice_fte_start"
+        ].value
+        backoffice_growth = input_model.operating_assumptions[
+            "backoffice_fte_growth_pct"
+        ].value
+        backoffice_salary = input_model.operating_assumptions[
+            "avg_backoffice_salary_eur_per_year"
+        ].value
+        overhead_inflation = input_model.overhead_and_variable_costs[
+            "overhead_inflation_pct"
+        ].value
+
+        cost_rows = []
+        for year_index in year_indexes:
+            consultants_fte = fte_field.value * (
+                (1 + fte_growth_pct) ** year_index
+            )
+            backoffice_fte = backoffice_fte_start * (
+                (1 + backoffice_growth) ** year_index
+            )
+            consultant_cost_per_fte = consultant_base_cost * (
+                (1 + bonus_pct) + payroll_pct
+            )
+            consultant_cost_per_fte *= (1 + wage_inflation) ** year_index
+            consultant_cost = consultant_cost_per_fte * consultants_fte
+
+            backoffice_cost_per_fte = backoffice_salary * (1 + payroll_pct)
+            backoffice_cost_per_fte *= (1 + wage_inflation) ** year_index
+            backoffice_cost = backoffice_cost_per_fte * backoffice_fte
+
+            management_cost = 0
+
+            advisory_cost = input_model.overhead_and_variable_costs[
+                "legal_audit_eur_per_year"
+            ].value * ((1 + overhead_inflation) ** year_index)
+            it_cost = input_model.overhead_and_variable_costs[
+                "it_and_software_eur_per_year"
+            ].value * ((1 + overhead_inflation) ** year_index)
+            office_cost = input_model.overhead_and_variable_costs[
+                "rent_eur_per_year"
+            ].value * ((1 + overhead_inflation) ** year_index)
+            services_cost = (
+                input_model.overhead_and_variable_costs[
+                    "insurance_eur_per_year"
+                ].value
+                + input_model.overhead_and_variable_costs[
+                    "other_overhead_eur_per_year"
+                ].value
+            ) * ((1 + overhead_inflation) ** year_index)
+
+            cost_rows.append(
+                {
+                    "Year": f"Year {year_index}",
+                    "Consultant Compensation (kEUR)": consultant_cost,
+                    "Backoffice Compensation (kEUR)": backoffice_cost,
+                    "Management / MD Compensation (kEUR)": management_cost,
+                    "Beratung (kEUR)": advisory_cost,
+                    "IT (kEUR)": it_cost,
+                    "Office (kEUR)": office_cost,
+                    "Services (kEUR)": services_cost,
+                }
+            )
+
+        cost_table = pd.DataFrame(cost_rows)
+        cost_format_map = {
+            "Consultant Compensation (kEUR)": format_currency,
+            "Backoffice Compensation (kEUR)": format_currency,
+            "Management / MD Compensation (kEUR)": format_currency,
+            "Beratung (kEUR)": format_currency,
+            "IT (kEUR)": format_currency,
+            "Office (kEUR)": format_currency,
+            "Services (kEUR)": format_currency,
+        }
+        cost_styled = cost_table.style.format(cost_format_map)
+        st.dataframe(cost_styled, use_container_width=True)
+
+        st.markdown("### Section 4 – Full P&L")
+        interest_by_year = {
+            row["year"]: row["interest_expense"]
+            for row in debt_schedule
+        }
+        pnl_rows = []
+        for year_index in year_indexes:
+            year_label = f"Year {year_index}"
+            year_data = pnl_table.iloc[year_index]
+            interest = interest_by_year.get(year_index, 0)
+            ebt = year_data["ebit"] - interest
+            pnl_rows.append(
+                {
+                    "Year": year_label,
+                    "Total Revenue (kEUR)": year_data["revenue"],
+                    "Personnel Costs (kEUR)": year_data["personnel_costs"],
+                    "Overhead & Operating Costs (kEUR)": year_data[
+                        "overhead_and_variable_costs"
+                    ],
+                    "EBIT (kEUR)": year_data["ebit"],
+                    "Interest (kEUR)": interest,
+                    "EBT (kEUR)": ebt,
+                    "Taxes (kEUR)": year_data["taxes"],
+                    "Net Income (kEUR)": year_data["net_income"],
+                }
+            )
+
+        pnl_full_table = pd.DataFrame(pnl_rows)
+        pnl_full_format_map = {
+            "Total Revenue (kEUR)": format_currency,
+            "Personnel Costs (kEUR)": format_currency,
+            "Overhead & Operating Costs (kEUR)": format_currency,
+            "EBIT (kEUR)": format_currency,
+            "Interest (kEUR)": format_currency,
+            "EBT (kEUR)": format_currency,
+            "Taxes (kEUR)": format_currency,
+            "Net Income (kEUR)": format_currency,
+        }
+        pnl_full_totals = [
+            "Total Revenue (kEUR)",
             "EBIT (kEUR)",
-            "Jahresueberschuss (kEUR)",
+            "Net Income (kEUR)",
         ]
-        pnl_styled = _style_totals(pnl_display, pnl_totals).format(
-            pnl_format_map
-        )
-        st.dataframe(pnl_styled, use_container_width=True)
+        pnl_full_styled = _style_totals(
+            pnl_full_table, pnl_full_totals
+        ).format(pnl_full_format_map)
+        st.dataframe(pnl_full_styled, use_container_width=True)
 
         if explain_calculations:
-            st.markdown("**Revenue build-up**")
+            st.markdown("**Revenue logic**")
             st.write(
-                "Revenue = Utilization × Working days × Headcount × Day rate"
+                "Gross revenue is based on consulting capacity: FTE × billable "
+                "days × utilization × day rate. Revenue guarantees create a "
+                "minimum utilization floor for the first three years."
             )
-            st.markdown("**Personnel cost logic**")
+            st.markdown("**Guarantee mechanism**")
             st.write(
-                "Personnel costs = Consulting FTE costs (base + bonus + payroll) "
-                "+ Backoffice costs, with wage inflation applied annually."
-            )
-            st.markdown("**Overhead growth logic**")
-            st.write(
-                "Fixed overhead grows by overhead inflation; variable overhead "
-                "is calculated as a percentage of revenue."
+                "Guaranteed revenue is calculated as capacity × guarantee %. "
+                "Non-guaranteed revenue is the remaining utilization above "
+                "the guarantee level."
             )
 
     if page == "Cashflow & Liquidity":

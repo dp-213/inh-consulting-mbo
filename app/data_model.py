@@ -115,6 +115,24 @@ class InputModel:
                 excel_ref="00_Inputs_Assumptions!B18",
                 editable=True,
             ),
+            "revenue_guarantee_pct_year_1": InputField(
+                value=0.00,
+                description="Revenue guarantee as percent of capacity for Year 1",
+                excel_ref="N/A",
+                editable=True,
+            ),
+            "revenue_guarantee_pct_year_2": InputField(
+                value=0.00,
+                description="Revenue guarantee as percent of capacity for Year 2",
+                excel_ref="N/A",
+                editable=True,
+            ),
+            "revenue_guarantee_pct_year_3": InputField(
+                value=0.00,
+                description="Revenue guarantee as percent of capacity for Year 3",
+                excel_ref="N/A",
+                editable=True,
+            ),
             "new_hire_ramp_up_factor_fy1": InputField(
                 value=0.08,
                 description="Ramp-up factor for new hires in FY1",
@@ -439,6 +457,15 @@ def create_demo_input_model():
     input_model.operating_assumptions[
         "avg_backoffice_salary_eur_per_year"
     ].value = 80000
+    input_model.operating_assumptions[
+        "revenue_guarantee_pct_year_1"
+    ].value = 0.10
+    input_model.operating_assumptions[
+        "revenue_guarantee_pct_year_2"
+    ].value = 0.05
+    input_model.operating_assumptions[
+        "revenue_guarantee_pct_year_3"
+    ].value = 0.00
 
     input_model.transaction_and_financing[
         "special_repayment_amount_eur"

@@ -20,11 +20,20 @@ def calculate_pnl(input_model):
     consultants_fte_growth_pct = input_model.operating_assumptions[
         "consulting_fte_growth_pct"
     ].value
-    billable_days_per_year = input_model.operating_assumptions[
-        "billable_days_per_year"
+    work_days_per_year = input_model.operating_assumptions[
+        "work_days_per_year"
     ].value
     day_rate_growth_pct = input_model.operating_assumptions[
         "day_rate_growth_pct"
+    ].value
+    guarantee_year_1 = input_model.operating_assumptions[
+        "revenue_guarantee_pct_year_1"
+    ].value
+    guarantee_year_2 = input_model.operating_assumptions[
+        "revenue_guarantee_pct_year_2"
+    ].value
+    guarantee_year_3 = input_model.operating_assumptions[
+        "revenue_guarantee_pct_year_3"
     ].value
 
     backoffice_fte_start = input_model.operating_assumptions[
@@ -106,12 +115,34 @@ def calculate_pnl(input_model):
         )
 
         # Revenue calculation based on scenario utilization and billable days.
-        revenue = (
+        gross_revenue = (
             consultants_fte
             * utilization_rate
-            * billable_days_per_year
+            * work_days_per_year
             * current_daily_rate
         )
+        guarantee_pct = 0
+        if year_index == 0:
+            guarantee_pct = guarantee_year_1
+        elif year_index == 1:
+            guarantee_pct = guarantee_year_2
+        elif year_index == 2:
+            guarantee_pct = guarantee_year_3
+
+        # Revenue guarantee acts as a minimum utilization floor.
+        guaranteed_revenue = (
+            consultants_fte
+            * work_days_per_year
+            * current_daily_rate
+            * guarantee_pct
+        )
+        non_guaranteed_revenue = (
+            consultants_fte
+            * work_days_per_year
+            * current_daily_rate
+            * max(utilization_rate - guarantee_pct, 0)
+        )
+        revenue = guaranteed_revenue + non_guaranteed_revenue
 
         # Consultant personnel cost: base + bonus + payroll burden, inflated.
         consultant_cost_per_fte = avg_consultant_base_cost_eur_per_year * (
