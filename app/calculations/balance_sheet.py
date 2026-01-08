@@ -22,7 +22,7 @@ def calculate_balance_sheet(
             )
 
     debt_by_year = {
-        debt_data["year"]: debt_data["outstanding_principal"]
+        debt_data["year"]: debt_data["closing_debt"]
         for debt_data in debt_schedule
     }
 

@@ -1,4 +1,4 @@
-def calculate_debt_schedule(input_model, cashflow_result):
+def calculate_debt_schedule(input_model, cashflow_result=None):
     """
     Build a simple debt schedule using cash flow results.
     Returns a list of yearly dictionaries.
@@ -27,9 +27,9 @@ def calculate_debt_schedule(input_model, cashflow_result):
     schedule = []
     outstanding_principal = initial_debt
 
-    # Calculate yearly interest, amortization, and DSCR.
-    for i, year_data in enumerate(cashflow_result):
-        year = year_data["year"]
+    # Calculate yearly interest and amortization.
+    for i in range(5):
+        year = i
         opening_debt = outstanding_principal
 
         # Interest is based on opening principal.
@@ -56,10 +56,10 @@ def calculate_debt_schedule(input_model, cashflow_result):
         )
         debt_service = interest_expense + total_repayment
 
-        # DSCR uses operating cash flow divided by total debt service.
-        operating_cf = year_data["operating_cf"]
-        cfads = operating_cf - year_data.get("capex", 0.0)
-        dscr = cfads / debt_service if debt_service != 0 else 0
+        # DSCR will be added when cashflow data is available.
+        cfads = None
+        dscr = None
+        covenant_breach = None
 
         # Reduce principal after payment.
         outstanding_principal = max(opening_debt - total_repayment, 0.0)
@@ -80,8 +80,21 @@ def calculate_debt_schedule(input_model, cashflow_result):
                 "dscr": dscr,
                 "cfads": cfads,
                 "minimum_dscr": min_dscr,
-                "covenant_breach": dscr < min_dscr,
+                "covenant_breach": covenant_breach,
             }
         )
+
+    if cashflow_result is not None:
+        cashflow_by_year = {row["year"]: row for row in cashflow_result}
+        for row in schedule:
+            year = row["year"]
+            year_data = cashflow_by_year.get(year, {})
+            operating_cf = year_data.get("operating_cf", 0.0)
+            cfads = operating_cf - year_data.get("capex", 0.0)
+            debt_service = row["debt_service"]
+            dscr = cfads / debt_service if debt_service != 0 else 0
+            row["cfads"] = cfads
+            row["dscr"] = dscr
+            row["covenant_breach"] = dscr < min_dscr
 
     return schedule

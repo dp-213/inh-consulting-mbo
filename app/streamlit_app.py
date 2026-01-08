@@ -2789,7 +2789,10 @@ def run_app():
 
     # Run model calculations in the standard order.
     pnl_list = run_model.calculate_pnl(input_model)
-    cashflow_result = run_model.calculate_cashflow(input_model, pnl_list)
+    debt_schedule = run_model.calculate_debt_schedule(input_model)
+    cashflow_result = run_model.calculate_cashflow(
+        input_model, pnl_list, debt_schedule
+    )
     depreciation_by_year = {
         row["year"]: row.get("depreciation", 0.0) for row in cashflow_result
     }
