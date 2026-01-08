@@ -21,38 +21,73 @@ def run_app():
     st.title("Financial Model")
 
     # Build input model and apply sidebar overrides.
-    use_demo = st.sidebar.checkbox("Use demo values", value=True)
-    input_model = create_demo_input_model() if use_demo else InputModel()
+    demo_model = create_demo_input_model()
 
+    st.sidebar.header("Assumptions")
     scenario = st.sidebar.selectbox("Scenario", ["Base", "Best", "Worst"])
-    input_model.scenario_selection["selected_scenario"].value = scenario
 
-    utilization_default = input_model.scenario_parameters["utilization_rate"][
+    utilization_default = demo_model.scenario_parameters["utilization_rate"][
         scenario.lower()
     ].value
-    day_rate_default = input_model.scenario_parameters["day_rate_eur"][
+    day_rate_default = demo_model.scenario_parameters["day_rate_eur"][
         scenario.lower()
     ].value
+    consultants_default = demo_model.operating_assumptions[
+        "consulting_fte_start"
+    ].value
+    working_days_default = demo_model.operating_assumptions[
+        "work_days_per_year"
+    ].value
 
-    utilization_override = st.sidebar.number_input(
-        "Utilization override",
-        value=float(utilization_default),
-        step=0.01,
-        format="%.2f",
+    utilization_percent = st.sidebar.number_input(
+        "Utilization (%)",
+        value=float(utilization_default * 100),
+        step=1.0,
+        format="%.1f",
     )
     day_rate_override = st.sidebar.number_input(
-        "Day rate override (EUR)",
+        "Day rate (EUR)",
         value=float(day_rate_default),
         step=100.0,
         format="%.0f",
     )
+    consultants_override = st.sidebar.number_input(
+        "Number of consultants (FTE)",
+        value=float(consultants_default),
+        step=1.0,
+        format="%.0f",
+    )
+    working_days_override = st.sidebar.number_input(
+        "Working days per year",
+        value=float(working_days_default),
+        step=1.0,
+        format="%.0f",
+    )
 
+    assumptions = {
+        "scenario": scenario,
+        "utilization_rate": utilization_percent / 100,
+        "day_rate_eur": day_rate_override,
+        "consulting_fte_start": consultants_override,
+        "work_days_per_year": working_days_override,
+    }
+
+    input_model = create_demo_input_model()
+    input_model.scenario_selection["selected_scenario"].value = assumptions[
+        "scenario"
+    ]
     input_model.scenario_parameters["utilization_rate"][
-        scenario.lower()
-    ].value = utilization_override
+        assumptions["scenario"].lower()
+    ].value = assumptions["utilization_rate"]
     input_model.scenario_parameters["day_rate_eur"][
-        scenario.lower()
-    ].value = day_rate_override
+        assumptions["scenario"].lower()
+    ].value = assumptions["day_rate_eur"]
+    input_model.operating_assumptions["consulting_fte_start"].value = (
+        assumptions["consulting_fte_start"]
+    )
+    input_model.operating_assumptions["work_days_per_year"].value = (
+        assumptions["work_days_per_year"]
+    )
 
     # Run model calculations in the standard order.
     pnl_result = run_model.calculate_pnl(input_model)
