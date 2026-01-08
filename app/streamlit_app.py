@@ -2514,7 +2514,15 @@ def run_app():
             elif parameter == "Investor Equity Contribution":
                 st.session_state["equity.investor_equity_eur"] = _non_negative(row["Value"])
             elif parameter == "Investor Exit Year":
-                st.session_state["equity.exit_year"] = int(max(3, min(7, row["Value"])))
+                try:
+                    exit_val = int(float(row["Value"]))
+                except (TypeError, ValueError):
+                    exit_val = _default_equity_assumptions(base_model)[
+                        "exit_year"
+                    ]
+                st.session_state["equity.exit_year"] = int(
+                    max(3, min(7, exit_val))
+                )
             elif parameter == "Exit Multiple (x EBITDA)":
                 st.session_state["equity.exit_multiple"] = float(row["Value"])
 
