@@ -10,6 +10,11 @@ from openpyxl.utils import get_column_letter
 st.set_page_config(layout="wide")
 
 from data_model import InputModel, create_demo_input_model
+from calculations.pnl import calculate_pnl
+from calculations.cashflow import calculate_cashflow
+from calculations.debt import calculate_debt_schedule
+from calculations.balance_sheet import calculate_balance_sheet
+from calculations.investment import calculate_investment
 import run_model as run_model
 from calculations.investment import _calculate_irr
 
@@ -2887,12 +2892,186 @@ def run_app():
             elif param == "Transaction Costs (%)":
                 st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
 
+    _apply_assumptions_state()
+
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
         "scenario_selection.selected_scenario",
         base_model.scenario_selection["selected_scenario"].value,
     )
     scenario_key = selected_scenario.lower()
+    input_model = create_demo_input_model()
+    for section_key, section_value in input_model.__dict__.items():
+        if isinstance(section_value, dict):
+            edited_values = _collect_values_from_session(
+                section_value, section_key
+            )
+            _apply_section_values(section_value, edited_values)
+
+    input_model.scenario_selection["selected_scenario"].value = selected_scenario
+    input_model.utilization_by_year = st.session_state.get(
+        "utilization_by_year", []
+    )
+    input_model.management_md_cost_eur_per_year = st.session_state.get(
+        "personnel_costs.management_md_cost_eur", 0.0
+    )
+    input_model.management_md_cost_growth_pct = st.session_state.get(
+        "personnel_costs.management_md_growth_pct", 0.0
+    )
+
+    input_model.cashflow_assumptions = _default_cashflow_assumptions()
+    for key, default_value in input_model.cashflow_assumptions.items():
+        input_model.cashflow_assumptions[key] = st.session_state.get(
+            f"cashflow.{key}", default_value
+        )
+    input_model.balance_sheet_assumptions = _default_balance_sheet_assumptions(
+        input_model
+    )
+    for key, default_value in input_model.balance_sheet_assumptions.items():
+        input_model.balance_sheet_assumptions[key] = st.session_state.get(
+            f"balance_sheet.{key}", default_value
+        )
+    input_model.financing_assumptions = _default_financing_assumptions(
+        input_model
+    )
+    for key, default_value in input_model.financing_assumptions.items():
+        input_model.financing_assumptions[key] = st.session_state.get(
+            f"financing.{key}", default_value
+        )
+    input_model.valuation_runtime = _default_valuation_assumptions(input_model)
+    for key, default_value in input_model.valuation_runtime.items():
+        input_model.valuation_runtime[key] = st.session_state.get(
+            f"valuation.{key}", default_value
+        )
+    input_model.equity_assumptions = _default_equity_assumptions(input_model)
+    for key, default_value in input_model.equity_assumptions.items():
+        input_model.equity_assumptions[key] = st.session_state.get(
+            f"equity.{key}", default_value
+        )
+
+    revenue_model = getattr(input_model, "revenue_model", {})
+    reference_revenue = revenue_model.get("reference_revenue_eur").value
+    revenue_by_year = []
+    for year_index in range(5):
+        guarantee_pct = revenue_model.get(
+            f"guarantee_pct_year_{year_index}"
+        ).value
+        in_group = revenue_model.get(
+            f"in_group_revenue_year_{year_index}"
+        ).value
+        external = revenue_model.get(
+            f"external_revenue_year_{year_index}"
+        ).value
+        modeled_revenue = in_group + external
+        guaranteed = min(
+            modeled_revenue, guarantee_pct * reference_revenue
+        )
+        final_revenue = max(guaranteed, modeled_revenue)
+        revenue_by_year.append(final_revenue)
+    input_model.revenue_by_year = revenue_by_year
+
+    cost_model = getattr(input_model, "cost_model", {})
+    wage_inflation = input_model.personnel_cost_assumptions[
+        "wage_inflation_pct"
+    ].value
+    bonus_pct_default = input_model.personnel_cost_assumptions[
+        "bonus_pct_of_base"
+    ].value
+    payroll_pct_default = input_model.personnel_cost_assumptions[
+        "payroll_burden_pct_of_comp"
+    ].value
+    management_cost = input_model.management_md_cost_eur_per_year
+    management_growth = input_model.management_md_cost_growth_pct
+    cost_model_totals = []
+    for year_index in range(5):
+        revenue = revenue_by_year[year_index]
+        consultant_fte = cost_model.get(
+            f"consultant_fte_year_{year_index}"
+        ).value
+        consultant_base = cost_model.get(
+            f"consultant_base_cost_eur_year_{year_index}"
+        ).value * ((1 + wage_inflation) ** year_index)
+        consultant_bonus = cost_model.get(
+            f"consultant_bonus_pct_year_{year_index}"
+        ).value if cost_model else bonus_pct_default
+        consultant_payroll = cost_model.get(
+            f"consultant_payroll_pct_year_{year_index}"
+        ).value if cost_model else payroll_pct_default
+        consultant_loaded = consultant_base * (
+            1 + consultant_bonus + consultant_payroll
+        )
+        consultant_total = consultant_fte * consultant_loaded
+
+        backoffice_fte = cost_model.get(
+            f"backoffice_fte_year_{year_index}"
+        ).value
+        backoffice_base = cost_model.get(
+            f"backoffice_base_cost_eur_year_{year_index}"
+        ).value * ((1 + wage_inflation) ** year_index)
+        backoffice_payroll = cost_model.get(
+            f"backoffice_payroll_pct_year_{year_index}"
+        ).value if cost_model else payroll_pct_default
+        backoffice_loaded = backoffice_base * (1 + backoffice_payroll)
+        backoffice_total = backoffice_fte * backoffice_loaded
+
+        managing_directors_cost = management_cost * (
+            (1 + management_growth) ** year_index
+        )
+
+        fixed_overhead = (
+            cost_model.get(f"fixed_overhead_advisory_year_{year_index}").value
+            + cost_model.get(f"fixed_overhead_legal_year_{year_index}").value
+            + cost_model.get(f"fixed_overhead_it_year_{year_index}").value
+            + cost_model.get(f"fixed_overhead_office_year_{year_index}").value
+            + cost_model.get(f"fixed_overhead_services_year_{year_index}").value
+        )
+
+        def _variable_cost(prefix):
+            pct = cost_model.get(
+                f"variable_{prefix}_pct_year_{year_index}"
+            ).value
+            eur = cost_model.get(
+                f"variable_{prefix}_eur_year_{year_index}"
+            ).value
+            return eur if eur > 0 else revenue * pct
+
+        variable_total = (
+            _variable_cost("training")
+            + _variable_cost("travel")
+            + _variable_cost("communication")
+        )
+        personnel_total = (
+            consultant_total + backoffice_total + managing_directors_cost
+        )
+        overhead_total = fixed_overhead + variable_total
+        cost_model_totals.append(
+            {
+                "consultant_costs": consultant_total,
+                "backoffice_costs": backoffice_total,
+                "management_costs": managing_directors_cost,
+                "personnel_costs": personnel_total,
+                "overhead_and_variable_costs": overhead_total,
+                "total_operating_costs": personnel_total + overhead_total,
+            }
+        )
+    input_model.cost_model_totals_by_year = cost_model_totals
+
+    pnl_base = calculate_pnl(input_model)
+    debt_schedule = calculate_debt_schedule(input_model)
+    cashflow_result = calculate_cashflow(input_model, pnl_base, debt_schedule)
+    depreciation_by_year = {
+        row["year"]: row.get("depreciation", 0.0)
+        for row in cashflow_result
+    }
+    pnl_list = calculate_pnl(input_model, depreciation_by_year)
+    pnl_result = {f"Year {row['year']}": row for row in pnl_list}
+    debt_schedule = calculate_debt_schedule(input_model, cashflow_result)
+    balance_sheet = calculate_balance_sheet(
+        input_model, cashflow_result, debt_schedule, pnl_list
+    )
+    investment_result = calculate_investment(
+        input_model, cashflow_result, pnl_list, balance_sheet
+    )
 
     # Navigation for question-driven layout.
     st.session_state.setdefault("current_page", "Overview")
