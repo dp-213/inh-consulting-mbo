@@ -38,6 +38,18 @@ def run_app():
     working_days_default = demo_model.operating_assumptions[
         "work_days_per_year"
     ].value
+    purchase_price_default = demo_model.transaction_and_financing[
+        "purchase_price_eur"
+    ].value
+    debt_amount_default = demo_model.transaction_and_financing[
+        "senior_term_loan_start_eur"
+    ].value
+    interest_rate_default = demo_model.transaction_and_financing[
+        "senior_interest_rate_pct"
+    ].value
+    annual_repayment_default = demo_model.transaction_and_financing[
+        "senior_repayment_per_year_eur"
+    ].value
 
     utilization_percent = st.sidebar.number_input(
         "Utilization (%)",
@@ -63,6 +75,30 @@ def run_app():
         step=1.0,
         format="%.0f",
     )
+    purchase_price_override = st.sidebar.number_input(
+        "Purchase price (EUR)",
+        value=float(purchase_price_default),
+        step=100000.0,
+        format="%.0f",
+    )
+    debt_amount_override = st.sidebar.number_input(
+        "Debt amount (EUR)",
+        value=float(debt_amount_default),
+        step=100000.0,
+        format="%.0f",
+    )
+    interest_rate_percent = st.sidebar.number_input(
+        "Interest rate (%)",
+        value=float(interest_rate_default * 100),
+        step=0.1,
+        format="%.1f",
+    )
+    annual_repayment_override = st.sidebar.number_input(
+        "Annual repayment (EUR)",
+        value=float(annual_repayment_default),
+        step=100000.0,
+        format="%.0f",
+    )
 
     assumptions = {
         "scenario": scenario,
@@ -70,6 +106,10 @@ def run_app():
         "day_rate_eur": day_rate_override,
         "consulting_fte_start": consultants_override,
         "work_days_per_year": working_days_override,
+        "purchase_price_eur": purchase_price_override,
+        "debt_amount_eur": debt_amount_override,
+        "interest_rate_pct": interest_rate_percent / 100,
+        "annual_repayment_eur": annual_repayment_override,
     }
 
     input_model = create_demo_input_model()
@@ -88,6 +128,18 @@ def run_app():
     input_model.operating_assumptions["work_days_per_year"].value = (
         assumptions["work_days_per_year"]
     )
+    input_model.transaction_and_financing["purchase_price_eur"].value = (
+        assumptions["purchase_price_eur"]
+    )
+    input_model.transaction_and_financing["senior_term_loan_start_eur"].value = (
+        assumptions["debt_amount_eur"]
+    )
+    input_model.transaction_and_financing["senior_interest_rate_pct"].value = (
+        assumptions["interest_rate_pct"]
+    )
+    input_model.transaction_and_financing[
+        "senior_repayment_per_year_eur"
+    ].value = assumptions["annual_repayment_eur"]
 
     # Run model calculations in the standard order.
     pnl_result = run_model.calculate_pnl(input_model)
