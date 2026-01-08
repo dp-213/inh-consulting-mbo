@@ -3235,138 +3235,203 @@ def run_app():
         return "\n".join(text_lines)
 
     if page == "Overview":
-        st.header("Overview")
-        st.write("Decision-oriented executive summary.")
+        st.header("Overview – Management Deal Assessment")
+        st.write(
+            "High-level assessment of attractiveness, affordability, and risk."
+        )
 
         revenue_values = [pnl_result[f"Year {i}"]["revenue"] for i in range(5)]
         ebitda_values = [pnl_result[f"Year {i}"]["ebitda"] for i in range(5)]
-        ebit_values = [pnl_result[f"Year {i}"]["ebit"] for i in range(5)]
-        net_income_values = [
-            pnl_result[f"Year {i}"]["net_income"] for i in range(5)
-        ]
-        free_cashflow_values = [
-            cashflow_result[i]["free_cashflow"] for i in range(5)
-        ]
         cash_balances = [cashflow_result[i]["cash_balance"] for i in range(5)]
         min_cash_balance = min(cash_balances)
-        avg_revenue = sum(revenue_values) / len(revenue_values)
-        avg_ebitda = sum(ebitda_values) / len(ebitda_values)
-        avg_ebitda_margin = (
-            avg_ebitda / avg_revenue if avg_revenue else 0
-        )
-        avg_free_cashflow = sum(free_cashflow_values) / len(
-            free_cashflow_values
-        )
+        steady_revenue = revenue_values[-1]
+        steady_ebitda = ebitda_values[-1]
+        steady_margin = steady_ebitda / steady_revenue if steady_revenue else 0
 
         purchase_price = input_model.transaction_and_financing[
             "purchase_price_eur"
         ].value
-        equity_contribution = input_model.transaction_and_financing[
-            "equity_contribution_eur"
-        ].value
+        equity_assumptions = input_model.equity_assumptions
+        sponsor_equity = equity_assumptions["sponsor_equity_eur"]
+        investor_equity = equity_assumptions["investor_equity_eur"]
+        required_equity = sponsor_equity + investor_equity
         debt_at_close = debt_schedule[0]["opening_debt"]
-        leverage_irr = st.session_state.get(
-            "equity.sponsor_irr", investment_result["irr"]
+        peak_debt = max(row["opening_debt"] for row in debt_schedule)
+        entry_multiple = purchase_price / steady_ebitda if steady_ebitda else 0
+
+        if entry_multiple < 7:
+            economics_verdict = "✅ Attractive"
+        elif entry_multiple <= 9:
+            economics_verdict = "⚠️ Borderline"
+        else:
+            economics_verdict = "❌ Not attractive"
+
+        leverage_ratio = peak_debt / steady_ebitda if steady_ebitda else 0
+        if min_cash_balance > 0 and leverage_ratio < 4:
+            affordability_verdict = "✅ Affordable"
+        elif min_cash_balance >= 0:
+            affordability_verdict = "⚠️ Tight"
+        else:
+            affordability_verdict = "❌ Not financeable"
+
+        st.markdown("### A. Deal Economics (Does it pay?)")
+        econ_cols = st.columns(5)
+        econ_cols[0].metric(
+            "Target Revenue", format_currency(steady_revenue)
+        )
+        econ_cols[1].metric("EBITDA", format_currency(steady_ebitda))
+        econ_cols[2].metric("EBITDA Margin", format_pct(steady_margin))
+        econ_cols[3].metric("Purchase Price", format_currency(purchase_price))
+        econ_cols[4].metric(
+            "Entry Multiple", f"{entry_multiple:.2f}x"
+        )
+        st.caption(f"Verdict: {economics_verdict}")
+
+        st.markdown("### B. Affordability (Can we carry it?)")
+        afford_cols = st.columns(4)
+        afford_cols[0].metric(
+            "Required Equity", format_currency(required_equity)
+        )
+        afford_cols[1].metric("Debt at Close", format_currency(debt_at_close))
+        afford_cols[2].metric("Peak Debt", format_currency(peak_debt))
+        afford_cols[3].metric(
+            "Minimum Cash Balance", format_currency(min_cash_balance)
+        )
+        st.caption(
+            f"Verdict: {affordability_verdict} "
+            "(Rule of thumb: Min cash > 0, Peak debt / EBITDA < 4.0x)"
         )
 
-        st.markdown("### A. Deal Snapshot")
-        deal_snapshot = pd.DataFrame(
+        st.markdown("### C. Business Robustness (Is the business stable?)")
+        revenue_std = pd.Series(revenue_values).std()
+        revenue_cv = revenue_std / steady_revenue if steady_revenue else 0
+        margin_values = [
+            ebitda_values[i] / revenue_values[i]
+            if revenue_values[i]
+            else 0
+            for i in range(5)
+        ]
+        margin_std = pd.Series(margin_values).std()
+        margin_signal = (
+            "High" if margin_std < 0.03 else "Medium" if margin_std < 0.06 else "Low"
+        )
+        revenue_signal = (
+            "High"
+            if revenue_cv < 0.05
+            else "Medium"
+            if revenue_cv < 0.1
+            else "Low"
+        )
+        guarantees = [
+            input_model.operating_assumptions[
+                "revenue_guarantee_pct_year_1"
+            ].value,
+            input_model.operating_assumptions[
+                "revenue_guarantee_pct_year_2"
+            ].value,
+            input_model.operating_assumptions[
+                "revenue_guarantee_pct_year_3"
+            ].value,
+        ]
+        guarantee_coverage = sum(guarantees) / len(guarantees) if guarantees else 0
+        utilization_by_year = st.session_state.get("utilization_by_year")
+        if utilization_by_year:
+            util_std = pd.Series(utilization_by_year).std()
+        else:
+            util_std = 0.0
+        utilization_signal = (
+            "Low" if util_std < 0.02 else "Medium" if util_std < 0.05 else "High"
+        )
+        robustness_table = pd.DataFrame(
             [
+                {"Metric": "Revenue Stability", "Signal": revenue_signal},
+                {"Metric": "Margin Stability", "Signal": margin_signal},
                 {
-                    "Metric": "Purchase Price (EUR)",
-                    "Value": format_currency(purchase_price),
-                    "Explanation": "Enterprise value paid at close.",
+                    "Metric": "Guarantee Coverage (Y1–Y3)",
+                    "Signal": format_pct(guarantee_coverage),
                 },
                 {
-                    "Metric": "Equity Contribution (EUR)",
-                    "Value": format_currency(equity_contribution),
-                    "Explanation": "Equity funded by management / sponsor.",
-                },
-                {
-                    "Metric": "Debt at Close (EUR)",
-                    "Value": format_currency(debt_at_close),
-                    "Explanation": "Senior debt drawn at close.",
-                },
-                {
-                    "Metric": "Avg Revenue (EUR)",
-                    "Value": format_currency(avg_revenue),
-                    "Explanation": "Average annual revenue over plan.",
-                },
-                {
-                    "Metric": "Avg EBITDA & Margin",
-                    "Value": f"{format_currency(avg_ebitda)} / {format_pct(avg_ebitda_margin)}",
-                    "Explanation": "Average EBITDA and margin over plan.",
-                },
-                {
-                    "Metric": "Avg Free Cash Flow",
-                    "Value": format_currency(avg_free_cashflow),
-                    "Explanation": "Average annual free cashflow.",
-                },
-                {
-                    "Metric": "Levered Equity IRR",
-                    "Value": format_pct(leverage_irr),
-                    "Explanation": "Equity return from levered cashflows.",
-                },
-                {
-                    "Metric": "Minimum Cash Balance",
-                    "Value": format_currency(min_cash_balance),
-                    "Explanation": "Lowest cash balance over plan.",
+                    "Metric": "Utilization Sensitivity",
+                    "Signal": utilization_signal,
                 },
             ]
         )
-        st.dataframe(deal_snapshot, use_container_width=True)
+        st.dataframe(robustness_table, use_container_width=True)
 
-        st.markdown("### B. Business Performance Summary")
-        performance_table = pd.DataFrame(
-            {
-                "Revenue": revenue_values,
-                "EBITDA": ebitda_values,
-                "EBIT": ebit_values,
-                "Net Income": net_income_values,
-            },
-            index=[f"Year {i}" for i in range(5)],
-        )
-        performance_table = performance_table.applymap(format_currency)
-        st.dataframe(performance_table, use_container_width=True)
-
-        st.markdown("### C. Financing & Risk Snapshot")
+        st.markdown("### D. Risk Flags (What can kill the deal?)")
         min_dscr_value = min(row["dscr"] for row in debt_schedule)
         dscr_threshold = input_model.financing_assumptions["minimum_dscr"]
-        stress_years = [
-            f"Year {row['year']}"
+        early_years = {0, 1}
+        covenant_early = [
+            row
             for row in debt_schedule
-            if row["dscr"] < dscr_threshold
+            if row["year"] in early_years and row["dscr"] < dscr_threshold
         ]
-        financing_snapshot = pd.DataFrame(
-            [
-                {
-                    "Metric": "Minimum DSCR",
-                    "Value": f"{min_dscr_value:.2f}x",
-                },
-                {
-                    "Metric": "Covenant Headroom",
-                    "Value": "NO" if stress_years else "YES",
-                },
-                {
-                    "Metric": "Peak Debt",
-                    "Value": format_currency(
-                        max(row["opening_debt"] for row in debt_schedule)
-                    ),
-                },
-                {
-                    "Metric": "Years with Covenant Stress",
-                    "Value": ", ".join(stress_years) if stress_years else "None",
-                },
-            ]
+        debt_after_guarantee = any(
+            row["year"] >= 3 and row["opening_debt"] > 0
+            for row in debt_schedule
         )
-        st.dataframe(financing_snapshot, use_container_width=True)
+        negative_cash_years = [
+            row["year"]
+            for row in cashflow_result
+            if row["cash_balance"] < 0
+        ]
+        flags = [
+            {
+                "Item": "Covenant pressure in early years",
+                "Status": "YES" if covenant_early else "NO",
+                "Note": "DSCR below covenant in years 0–1."
+                if covenant_early
+                else "No early DSCR breach.",
+            },
+            {
+                "Item": "Revenue guarantee expires before deleveraging",
+                "Status": "YES" if debt_after_guarantee else "NO",
+                "Note": "Debt remains after guarantee period."
+                if debt_after_guarantee
+                else "Deleveraging within guarantee window.",
+            },
+            {
+                "Item": "High utilization dependency",
+                "Status": "YES" if utilization_signal == "High" else "NO",
+                "Note": "Utilization swings drive revenue sensitivity."
+                if utilization_signal == "High"
+                else "Utilization sensitivity manageable.",
+            },
+            {
+                "Item": "Negative cash years",
+                "Status": "YES" if negative_cash_years else "NO",
+                "Note": "Cash dips below zero in "
+                f"{', '.join(f'Year {y}' for y in negative_cash_years)}."
+                if negative_cash_years
+                else "No negative cash years.",
+            },
+        ]
+        flag_table = pd.DataFrame(flags)
+        st.dataframe(flag_table, use_container_width=True)
 
-        st.markdown("### D. Equity Story")
+        st.markdown("### E. Management Takeaway")
+        risk_list = [
+            flag["Item"] for flag in flags if flag["Status"] == "YES"
+        ]
+        risk_text = ", ".join(risk_list) if risk_list else "no major red flags"
+        next_steps = (
+            "validate covenant headroom and stress utilization"
+            if risk_list
+            else "continue with diligence and confirm pricing"
+        )
+        attractiveness = (
+            "attractive"
+            if economics_verdict.startswith("✅")
+            else "borderline"
+            if economics_verdict.startswith("⚠️")
+            else "unattractive"
+        )
         st.info(
-            f"At a purchase price of {format_currency(purchase_price)} and equity of "
-            f"{format_currency(equity_contribution)}, the deal generates a levered "
-            f"IRR of {format_pct(leverage_irr)}, driven by operating cashflow and "
-            "deleveraging."
+            "This case appears "
+            f"{attractiveness} based on entry valuation, cash generation, "
+            f"and financing capacity. The key risks are {risk_text}. "
+            f"Next steps should focus on {next_steps}."
         )
 
     if page == "Model Settings":
