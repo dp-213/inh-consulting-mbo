@@ -217,6 +217,76 @@ def _render_inline_controls(title, controls, columns=3):
                         key=widget_key,
                     )
                     _set_field_value(control["field_key"], value)
+
+
+def _render_pnl_html(pnl_statement, section_rows, bold_rows):
+    def escape(text):
+        return (
+            str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    columns = ["Line Item", "Year 0", "Year 1", "Year 2", "Year 3", "Year 4"]
+    header_cells = "".join(f"<th>{escape(col)}</th>" for col in columns)
+
+    body_rows = []
+    for _, row in pnl_statement.iterrows():
+        label = row["Line Item"]
+        row_class = ""
+        if label in section_rows:
+            row_class = "section-row"
+        elif label in bold_rows:
+            row_class = "total-row"
+        cells = []
+        for col in columns:
+            value = row[col]
+            if col != "Line Item":
+                value = format_currency(value)
+            cell_value = "&nbsp;" if value in ("", None) else escape(value)
+            cells.append(f"<td>{cell_value}</td>")
+        body_rows.append(f"<tr class=\"{row_class}\">{''.join(cells)}</tr>")
+
+    css = """
+    <style>
+      .pnl-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .pnl-table col.line-item { width: 40%; }
+      .pnl-table col.year { width: 12%; }
+      .pnl-table th, .pnl-table td {
+        padding: 2px 8px;
+        white-space: nowrap;
+        line-height: 1.1;
+        border: 0;
+      }
+      .pnl-table th { text-align: right; font-weight: 600; }
+      .pnl-table th:first-child { text-align: left; }
+      .pnl-table td { text-align: right; }
+      .pnl-table td:first-child { text-align: left; }
+      .pnl-table .section-row td {
+        font-weight: 700;
+        background: #f9fafb;
+      }
+      .pnl-table .total-row td {
+        font-weight: 700;
+        background: #f3f4f6;
+        border-top: 1px solid #c7c7c7;
+      }
+    </style>
+    """
+    colgroup = (
+        "<colgroup>"
+        "<col class=\"line-item\"/>"
+        "<col class=\"year\"/><col class=\"year\"/><col class=\"year\"/>"
+        "<col class=\"year\"/><col class=\"year\"/>"
+        "</colgroup>"
+    )
+    table_html = (
+        f"{css}<table class=\"pnl-table\">{colgroup}"
+        f"<thead><tr>{header_cells}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody></table>"
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
                 else:
                     value = st.number_input(
                         control["label"],
@@ -1469,22 +1539,7 @@ def run_app():
                     styles.loc[idx, :] += "font-weight: 700; background-color: #f3f4f6; border-top: 1px solid #c7c7c7;"
             return styles
 
-        pnl_styled = (
-            pnl_statement.style.apply(_style_pnl, axis=None)
-            .format(format_map)
-            .hide(axis="index")
-            .set_table_styles(
-                [
-                    {"selector": "th", "props": [("text-align", "right"), ("font-weight", "600"), ("border", "0px"), ("padding", "3px 8px"), ("white-space", "nowrap"), ("line-height", "1.1")]},
-                    {"selector": "th:first-child", "props": [("text-align", "left"), ("width", "40%")]},
-                    {"selector": "th:not(:first-child)", "props": [("width", "12%")]},
-                    {"selector": "td", "props": [("border", "0px"), ("padding", "2px 8px"), ("white-space", "nowrap"), ("line-height", "1.1")]},
-                    {"selector": "td:first-child", "props": [("width", "40%")]},
-                    {"selector": "td:not(:first-child)", "props": [("width", "12%")]},
-                    {"selector": "table", "props": [("border-collapse", "collapse"), ("width", "100%"), ("table-layout", "fixed")]},
-                ]
-            )
-        )
+        _render_pnl_html(pnl_statement, section_rows, bold_rows)
         avg_revenue = pnl_table["revenue"].mean()
         consultant_counts = [
             fte_field.value * ((1 + fte_growth_field.value) ** idx)
@@ -1528,7 +1583,7 @@ def run_app():
         kpi_strip[3].metric("Personnel Cost Ratio", format_pct(personnel_cost_ratio))
         kpi_strip[4].metric("Revenue Guarantee %", format_pct(revenue_guarantee_pct))
 
-        st.table(pnl_styled)
+        # Table rendered via HTML for full-width layout.
 
         explain_pnl = st.toggle("Explain P&L logic")
         if explain_pnl:
