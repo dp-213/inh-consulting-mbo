@@ -24,7 +24,9 @@ def _format_section_title(section_key):
 def format_currency(value):
     if value is None or pd.isna(value):
         return ""
-    return f"{value / 1000:,.0f} kEUR"
+    if isinstance(value, str):
+        return value
+    return f"{value / 1_000_000:,.2f} m EUR"
 
 
 def format_pct(value):
@@ -251,7 +253,7 @@ def run_app():
         if page == "Operating Model (P&L)":
             st.markdown("## Quick Assumptions")
             if st.session_state.get("edit_guarantee"):
-                if st.button("Hide Revenue Guarantees", key="hide_guarantee"):
+                if st.button("Close", key="hide_guarantee"):
                     st.session_state["edit_guarantee"] = False
                 scenario_options = ["Base", "Best", "Worst"]
                 selected_scenario = st.session_state.get(
@@ -382,7 +384,7 @@ def run_app():
                 _render_inline_controls("Revenue Guarantees", guarantee_controls, columns=1)
 
             if st.session_state.get("edit_consultant_comp"):
-                if st.button("Hide Consultant Compensation", key="hide_consultant_comp"):
+                if st.button("Close", key="hide_consultant_comp"):
                     st.session_state["edit_consultant_comp"] = False
                 base_cost_field = _get_field_by_path(
                     base_model.__dict__,
@@ -443,7 +445,7 @@ def run_app():
                 _render_inline_controls("Consultant Compensation", comp_controls, columns=1)
 
             if st.session_state.get("edit_operating_expenses"):
-                if st.button("Hide Operating Expenses", key="hide_operating_expenses"):
+                if st.button("Close", key="hide_operating_expenses"):
                     st.session_state["edit_operating_expenses"] = False
                 legal_field = _get_field_by_path(
                     base_model.__dict__,
@@ -1197,19 +1199,15 @@ def run_app():
         )
 
         st.markdown("### P&L (GuV)")
-        edit_cols = st.columns([3, 1])
-        edit_cols[0].markdown("**Guaranteed Revenue**")
-        if edit_cols[1].button("Edit assumptions", key="edit_guarantee"):
+        edit_row = st.columns([4, 0.6, 4, 0.6, 4, 0.6])
+        edit_row[0].markdown("**Guaranteed Revenue**")
+        if edit_row[1].button("✎", key="edit_guarantee", help="Edit revenue guarantees"):
             st.session_state["edit_guarantee"] = True
-
-        edit_cols = st.columns([3, 1])
-        edit_cols[0].markdown("**Consultant Compensation**")
-        if edit_cols[1].button("Edit assumptions", key="edit_consultant_comp"):
+        edit_row[2].markdown("**Consultant Compensation**")
+        if edit_row[3].button("✎", key="edit_consultant_comp", help="Edit consultant compensation"):
             st.session_state["edit_consultant_comp"] = True
-
-        edit_cols = st.columns([3, 1])
-        edit_cols[0].markdown("**Operating Expenses**")
-        if edit_cols[1].button("Edit assumptions", key="edit_operating_expenses"):
+        edit_row[4].markdown("**Operating Expenses**")
+        if edit_row[5].button("✎", key="edit_operating_expenses", help="Edit operating expenses"):
             st.session_state["edit_operating_expenses"] = True
 
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
@@ -1253,11 +1251,11 @@ def run_app():
             if name not in line_items:
                 line_items[name] = {
                     "Line Item": name,
-                    "Year 0": None,
-                    "Year 1": None,
-                    "Year 2": None,
-                    "Year 3": None,
-                    "Year 4": None,
+                    "Year 0": "",
+                    "Year 1": "",
+                    "Year 2": "",
+                    "Year 3": "",
+                    "Year 4": "",
                 }
             line_items[name][year_label] = value
 
@@ -1377,20 +1375,17 @@ def run_app():
             "Guaranteed Revenue",
             "Non-Guaranteed Revenue",
             "Total Revenue",
-            "",
             "Personnel Costs",
             "Consultant Compensation",
             "Backoffice Compensation",
             "Management / MD Compensation",
             "Total Personnel Costs",
-            "",
             "Operating Expenses",
             "External Consulting / Advisors",
             "IT",
             "Office",
             "Other Services",
             "Total Operating Expenses",
-            "",
             "EBITDA",
             "Depreciation",
             "EBIT",
@@ -1402,15 +1397,15 @@ def run_app():
 
         label_rows = []
         for label in row_order:
-            if label in ("Revenue", "Personnel Costs", "Operating Expenses", ""):
+            if label in ("Revenue", "Personnel Costs", "Operating Expenses"):
                 label_rows.append(
                     {
                         "Line Item": label,
-                        "Year 0": None,
-                        "Year 1": None,
-                        "Year 2": None,
-                        "Year 3": None,
-                        "Year 4": None,
+                        "Year 0": "",
+                        "Year 1": "",
+                        "Year 2": "",
+                        "Year 3": "",
+                        "Year 4": "",
                     }
                 )
             else:
@@ -1421,11 +1416,11 @@ def run_app():
                     label_rows.append(
                         {
                             "Line Item": label,
-                            "Year 0": None,
-                            "Year 1": None,
-                            "Year 2": None,
-                            "Year 3": None,
-                            "Year 4": None,
+                            "Year 0": "",
+                            "Year 1": "",
+                            "Year 2": "",
+                            "Year 3": "",
+                            "Year 4": "",
                         }
                     )
 
@@ -1446,31 +1441,48 @@ def run_app():
             "EBT",
             "Net Income (Jahresueberschuss)",
         }
+        section_rows = {"Revenue", "Personnel Costs", "Operating Expenses"}
 
         def _style_pnl(df):
-            styles = []
-            for _, row in df.iterrows():
-                row_styles = []
+            styles = pd.DataFrame("", index=df.index, columns=df.columns)
+            for idx, row in df.iterrows():
                 for col in df.columns:
-                    if col == "Line Item":
-                        row_styles.append("text-align: left;")
-                    else:
-                        row_styles.append("text-align: right;")
+                    align = "text-align: left;" if col == "Line Item" else "text-align: right;"
+                    styles.at[idx, col] += align
+                if row["Line Item"] in section_rows:
+                    styles.loc[idx, :] += "font-weight: 700; font-size: 1.05rem; background-color: #f9fafb;"
                 if row["Line Item"] in bold_rows:
-                    row_styles = [style + "font-weight: 600;" for style in row_styles]
-                styles.append(row_styles)
-            return pd.DataFrame(styles, index=df.index, columns=df.columns)
+                    styles.loc[idx, :] += "font-weight: 700; background-color: #f3f4f6; border-top: 1px solid #c7c7c7;"
+            return styles
 
-        pnl_styled = pnl_statement.style.apply(_style_pnl, axis=None).format(
-            format_map
+        pnl_styled = (
+            pnl_statement.style.apply(_style_pnl, axis=None)
+            .format(format_map)
+            .set_table_styles(
+                [
+                    {"selector": "th", "props": [("text-align", "right"), ("font-weight", "600"), ("border", "0px"), ("padding", "8px 12px")]},
+                    {"selector": "th:first-child", "props": [("text-align", "left")]},
+                    {"selector": "td", "props": [("border", "0px"), ("padding", "6px 12px")]},
+                    {"selector": "table", "props": [("border-collapse", "collapse")]},
+                ]
+            )
         )
         table_col, kpi_col = st.columns([4, 1])
         with table_col:
             st.dataframe(pnl_styled, use_container_width=True)
 
         avg_revenue = pnl_table["revenue"].mean()
+        consultant_counts = [
+            fte_field.value * ((1 + fte_growth_field.value) ** idx)
+            for idx in year_indexes
+        ]
+        avg_consultants = (
+            sum(consultant_counts) / len(consultant_counts)
+            if consultant_counts
+            else 0
+        )
         revenue_per_consultant = (
-            avg_revenue / fte_field.value if fte_field.value else 0
+            avg_revenue / avg_consultants if avg_consultants else 0
         )
         ebitda_margin = (
             pnl_table["ebitda"].sum() / pnl_table["revenue"].sum()
@@ -1482,6 +1494,15 @@ def run_app():
             if pnl_table["revenue"].sum()
             else 0
         )
+        personnel_cost_ratio = (
+            pnl_table["personnel_costs"].sum() / pnl_table["revenue"].sum()
+            if pnl_table["revenue"].sum()
+            else 0
+        )
+        revenue_guarantee_pct = (
+            (guarantee_y1_field.value + guarantee_y2_field.value + guarantee_y3_field.value)
+            / 3
+        )
         with kpi_col:
             st.metric(
                 "Revenue per Consultant",
@@ -1489,6 +1510,8 @@ def run_app():
             )
             st.metric("EBITDA Margin", format_pct(ebitda_margin))
             st.metric("EBIT Margin", format_pct(ebit_margin))
+            st.metric("Personnel Cost Ratio", format_pct(personnel_cost_ratio))
+            st.metric("Revenue Guarantee %", format_pct(revenue_guarantee_pct))
 
         explain_pnl = st.toggle("Explain P&L logic")
         if explain_pnl:
@@ -1611,22 +1634,22 @@ def run_app():
         cashflow_display.rename(
             columns={
                 "year": "Year",
-                "operating_cf": "Operating CF (kEUR)",
-                "investing_cf": "Investing CF (kEUR)",
-                "financing_cf": "Financing CF (kEUR)",
-                "net_cashflow": "Net Cashflow (kEUR)",
-                "cash_balance": "Cash Balance (kEUR)",
+                "operating_cf": "Operating CF (m EUR)",
+                "investing_cf": "Investing CF (m EUR)",
+                "financing_cf": "Financing CF (m EUR)",
+                "net_cashflow": "Net Cashflow (m EUR)",
+                "cash_balance": "Cash Balance (m EUR)",
             },
             inplace=True,
         )
         cashflow_format_map = {
-            "Operating CF (kEUR)": format_currency,
-            "Investing CF (kEUR)": format_currency,
-            "Financing CF (kEUR)": format_currency,
-            "Net Cashflow (kEUR)": format_currency,
-            "Cash Balance (kEUR)": format_currency,
+            "Operating CF (m EUR)": format_currency,
+            "Investing CF (m EUR)": format_currency,
+            "Financing CF (m EUR)": format_currency,
+            "Net Cashflow (m EUR)": format_currency,
+            "Cash Balance (m EUR)": format_currency,
         }
-        cashflow_totals = ["Net Cashflow (kEUR)", "Cash Balance (kEUR)"]
+        cashflow_totals = ["Net Cashflow (m EUR)", "Cash Balance (m EUR)"]
         cashflow_styled = _style_totals(
             cashflow_display, cashflow_totals
         ).format(cashflow_format_map)
@@ -1732,22 +1755,22 @@ def run_app():
         balance_display.rename(
             columns={
                 "year": "Year",
-                "assets": "Assets (kEUR)",
-                "liabilities": "Liabilities (kEUR)",
-                "equity": "Equity (kEUR)",
-                "working_capital": "Working Capital (kEUR)",
-                "retained_earnings": "Retained Earnings (kEUR)",
+                "assets": "Assets (m EUR)",
+                "liabilities": "Liabilities (m EUR)",
+                "equity": "Equity (m EUR)",
+                "working_capital": "Working Capital (m EUR)",
+                "retained_earnings": "Retained Earnings (m EUR)",
             },
             inplace=True,
         )
         balance_format_map = {
-            "Assets (kEUR)": format_currency,
-            "Liabilities (kEUR)": format_currency,
-            "Equity (kEUR)": format_currency,
-            "Working Capital (kEUR)": format_currency,
-            "Retained Earnings (kEUR)": format_currency,
+            "Assets (m EUR)": format_currency,
+            "Liabilities (m EUR)": format_currency,
+            "Equity (m EUR)": format_currency,
+            "Working Capital (m EUR)": format_currency,
+            "Retained Earnings (m EUR)": format_currency,
         }
-        balance_totals = ["Assets (kEUR)", "Equity (kEUR)"]
+        balance_totals = ["Assets (m EUR)", "Equity (m EUR)"]
         balance_styled = _style_totals(
             balance_display, balance_totals
         ).format(balance_format_map)
@@ -1872,12 +1895,12 @@ def run_app():
         cashflow_display.rename(
             columns={
                 "year": "Year",
-                "cash_balance": "Cash Balance (kEUR)",
+                "cash_balance": "Cash Balance (m EUR)",
             },
             inplace=True,
         )
         cashflow_display = cashflow_display[
-            ["Year", "Cash Balance (kEUR)"]
+            ["Year", "Cash Balance (m EUR)"]
         ]
 
         debt_table = pd.DataFrame(debt_schedule)
@@ -1910,10 +1933,10 @@ def run_app():
         debt_display.rename(
             columns={
                 "year": "Year",
-                "interest_expense": "Interest Expense (kEUR)",
-                "principal_payment": "Debt Repayment (kEUR)",
-                "debt_service": "Debt Service (kEUR)",
-                "outstanding_principal": "Debt Outstanding (kEUR)",
+                "interest_expense": "Interest Expense (m EUR)",
+                "principal_payment": "Debt Repayment (m EUR)",
+                "debt_service": "Debt Service (m EUR)",
+                "outstanding_principal": "Debt Outstanding (m EUR)",
                 "dscr": "DSCR (x)",
             },
             inplace=True,
@@ -1921,9 +1944,9 @@ def run_app():
         debt_display = debt_display[
             [
                 "Year",
-                "Debt Outstanding (kEUR)",
-                "Interest Expense (kEUR)",
-                "Debt Service (kEUR)",
+                "Debt Outstanding (m EUR)",
+                "Interest Expense (m EUR)",
+                "Debt Service (m EUR)",
                 "DSCR (x)",
             ]
         ]
@@ -1938,7 +1961,7 @@ def run_app():
                 if col == "DSCR (x)" and pd.notna(row[col]) and row[col] < 1.3:
                     styles.append("background-color: #fdecea;")
                 elif (
-                    col == "Cash Balance (kEUR)"
+                    col == "Cash Balance (m EUR)"
                     and pd.notna(row[col])
                     and row[col] < 0
                 ):
@@ -1948,11 +1971,11 @@ def run_app():
             return styles
 
         bankability_format_map = {
-            "Debt Outstanding (kEUR)": format_currency,
-            "Interest Expense (kEUR)": format_currency,
-            "Debt Service (kEUR)": format_currency,
+            "Debt Outstanding (m EUR)": format_currency,
+            "Interest Expense (m EUR)": format_currency,
+            "Debt Service (m EUR)": format_currency,
             "DSCR (x)": lambda x: f"{x:.2f}" if pd.notna(x) else "",
-            "Cash Balance (kEUR)": format_currency,
+            "Cash Balance (m EUR)": format_currency,
         }
 
         bankability_styled = bankability_table.style.apply(
@@ -2078,18 +2101,18 @@ def run_app():
         summary_display = summary_table.copy()
         summary_display.rename(
             columns={
-                "initial_equity": "Eigenkapital (Start, kEUR)",
-                "exit_value": "Exit Value (kEUR)",
+                "initial_equity": "Eigenkapital (Start, m EUR)",
+                "exit_value": "Exit Value (m EUR)",
                 "irr": "IRR (%)",
             },
             inplace=True,
         )
         summary_format_map = {
-            "Eigenkapital (Start, kEUR)": format_currency,
-            "Exit Value (kEUR)": format_currency,
+            "Eigenkapital (Start, m EUR)": format_currency,
+            "Exit Value (m EUR)": format_currency,
             "IRR (%)": format_pct,
         }
-        summary_totals = ["Eigenkapital (Start, kEUR)", "Exit Value (kEUR)"]
+        summary_totals = ["Eigenkapital (Start, m EUR)", "Exit Value (m EUR)"]
         summary_styled = _style_totals(
             summary_display, summary_totals
         ).format(summary_format_map)
@@ -2104,15 +2127,15 @@ def run_app():
         cashflows_display.rename(
             columns={
                 "year": "Year",
-                "equity_cashflows": "Equity Cashflows (kEUR)",
+                "equity_cashflows": "Equity Cashflows (m EUR)",
             },
             inplace=True,
         )
         cashflows_format_map = {
-            "Equity Cashflows (kEUR)": format_currency
+            "Equity Cashflows (m EUR)": format_currency
         }
         cashflows_styled = _style_totals(
-            cashflows_display, ["Equity Cashflows (kEUR)"]
+            cashflows_display, ["Equity Cashflows (m EUR)"]
         ).format(cashflows_format_map)
 
         st.dataframe(summary_styled, use_container_width=True)
