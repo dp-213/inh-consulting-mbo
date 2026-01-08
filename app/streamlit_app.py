@@ -32,7 +32,7 @@ def format_currency(value):
 
 
 def format_pct(value):
-    if value is None or pd.isna(value):
+    if value is None or pd.isna(value) or value == "":
         return ""
     return f"{value:.1%}"
 
