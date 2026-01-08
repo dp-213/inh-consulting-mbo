@@ -570,6 +570,11 @@ def run_app():
         kpi_col_3.metric(
             "Cumulative CF", format_currency(cumulative_cashflow)
         )
+        st.markdown("### Bankability Table")
+        st.write(
+            "Focus on DSCR compliance and cash headroom by year."
+        )
+
         cashflow_display = cashflow_table.copy()
         cashflow_display["year"] = cashflow_display["year"].map(
             lambda x: f"Year {int(x)}" if pd.notna(x) else ""
@@ -577,26 +582,13 @@ def run_app():
         cashflow_display.rename(
             columns={
                 "year": "Year",
-                "operating_cf": "Operating CF (EUR)",
-                "investing_cf": "Investing CF (EUR)",
-                "financing_cf": "Financing CF (EUR)",
-                "net_cashflow": "Net Cashflow (EUR)",
-                "cash_balance": "Cash Bestand (EUR)",
+                "cash_balance": "Cash Balance (EUR)",
             },
             inplace=True,
         )
-        cashflow_format_map = {
-            "Operating CF (EUR)": format_currency,
-            "Investing CF (EUR)": format_currency,
-            "Financing CF (EUR)": format_currency,
-            "Net Cashflow (EUR)": format_currency,
-            "Cash Bestand (EUR)": format_currency,
-        }
-        cashflow_totals = ["Net Cashflow (EUR)", "Cash Bestand (EUR)"]
-        cashflow_styled = _style_totals(
-            cashflow_display, cashflow_totals
-        ).format(cashflow_format_map)
-        st.dataframe(cashflow_styled, use_container_width=True)
+        cashflow_display = cashflow_display[
+            ["Year", "Cash Balance (EUR)"]
+        ]
 
         debt_table = pd.DataFrame(debt_schedule)
         initial_debt = (
@@ -620,6 +612,7 @@ def run_app():
         kpi_col_1.metric("Initial Debt", format_currency(initial_debt))
         kpi_col_2.metric("Minimum DSCR", f"{min_dscr:.2f}x")
         kpi_col_3.metric("Debt Fully Repaid", debt_repaid_label)
+
         debt_display = debt_table.copy()
         debt_display["year"] = debt_display["year"].map(
             lambda x: f"Year {int(x)}" if pd.notna(x) else ""
@@ -627,26 +620,61 @@ def run_app():
         debt_display.rename(
             columns={
                 "year": "Year",
-                "interest_expense": "Zinsaufwand (EUR)",
-                "principal_payment": "Tilgung (EUR)",
-                "debt_service": "Schuldendienst (EUR)",
-                "outstanding_principal": "Restschuld (EUR)",
+                "interest_expense": "Interest Expense (EUR)",
+                "principal_payment": "Debt Repayment (EUR)",
+                "debt_service": "Debt Service (EUR)",
+                "outstanding_principal": "Debt Outstanding (EUR)",
                 "dscr": "DSCR (x)",
             },
             inplace=True,
         )
-        debt_format_map = {
-            "Zinsaufwand (EUR)": format_currency,
-            "Tilgung (EUR)": format_currency,
-            "Schuldendienst (EUR)": format_currency,
-            "Restschuld (EUR)": format_currency,
-            "DSCR (x)": lambda x: f"{x:.2f}" if pd.notna(x) else "",
-        }
-        debt_totals = ["Restschuld (EUR)", "Schuldendienst (EUR)"]
-        debt_styled = _style_totals(debt_display, debt_totals).format(
-            debt_format_map
+        debt_display = debt_display[
+            [
+                "Year",
+                "Debt Outstanding (EUR)",
+                "Interest Expense (EUR)",
+                "Debt Service (EUR)",
+                "DSCR (x)",
+            ]
+        ]
+
+        bankability_table = debt_display.merge(
+            cashflow_display, on="Year", how="left"
         )
-        st.dataframe(debt_styled, use_container_width=True)
+
+        def _highlight_bankability(row):
+            styles = []
+            for col in bankability_table.columns:
+                if col == "DSCR (x)" and pd.notna(row[col]) and row[col] < 1.3:
+                    styles.append("background-color: #fdecea;")
+                elif (
+                    col == "Cash Balance (EUR)"
+                    and pd.notna(row[col])
+                    and row[col] < 0
+                ):
+                    styles.append("background-color: #fdecea;")
+                else:
+                    styles.append("")
+            return styles
+
+        bankability_format_map = {
+            "Debt Outstanding (EUR)": format_currency,
+            "Interest Expense (EUR)": format_currency,
+            "Debt Service (EUR)": format_currency,
+            "DSCR (x)": lambda x: f"{x:.2f}" if pd.notna(x) else "",
+            "Cash Balance (EUR)": format_currency,
+        }
+
+        bankability_styled = bankability_table.style.apply(
+            _highlight_bankability, axis=1
+        ).format(bankability_format_map)
+        st.dataframe(bankability_styled, use_container_width=True)
+
+        st.markdown("### Bank Commentary")
+        st.write(
+            "Red rows indicate years with DSCR below 1.3x or negative cash. "
+            "These years typically trigger tighter covenants or pricing."
+        )
 
     if page == "Equity Case":
         st.header("Equity Case")
