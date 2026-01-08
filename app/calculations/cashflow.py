@@ -3,6 +3,8 @@ def calculate_cashflow(input_model, pnl_result):
     Build a simple multi-year cash flow statement from P&L results.
     Returns a list of yearly dictionaries with a running cash balance.
     """
+    financing_assumptions = getattr(input_model, "financing_assumptions", {})
+
     # Map legacy financing fields to Excel-equivalent transaction inputs.
     debt_amount = financing_assumptions.get(
         "initial_debt_eur",
@@ -24,7 +26,6 @@ def calculate_cashflow(input_model, pnl_result):
     ].value
 
     cashflow_assumptions = getattr(input_model, "cashflow_assumptions", {})
-    financing_assumptions = getattr(input_model, "financing_assumptions", {})
     tax_cash_rate_pct = cashflow_assumptions.get(
         "tax_cash_rate_pct",
         input_model.tax_and_distributions["tax_rate_pct"].value,
