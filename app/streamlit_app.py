@@ -74,15 +74,113 @@ def run_app():
 
     with tab_pnl:
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
-        st.table(pnl_table)
+        pnl_display = pnl_table.copy()
+        year_labels = []
+        for year_label in pnl_display.index:
+            try:
+                year_index = int(str(year_label).split()[-1])
+                year_labels.append(f"Year {year_index}")
+            except (ValueError, IndexError):
+                year_labels.append(str(year_label))
+        pnl_display.insert(0, "year", year_labels)
+
+        pnl_display.rename(
+            columns={
+                "year": "Year",
+                "revenue": "Umsatz (EUR)",
+                "personnel_costs": "Personalkosten (EUR)",
+                "overhead_and_variable_costs": "Overhead & Variable Kosten (EUR)",
+                "ebitda": "EBITDA (EUR)",
+                "depreciation": "Abschreibungen (EUR)",
+                "ebit": "EBIT (EUR)",
+                "taxes": "Steuern (EUR)",
+                "net_income": "Jahresueberschuss (EUR)",
+            },
+            inplace=True,
+        )
+
+        pnl_money_columns = [
+            "Umsatz (EUR)",
+            "Personalkosten (EUR)",
+            "Overhead & Variable Kosten (EUR)",
+            "EBITDA (EUR)",
+            "Abschreibungen (EUR)",
+            "EBIT (EUR)",
+            "Steuern (EUR)",
+            "Jahresueberschuss (EUR)",
+        ]
+        for col in pnl_money_columns:
+            if col in pnl_display.columns:
+                pnl_display[col] = pnl_display[col].map(
+                    lambda x: f"{x:,.0f}" if pd.notna(x) else ""
+                )
+
+        st.table(pnl_display)
 
     with tab_cashflow:
         cashflow_table = pd.DataFrame(cashflow_result)
-        st.table(cashflow_table)
+        cashflow_display = cashflow_table.copy()
+        cashflow_display["year"] = cashflow_display["year"].map(
+            lambda x: f"Year {int(x)}" if pd.notna(x) else ""
+        )
+        cashflow_display.rename(
+            columns={
+                "year": "Year",
+                "operating_cf": "Operating CF (EUR)",
+                "investing_cf": "Investing CF (EUR)",
+                "financing_cf": "Financing CF (EUR)",
+                "net_cashflow": "Net Cashflow (EUR)",
+                "cash_balance": "Cash Bestand (EUR)",
+            },
+            inplace=True,
+        )
+        cashflow_money_columns = [
+            "Operating CF (EUR)",
+            "Investing CF (EUR)",
+            "Financing CF (EUR)",
+            "Net Cashflow (EUR)",
+            "Cash Bestand (EUR)",
+        ]
+        for col in cashflow_money_columns:
+            if col in cashflow_display.columns:
+                cashflow_display[col] = cashflow_display[col].map(
+                    lambda x: f"{x:,.0f}" if pd.notna(x) else ""
+                )
+        st.table(cashflow_display)
 
     with tab_debt:
         debt_table = pd.DataFrame(debt_schedule)
-        st.table(debt_table)
+        debt_display = debt_table.copy()
+        debt_display["year"] = debt_display["year"].map(
+            lambda x: f"Year {int(x)}" if pd.notna(x) else ""
+        )
+        debt_display.rename(
+            columns={
+                "year": "Year",
+                "interest_expense": "Zinsaufwand (EUR)",
+                "principal_payment": "Tilgung (EUR)",
+                "debt_service": "Schuldendienst (EUR)",
+                "outstanding_principal": "Restschuld (EUR)",
+                "dscr": "DSCR (x)",
+            },
+            inplace=True,
+        )
+        debt_money_columns = [
+            "Zinsaufwand (EUR)",
+            "Tilgung (EUR)",
+            "Schuldendienst (EUR)",
+            "Restschuld (EUR)",
+        ]
+        for col in debt_money_columns:
+            if col in debt_display.columns:
+                debt_display[col] = debt_display[col].map(
+                    lambda x: f"{x:,.0f}" if pd.notna(x) else ""
+                )
+        if "DSCR (x)" in debt_display.columns:
+            debt_display["DSCR (x)"] = debt_display["DSCR (x)"].map(
+                lambda x: f"{x:.2f}" if pd.notna(x) else ""
+            )
+        st.table(debt_display)
 
     with tab_equity:
         summary = {
@@ -91,11 +189,49 @@ def run_app():
             "irr": investment_result["irr"],
         }
         summary_table = pd.DataFrame([summary])
+        summary_display = summary_table.copy()
+        summary_display.rename(
+            columns={
+                "initial_equity": "Eigenkapital (Start, EUR)",
+                "exit_value": "Exit Value (EUR)",
+                "irr": "IRR (%)",
+            },
+            inplace=True,
+        )
+        summary_money_columns = [
+            "Eigenkapital (Start, EUR)",
+            "Exit Value (EUR)",
+        ]
+        for col in summary_money_columns:
+            if col in summary_display.columns:
+                summary_display[col] = summary_display[col].map(
+                    lambda x: f"{x:,.0f}" if pd.notna(x) else ""
+                )
+        if "IRR (%)" in summary_display.columns:
+            summary_display["IRR (%)"] = summary_display["IRR (%)"].map(
+                lambda x: f"{x:.1%}" if pd.notna(x) else ""
+            )
+
         cashflows_table = pd.DataFrame(
             {"equity_cashflows": investment_result["equity_cashflows"]}
         )
-        st.table(summary_table)
-        st.table(cashflows_table)
+        cashflows_display = cashflows_table.copy()
+        cashflows_display.insert(
+            0, "year", [f"Year {i}" for i in range(len(cashflows_display))]
+        )
+        cashflows_display.rename(
+            columns={
+                "year": "Year",
+                "equity_cashflows": "Equity Cashflows (EUR)",
+            },
+            inplace=True,
+        )
+        cashflows_display["Equity Cashflows (EUR)"] = cashflows_display[
+            "Equity Cashflows (EUR)"
+        ].map(lambda x: f"{x:,.0f}" if pd.notna(x) else "")
+
+        st.table(summary_display)
+        st.table(cashflows_display)
 
 
 if __name__ == "__main__":
