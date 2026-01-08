@@ -1,6 +1,8 @@
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(layout="wide")
+
 from data_model import InputModel, create_demo_input_model
 import run_model as run_model
 
@@ -260,13 +262,14 @@ def _render_pnl_html(pnl_statement, section_rows, bold_rows):
     css = """
     <style>
       .pnl-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      .pnl-table col.line-item { width: 40%; }
-      .pnl-table col.year { width: 12%; }
+      .pnl-table col.line-item { width: 42%; }
+      .pnl-table col.year { width: 11.6%; }
       .pnl-table th, .pnl-table td {
-        padding: 2px 8px;
+        padding: 2px 6px;
         white-space: nowrap;
-        line-height: 1.1;
+        line-height: 1.0;
         border: 0;
+        font-size: 0.9rem;
       }
       .pnl-table th { text-align: right; font-weight: 600; }
       .pnl-table th:first-child { text-align: left; }
