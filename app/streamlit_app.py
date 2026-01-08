@@ -96,6 +96,9 @@ def _default_financing_assumptions(input_model):
         "minimum_cash_balance_eur": input_model.capex_and_working_capital[
             "minimum_cash_balance_eur"
         ].value,
+        "target_irr": 0.25,
+        "max_equity_contribution_eur": None,
+        "min_cash_yield": 0.08,
     }
 
 
@@ -729,6 +732,8 @@ def _build_pnl_excel(input_model):
         ("Insurance (EUR)", input_model.overhead_and_variable_costs["insurance_eur_per_year"].value),
         ("Other Services (EUR)", input_model.overhead_and_variable_costs["other_overhead_eur_per_year"].value),
         ("Depreciation (EUR)", input_model.capex_and_working_capital["depreciation_eur_per_year"].value),
+        ("Purchase Price (EUR)", input_model.transaction_and_financing["purchase_price_eur"].value),
+        ("Equity Contribution (EUR)", input_model.transaction_and_financing["equity_contribution_eur"].value),
         ("Debt Amount (EUR)", input_model.transaction_and_financing["senior_term_loan_start_eur"].value),
         ("Interest Rate %", input_model.transaction_and_financing["senior_interest_rate_pct"].value),
         ("Annual Debt Repayment (EUR)", input_model.transaction_and_financing["senior_repayment_per_year_eur"].value),
@@ -751,6 +756,7 @@ def _build_pnl_excel(input_model):
         ws_balance = wb.create_sheet("Balance Sheet")
         ws_valuation = wb.create_sheet("Valuation")
         ws_financing = wb.create_sheet("Financing & Debt")
+        ws_financing_notes = wb.create_sheet("Financing Notes")
 
         assumption_cells = {
             name: f"Assumptions!B{idx + 2}" for idx, (name, _) in enumerate(assumptions)
@@ -1361,12 +1367,75 @@ def _build_pnl_excel(input_model):
             ("Special Repayment Amount (EUR)", financing_assumptions["special_repayment_amount_eur"]),
             ("Minimum DSCR", financing_assumptions["minimum_dscr"]),
             ("Minimum Cash Balance (EUR)", financing_assumptions["minimum_cash_balance_eur"]),
+            ("Target IRR", financing_assumptions["target_irr"]),
+            ("Max Equity Contribution (EUR)", financing_assumptions["max_equity_contribution_eur"] or 0),
+            ("Minimum Cash Yield", financing_assumptions["min_cash_yield"]),
         ]
         for idx, (label, value) in enumerate(financing_rows, start=2):
             ws_financing.cell(row=idx, column=1, value=label)
             ws_financing.cell(row=idx, column=2, value=value)
 
-        debt_table_start = 12
+        sources_start = 12
+        ws_financing.cell(row=sources_start, column=1, value="Sources & Uses")
+        ws_financing.cell(row=sources_start + 1, column=1, value="Line Item")
+        ws_financing.cell(row=sources_start + 1, column=2, value="Amount")
+
+        sources_items = [
+            "USES",
+            "Purchase Price",
+            "Transaction Fees",
+            "Refinancing",
+            "Minimum Cash at Close",
+            "Total Uses",
+            "SOURCES",
+            "Senior Debt",
+            "Equity Contribution",
+            "Total Sources",
+            "Sources - Uses",
+        ]
+        for row_idx, item in enumerate(sources_items, start=sources_start + 2):
+            ws_financing.cell(row=row_idx, column=1, value=item)
+
+        sources_row_map = {
+            item: sources_start + 2 + idx
+            for idx, item in enumerate(sources_items)
+        }
+        purchase_price_cell = assumption_cells["Purchase Price (EUR)"]
+        equity_cell = assumption_cells["Equity Contribution (EUR)"]
+        tx_cost_pct_cell = "Valuation!B7"
+        initial_debt_cell = "B2"
+        min_cash_cell = "B10"
+
+        ws_financing[f"B{sources_row_map['Purchase Price']}"] = (
+            f"={purchase_price_cell}"
+        )
+        ws_financing[f"B{sources_row_map['Transaction Fees']}"] = (
+            f"={purchase_price_cell}*{tx_cost_pct_cell}"
+        )
+        ws_financing[f"B{sources_row_map['Refinancing']}"] = "=0"
+        ws_financing[f"B{sources_row_map['Minimum Cash at Close']}"] = (
+            f"={min_cash_cell}"
+        )
+        ws_financing[f"B{sources_row_map['Total Uses']}"] = (
+            f"=B{sources_row_map['Purchase Price']}"
+            f"+B{sources_row_map['Transaction Fees']}"
+            f"+B{sources_row_map['Refinancing']}"
+            f"+B{sources_row_map['Minimum Cash at Close']}"
+        )
+        ws_financing[f"B{sources_row_map['Senior Debt']}"] = (
+            f"={initial_debt_cell}"
+        )
+        ws_financing[f"B{sources_row_map['Equity Contribution']}"] = (
+            f"={equity_cell}"
+        )
+        ws_financing[f"B{sources_row_map['Total Sources']}"] = (
+            f"=B{sources_row_map['Senior Debt']}+B{sources_row_map['Equity Contribution']}"
+        )
+        ws_financing[f"B{sources_row_map['Sources - Uses']}"] = (
+            f"=B{sources_row_map['Total Sources']}-B{sources_row_map['Total Uses']}"
+        )
+
+        debt_table_start = sources_start + len(sources_items) + 3
         ws_financing.cell(row=debt_table_start, column=1, value="Debt Schedule")
         ws_financing.cell(row=debt_table_start + 1, column=1, value="Line Item")
         for idx, header in enumerate(year_headers, start=2):
@@ -1394,7 +1463,6 @@ def _build_pnl_excel(input_model):
             "Interest Expense": debt_table_start + 8,
         }
 
-        initial_debt_cell = "B2"
         interest_rate_cell = "B3"
         amort_type_cell = "B4"
         amort_period_cell = "B5"
@@ -1482,22 +1550,158 @@ def _build_pnl_excel(input_model):
                 f"=IF({col}{service_row_map['DSCR']}<{min_dscr_cell},\"YES\",\"NO\")"
             )
 
-        financing_notes_row = service_table_start + len(service_items) + 2
+        investor_table_start = service_table_start + len(service_items) + 3
+        ws_financing.cell(
+            row=investor_table_start,
+            column=1,
+            value="Investor Cashflow Bridge",
+        )
+        ws_financing.cell(
+            row=investor_table_start + 1,
+            column=1,
+            value="Line Item",
+        )
+        for idx, header in enumerate(year_headers, start=2):
+            ws_financing.cell(
+                row=investor_table_start + 1, column=idx, value=header
+            )
+
+        investor_items = [
+            "Free Cashflow",
+            "Debt Service",
+            "Mandatory Cash Retention",
+            "Cash to Equity",
+        ]
+        for row_idx, item in enumerate(
+            investor_items, start=investor_table_start + 2
+        ):
+            ws_financing.cell(row=row_idx, column=1, value=item)
+
+        investor_row_map = {
+            "Free Cashflow": investor_table_start + 2,
+            "Debt Service": investor_table_start + 3,
+            "Mandatory Cash Retention": investor_table_start + 4,
+            "Cash to Equity": investor_table_start + 5,
+        }
+
+        for year_index in range(5):
+            col = year_col(2 + year_index)
+            ws_financing[f"{col}{investor_row_map['Free Cashflow']}"] = (
+                f"=Cashflow!{col}{cashflow_row_map['Free Cashflow']}"
+            )
+            ws_financing[f"{col}{investor_row_map['Debt Service']}"] = (
+                f"={col}{debt_row_map['Interest Expense']}"
+                f"+{col}{debt_row_map['Total Repayment']}"
+            )
+            ws_financing[
+                f"{col}{investor_row_map['Cash to Equity']}"
+            ] = f"=Cashflow!{col}{cashflow_row_map['Net Cashflow (Liquidity)']}"
+            ws_financing[
+                f"{col}{investor_row_map['Mandatory Cash Retention']}"
+            ] = (
+                f"={col}{investor_row_map['Free Cashflow']}"
+                f"-{col}{investor_row_map['Debt Service']}"
+                f"-{col}{investor_row_map['Cash to Equity']}"
+            )
+
+        investor_kpi_start = investor_table_start + len(investor_items) + 3
+        ws_financing.cell(
+            row=investor_kpi_start, column=1, value="Investor KPIs"
+        )
+        ws_financing.cell(
+            row=investor_kpi_start + 1, column=1, value="Metric"
+        )
+        ws_financing.cell(
+            row=investor_kpi_start + 1, column=2, value="Value"
+        )
+
+        investor_kpis = [
+            "Equity Contribution",
+            "Target IRR",
+            "Achieved IRR",
+            "Cash-on-Cash",
+            "Average Cash Yield",
+        ]
+        for row_idx, item in enumerate(
+            investor_kpis, start=investor_kpi_start + 2
+        ):
+            ws_financing.cell(row=row_idx, column=1, value=item)
+
+        irr_cashflows_start = investor_kpi_start + len(investor_kpis) + 3
+        ws_financing.cell(
+            row=irr_cashflows_start, column=1, value="IRR Cashflows"
+        )
+        irr_cashflow_rows = [
+            "Initial Equity",
+            "Year 0 Cash to Equity",
+            "Year 1 Cash to Equity",
+            "Year 2 Cash to Equity",
+            "Year 3 Cash to Equity",
+            "Year 4 Cash to Equity",
+        ]
+        for row_idx, item in enumerate(
+            irr_cashflow_rows, start=irr_cashflows_start + 1
+        ):
+            ws_financing.cell(row=row_idx, column=1, value=item)
+
+        ws_financing[f"B{irr_cashflows_start + 1}"] = f"=-{equity_cell}"
+        for year_index in range(5):
+            ws_financing[f"B{irr_cashflows_start + 2 + year_index}"] = (
+                f"=Cashflow!{year_col(2 + year_index)}{cashflow_row_map['Net Cashflow (Liquidity)']}"
+            )
+
+        target_irr_cell = "B11"
+        ws_financing[f"B{investor_kpi_start + 2}"] = f"={equity_cell}"
+        ws_financing[f"B{investor_kpi_start + 3}"] = f"={target_irr_cell}"
+        ws_financing[f"B{investor_kpi_start + 4}"] = (
+            f"=IRR(B{irr_cashflows_start + 1}:B{irr_cashflows_start + 6})"
+        )
+        ws_financing[f"B{investor_kpi_start + 5}"] = (
+            f"=IF({equity_cell}=0,0,"
+            f"SUMIF(B{irr_cashflows_start + 2}:B{irr_cashflows_start + 6},\">0\")/"
+            f"{equity_cell})"
+        )
+        ws_financing[f"B{investor_kpi_start + 6}"] = (
+            f"=IF({equity_cell}=0,0,"
+            f"(SUMIF(B{irr_cashflows_start + 2}:B{irr_cashflows_start + 6},\">0\")/5)/"
+            f"{equity_cell})"
+        )
+
+        financing_notes_row = irr_cashflows_start + len(irr_cashflow_rows) + 2
         ws_financing.cell(row=financing_notes_row, column=1, value="Notes")
         ws_financing.cell(
             row=financing_notes_row + 1,
             column=1,
-            value="Interest = Opening Debt × Interest Rate.",
+            value="Sources & uses must reconcile: Total Sources - Total Uses = 0.",
         )
         ws_financing.cell(
             row=financing_notes_row + 2,
             column=1,
-            value="DSCR = CFADS / Debt Service.",
+            value="Interest = Opening Debt × Interest Rate.",
         )
         ws_financing.cell(
             row=financing_notes_row + 3,
             column=1,
+            value="DSCR = CFADS / Debt Service.",
+        )
+        ws_financing.cell(
+            row=financing_notes_row + 4,
+            column=1,
             value="CFADS = Operating Cashflow - Maintenance Capex.",
+        )
+
+        ws_financing_notes["A1"] = "Financing Notes"
+        ws_financing_notes["A2"] = (
+            "Sources & uses reconcile purchase price, fees, and minimum cash at close."
+        )
+        ws_financing_notes["A3"] = (
+            "Debt service is based on opening debt, scheduled amortisation, and interest."
+        )
+        ws_financing_notes["A4"] = (
+            "CFADS measures cash available for debt service after maintenance capex."
+        )
+        ws_financing_notes["A5"] = (
+            "Investor cashflows reflect remaining cash after debt service."
         )
 
         writer.close()
@@ -2184,6 +2388,36 @@ def run_app():
                     "step": 50000.0,
                     "format": "%.0f",
                 },
+                {
+                    "type": "pct",
+                    "label": "Target IRR",
+                    "field_key": "financing.target_irr",
+                    "value": _get_current_value(
+                        "financing.target_irr",
+                        financing_defaults["target_irr"],
+                    ),
+                },
+                {
+                    "type": "number",
+                    "label": "Max Equity Contribution (EUR)",
+                    "field_key": "financing.max_equity_contribution_eur",
+                    "value": _get_current_value(
+                        "financing.max_equity_contribution_eur",
+                        financing_defaults["max_equity_contribution_eur"],
+                    )
+                    or 0,
+                    "step": 100000.0,
+                    "format": "%.0f",
+                },
+                {
+                    "type": "pct",
+                    "label": "Minimum Cash Yield",
+                    "field_key": "financing.min_cash_yield",
+                    "value": _get_current_value(
+                        "financing.min_cash_yield",
+                        financing_defaults["min_cash_yield"],
+                    ),
+                },
             ]
             _render_inline_controls("Financing Drivers", financing_controls, columns=1)
 
@@ -2473,6 +2707,18 @@ def run_app():
         "minimum_cash_balance_eur": st.session_state.get(
             "financing.minimum_cash_balance_eur",
             financing_defaults["minimum_cash_balance_eur"],
+        ),
+        "target_irr": st.session_state.get(
+            "financing.target_irr",
+            financing_defaults["target_irr"],
+        ),
+        "max_equity_contribution_eur": st.session_state.get(
+            "financing.max_equity_contribution_eur",
+            financing_defaults["max_equity_contribution_eur"],
+        ),
+        "min_cash_yield": st.session_state.get(
+            "financing.min_cash_yield",
+            financing_defaults["min_cash_yield"],
         ),
     }
 
@@ -4388,6 +4634,131 @@ def run_app():
         cashflow_by_year = {
             row["year"]: row for row in cashflow_result
         }
+        valuation_runtime = getattr(
+            input_model,
+            "valuation_runtime",
+            _default_valuation_assumptions(input_model),
+        )
+
+        purchase_price = input_model.transaction_and_financing[
+            "purchase_price_eur"
+        ].value
+        equity_contribution = input_model.transaction_and_financing[
+            "equity_contribution_eur"
+        ].value
+        transaction_fee_pct = valuation_runtime.get(
+            "transaction_cost_pct", 0.0
+        )
+        transaction_fees = purchase_price * transaction_fee_pct
+        refinancing_amount = 0.0
+        minimum_cash_close = financing_assumptions[
+            "minimum_cash_balance_eur"
+        ]
+        total_uses = (
+            purchase_price
+            + transaction_fees
+            + refinancing_amount
+            + minimum_cash_close
+        )
+        senior_debt = financing_assumptions["initial_debt_eur"]
+        total_sources = senior_debt + equity_contribution
+
+        sources_uses_rows = [
+            {
+                "Line Item": "USES",
+                "Year 0": "",
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Purchase Price",
+                "Year 0": purchase_price,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Transaction Fees",
+                "Year 0": transaction_fees,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Refinancing",
+                "Year 0": refinancing_amount,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Minimum Cash at Close",
+                "Year 0": minimum_cash_close,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Total Uses",
+                "Year 0": total_uses,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "SOURCES",
+                "Year 0": "",
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Senior Debt",
+                "Year 0": senior_debt,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Equity Contribution",
+                "Year 0": equity_contribution,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Total Sources",
+                "Year 0": total_sources,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+        ]
+        sources_uses_statement = pd.DataFrame(sources_uses_rows)
+
+        st.markdown("### Sources & Uses")
+        _render_custom_table_html(
+            sources_uses_statement,
+            {"USES", "SOURCES"},
+            {"Total Uses", "Total Sources"},
+            {},
+        )
+        if abs(total_sources - total_uses) > 1:
+            st.warning(
+                "Sources and uses do not reconcile. "
+                f"Gap: {format_currency(total_sources - total_uses)}"
+            )
 
         initial_debt = debt_schedule[0]["opening_debt"]
         peak_debt = max(row["opening_debt"] for row in debt_schedule)
@@ -4626,56 +4997,214 @@ def run_app():
             if total_equity_invested
             else 0
         )
-        st.markdown("### Equity Impact of Financing Structure")
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "Metric": "Equity Contribution",
-                        "Value": format_currency(total_equity_invested),
-                    },
-                    {
-                        "Metric": "Levered IRR",
-                        "Value": format_pct(investment_result["irr"]),
-                    },
-                    {
-                        "Metric": "Cash-on-Cash",
-                        "Value": f"{cash_on_cash:.2f}x",
-                    },
-                ]
-            ),
-            use_container_width=True,
+
+        st.markdown("### Investor Financing View")
+        ebitda_year0 = pnl_result["Year 0"]["ebitda"]
+        entry_ev = purchase_price + transaction_fees
+        entry_multiple = (
+            entry_ev / ebitda_year0 if ebitda_year0 else 0
         )
+        ownership_pct = (
+            equity_contribution / (equity_contribution + senior_debt)
+            if equity_contribution + senior_debt
+            else 0
+        )
+        net_debt_at_close = senior_debt - balance_sheet[0]["cash"]
+        investor_summary = pd.DataFrame(
+            [
+                {
+                    "Metric": "Equity Contribution",
+                    "Value": format_currency(equity_contribution),
+                },
+                {
+                    "Metric": "Ownership %",
+                    "Value": format_pct(ownership_pct),
+                },
+                {
+                    "Metric": "Entry Multiple (EV / EBITDA)",
+                    "Value": f"{entry_multiple:.2f}x",
+                },
+                {
+                    "Metric": "Debt at Close",
+                    "Value": format_currency(senior_debt),
+                },
+                {
+                    "Metric": "Net Debt at Close",
+                    "Value": format_currency(net_debt_at_close),
+                },
+            ]
+        )
+        st.dataframe(investor_summary, use_container_width=True)
         st.caption(
-            "Higher leverage can lift IRR but tightens DSCR headroom, "
-            "creating a trade-off between bankability and equity returns."
+            "Investor provides the residual capital after bank funding "
+            "and minimum liquidity needs are satisfied."
+        )
+
+        bridge_rows = []
+        cash_to_equity = equity_cashflows[1:]
+        for year_index in range(5):
+            year_label = f"Year {year_index}"
+            free_cf = cashflow_by_year[year_index]["free_cashflow"]
+            debt_service = (
+                debt_schedule[year_index]["interest_expense"]
+                + debt_schedule[year_index]["total_repayment"]
+            )
+            equity_cf = (
+                cash_to_equity[year_index]
+                if year_index < len(cash_to_equity)
+                else 0
+            )
+            mandatory_retention = free_cf - debt_service - equity_cf
+            bridge_rows.append(
+                {
+                    "Line Item": "Free Cashflow",
+                    year_label: free_cf,
+                }
+            )
+            bridge_rows.append(
+                {
+                    "Line Item": "Debt Service",
+                    year_label: debt_service,
+                }
+            )
+            bridge_rows.append(
+                {
+                    "Line Item": "Mandatory Cash Retention",
+                    year_label: mandatory_retention,
+                }
+            )
+            bridge_rows.append(
+                {
+                    "Line Item": "Cash to Equity",
+                    year_label: equity_cf,
+                }
+            )
+
+        bridge_metrics = {}
+        for entry in bridge_rows:
+            label = entry["Line Item"]
+            bridge_metrics.setdefault(label, {})
+            for year_index in range(5):
+                year_label = f"Year {year_index}"
+                if year_label in entry:
+                    bridge_metrics[label][year_label] = entry[year_label]
+
+        bridge_table = pd.DataFrame.from_dict(bridge_metrics, orient="index")
+        bridge_table = bridge_table[
+            [f"Year {i}" for i in range(5)]
+        ].reset_index()
+        bridge_table.rename(columns={"index": "Line Item"}, inplace=True)
+
+        st.markdown("### Cashflow Available to Equity")
+        _render_custom_table_html(
+            bridge_table,
+            set(),
+            {"Cash to Equity"},
+            {},
+        )
+
+        target_irr = financing_assumptions["target_irr"]
+        max_equity = financing_assumptions["max_equity_contribution_eur"]
+        min_cash_yield = financing_assumptions["min_cash_yield"]
+        average_cash_distribution = (
+            sum(cf for cf in cash_to_equity if cf > 0) / 5
+            if cash_to_equity
+            else 0
+        )
+        cash_yield = (
+            average_cash_distribution / equity_contribution
+            if equity_contribution
+            else 0
+        )
+        equity_stress_years = [
+            f"Year {i}"
+            for i, value in enumerate(cash_to_equity)
+            if value < 0
+        ]
+        meets_target_irr = (
+            investment_result["irr"] >= target_irr
+            if target_irr is not None
+            else True
+        )
+        meets_max_equity = (
+            equity_contribution <= max_equity
+            if max_equity
+            else True
+        )
+        meets_cash_yield = (
+            cash_yield >= min_cash_yield
+            if min_cash_yield is not None
+            else True
+        )
+
+        st.markdown("### Investor Constraints")
+        investor_constraints = pd.DataFrame(
+            [
+                {
+                    "Metric": "Target IRR",
+                    "Value": format_pct(target_irr),
+                    "Status": "YES" if meets_target_irr else "NO",
+                },
+                {
+                    "Metric": "Max Equity Contribution",
+                    "Value": format_currency(max_equity)
+                    if max_equity
+                    else "N/A",
+                    "Status": "YES" if meets_max_equity else "NO",
+                },
+                {
+                    "Metric": "Min Cash Yield",
+                    "Value": format_pct(min_cash_yield),
+                    "Status": "YES" if meets_cash_yield else "NO",
+                },
+                {
+                    "Metric": "Equity Stress Year(s)",
+                    "Value": ", ".join(equity_stress_years)
+                    if equity_stress_years
+                    else "None",
+                    "Status": "",
+                },
+            ]
+        )
+        st.dataframe(investor_constraints, use_container_width=True)
+
+        st.markdown("### Leverage vs Investor Returns")
+        st.write(
+            "Higher leverage can lift IRR but reduces DSCR headroom; "
+            f"current minimum DSCR is {min_dscr_value:.2f}x versus a "
+            f"{financing_assumptions['minimum_dscr']:.2f}x covenant. "
+            f"Equity IRR is {format_pct(investment_result['irr'])}."
         )
 
         explain_financing = st.toggle("Explain Financing Logic")
         if explain_financing:
-            st.markdown("### 1. Debt Structure Summary")
+            st.markdown("### 1. Transaction Funding (Sources & Uses)")
+            st.write(
+                "Purchase price, fees, and required cash at close are funded "
+                "through senior debt and equity. Sources must match uses."
+            )
+            st.markdown("### 2. Bank Debt Mechanics & Covenants")
             st.write(
                 f"Initial debt of {format_currency(initial_debt)} is amortised "
                 f"{financing_assumptions['amortization_type'].lower()} over "
                 f"{financing_assumptions['amortization_period_years']} years "
-                f"with {financing_assumptions['grace_period_years']} years grace."
+                f"with {financing_assumptions['grace_period_years']} years grace. "
+                f"Minimum DSCR is {financing_assumptions['minimum_dscr']:.2f}x."
             )
-            st.markdown("### 2. Cashflow vs Debt Service Mechanics")
+            st.markdown("### 3. Residual Equity Funding")
             st.write(
-                "CFADS equals operating cashflow less maintenance capex. "
-                "DSCR compares CFADS to total debt service."
+                "Equity funds the residual capital after debt capacity and "
+                "liquidity requirements are satisfied."
             )
-            st.markdown("### 3. Covenant Logic")
+            st.markdown("### 4. Cashflow Split: Bank vs Investor")
             st.write(
-                f"Minimum DSCR is set at {financing_assumptions['minimum_dscr']:.2f}x. "
-                "Breaches are flagged when DSCR falls below this level."
+                "Operating cashflow less capex defines CFADS; debt service "
+                "is paid first, and remaining cash is available to equity."
             )
-            st.markdown("### 4. Bank Conclusion")
-            st.write(credit_conclusion)
-            st.markdown("### 5. Equity Implication")
+            st.markdown("### 5. Resulting Investor Returns")
             st.write(
-                "Stricter bank terms reduce leverage and IRR; looser terms "
-                "increase returns but reduce covenant headroom."
+                f"Equity IRR is {format_pct(investment_result['irr'])}, with "
+                "returns sensitive to leverage and covenant headroom."
             )
 
     if page == "Equity Case":
