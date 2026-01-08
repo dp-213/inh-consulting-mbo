@@ -1199,16 +1199,27 @@ def run_app():
         )
 
         st.markdown("### P&L (GuV)")
-        edit_row = st.columns([4, 0.6, 4, 0.6, 4, 0.6])
-        edit_row[0].markdown("**Guaranteed Revenue**")
-        if edit_row[1].button("✎", key="edit_guarantee", help="Edit revenue guarantees"):
+        edit_cols = st.columns([3, 1, 1, 1])
+        edit_cols[0].markdown("**Edit assumptions**")
+        if edit_cols[1].button(
+            "✎ Guarantees",
+            key="edit_guarantee",
+            help="Edit revenue guarantees",
+        ):
             st.session_state["edit_guarantee"] = True
-        edit_row[2].markdown("**Consultant Compensation**")
-        if edit_row[3].button("✎", key="edit_consultant_comp", help="Edit consultant compensation"):
+        if edit_cols[2].button(
+            "✎ Consultant",
+            key="edit_consultant_comp",
+            help="Edit consultant compensation",
+        ):
             st.session_state["edit_consultant_comp"] = True
-        edit_row[4].markdown("**Operating Expenses**")
-        if edit_row[5].button("✎", key="edit_operating_expenses", help="Edit operating expenses"):
+        if edit_cols[3].button(
+            "✎ Opex",
+            key="edit_operating_expenses",
+            help="Edit operating expenses",
+        ):
             st.session_state["edit_operating_expenses"] = True
+
 
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
         year_indexes = list(range(len(pnl_table)))
@@ -1425,6 +1436,13 @@ def run_app():
                     )
 
         pnl_statement = pd.DataFrame(label_rows)
+        pnl_statement["Line Item"] = pnl_statement["Line Item"].replace(
+            {
+                "Guaranteed Revenue": "Guaranteed Revenue (edit ✎)",
+                "Consultant Compensation": "Consultant Compensation (edit ✎)",
+                "Operating Expenses": "Operating Expenses (edit ✎)",
+            }
+        )
         format_map = {
             "Year 0": format_currency,
             "Year 1": format_currency,
@@ -1467,10 +1485,6 @@ def run_app():
                 ]
             )
         )
-        table_col, kpi_col = st.columns([4, 1])
-        with table_col:
-            st.dataframe(pnl_styled, use_container_width=True)
-
         avg_revenue = pnl_table["revenue"].mean()
         consultant_counts = [
             fte_field.value * ((1 + fte_growth_field.value) ** idx)
@@ -1503,15 +1517,18 @@ def run_app():
             (guarantee_y1_field.value + guarantee_y2_field.value + guarantee_y3_field.value)
             / 3
         )
-        with kpi_col:
-            st.metric(
-                "Revenue per Consultant",
-                format_currency(revenue_per_consultant),
-            )
-            st.metric("EBITDA Margin", format_pct(ebitda_margin))
-            st.metric("EBIT Margin", format_pct(ebit_margin))
-            st.metric("Personnel Cost Ratio", format_pct(personnel_cost_ratio))
-            st.metric("Revenue Guarantee %", format_pct(revenue_guarantee_pct))
+
+        kpi_strip = st.columns(5)
+        kpi_strip[0].metric(
+            "Revenue per Consultant",
+            format_currency(revenue_per_consultant),
+        )
+        kpi_strip[1].metric("EBITDA Margin", format_pct(ebitda_margin))
+        kpi_strip[2].metric("EBIT Margin", format_pct(ebit_margin))
+        kpi_strip[3].metric("Personnel Cost Ratio", format_pct(personnel_cost_ratio))
+        kpi_strip[4].metric("Revenue Guarantee %", format_pct(revenue_guarantee_pct))
+
+        st.dataframe(pnl_styled, use_container_width=True)
 
         explain_pnl = st.toggle("Explain P&L logic")
         if explain_pnl:
