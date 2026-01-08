@@ -1,9 +1,9 @@
-from app.data_model import InputModel
-from app.calculations.pnl import calculate_pnl
-from app.calculations.cashflow import calculate_cashflow
-from app.calculations.debt import calculate_debt_schedule
-from app.calculations.balance_sheet import calculate_balance_sheet
-from app.calculations.investment import calculate_investment
+from data_model import InputModel
+from calculations.pnl import calculate_pnl
+from calculations.cashflow import calculate_cashflow
+from calculations.debt import calculate_debt_schedule
+from calculations.balance_sheet import calculate_balance_sheet
+from calculations.investment import calculate_investment
 
 
 def run_model():
