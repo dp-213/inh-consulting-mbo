@@ -1,4 +1,8 @@
 import io
+import json
+import subprocess
+from datetime import datetime
+import zipfile
 import pandas as pd
 import streamlit as st
 from openpyxl.utils import get_column_letter
@@ -2785,6 +2789,334 @@ def run_app():
             return "—"
         return formatter(value)
 
+    def _get_git_commit():
+        try:
+            return (
+                subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+                .decode("utf-8")
+                .strip()
+            )
+        except Exception:
+            return "unknown"
+
+    def _build_page_structure_snapshot():
+        return {
+            "Overview": {
+                "title": "Overview",
+                "sections": [
+                    "Deal Snapshot",
+                    "Business Performance Summary",
+                    "Financing & Risk Snapshot",
+                    "Equity Story",
+                ],
+                "tables": ["Performance Summary", "Financing Snapshot"],
+                "kpis": [
+                    "Purchase Price",
+                    "Equity Contribution",
+                    "Debt at Close",
+                    "Avg Revenue",
+                    "Avg EBITDA & Margin",
+                    "Avg Free Cash Flow",
+                    "Levered Equity IRR",
+                    "Minimum Cash Balance",
+                ],
+            },
+            "Operating Model (P&L)": {
+                "title": "Operating Model (P&L)",
+                "sections": ["Income Statement", "KPI Summary"],
+                "tables": ["P&L Statement", "KPI Block"],
+                "kpis": ["Revenue per Consultant", "EBITDA Margin", "EBIT Margin"],
+            },
+            "Cashflow & Liquidity": {
+                "title": "Cashflow & Liquidity",
+                "sections": ["Cashflow Statement", "KPI Summary"],
+                "tables": ["Cashflow Statement"],
+                "kpis": [
+                    "Operating Cashflow",
+                    "Free Cashflow",
+                    "Minimum Cash Balance",
+                ],
+            },
+            "Balance Sheet": {
+                "title": "Balance Sheet",
+                "sections": ["Balance Sheet", "KPI Summary"],
+                "tables": ["Balance Sheet"],
+                "kpis": [
+                    "Net Debt",
+                    "Equity Ratio",
+                    "Net Debt / EBITDA",
+                    "Minimum Cash Headroom",
+                ],
+            },
+            "Financing & Debt": {
+                "title": "Financing & Debt",
+                "sections": ["Bank View", "KPI Summary"],
+                "tables": ["Bank View (DSCR)", "Debt Schedule"],
+                "kpis": ["Average DSCR", "Minimum DSCR", "Peak Debt"],
+            },
+            "Valuation & Purchase Price": {
+                "title": "Valuation & Purchase Price",
+                "sections": [
+                    "Seller Valuation",
+                    "Buyer Valuation",
+                    "Purchase Price Bridge",
+                ],
+                "tables": [
+                    "Seller Valuation (Multiple-Based)",
+                    "Buyer Valuation (DCF)",
+                    "Purchase Price Bridge",
+                ],
+                "kpis": ["Implied EV / EBIT", "Buyer IRR"],
+            },
+            "Equity Case": {
+                "title": "Equity Case",
+                "sections": [
+                    "Headline Metrics",
+                    "Sources & Uses",
+                    "Equity Ownership",
+                    "Equity Cashflows",
+                    "Equity KPIs",
+                ],
+                "tables": [
+                    "Sources & Uses",
+                    "Equity Ownership",
+                    "Equity Cashflows",
+                    "Equity KPIs",
+                ],
+                "kpis": ["Sponsor IRR", "Investor IRR"],
+            },
+            "Assumptions (Advanced)": {
+                "title": "Assumptions (Advanced)",
+                "sections": [
+                    "Revenue Drivers",
+                    "Revenue Guarantees",
+                    "Personnel Costs",
+                    "Opex",
+                    "Financing",
+                    "Equity",
+                    "Cashflow",
+                    "Balance Sheet",
+                    "Valuation",
+                ],
+                "tables": [
+                    "Revenue Drivers",
+                    "Revenue Guarantees",
+                    "Personnel Costs",
+                    "Operating Expenses",
+                    "Financing Assumptions",
+                    "Equity Assumptions",
+                    "Cashflow Assumptions",
+                    "Balance Sheet Assumptions",
+                    "Valuation Assumptions",
+                ],
+                "kpis": [],
+            },
+        }
+
+    def _build_model_snapshot_payload():
+        scenario = input_model.scenario_selection["selected_scenario"].value
+        horizon_years = 5
+        assumptions_state = st.session_state.get("assumptions", {})
+        utilization_by_year = st.session_state.get("utilization_by_year")
+
+        pnl_summary = {}
+        for year_label, year_data in pnl_result.items():
+            revenue = year_data.get("revenue", 0.0)
+            ebitda = year_data.get("ebitda", 0.0)
+            ebit = year_data.get("ebit", 0.0)
+            net_income = year_data.get("net_income", 0.0)
+            pnl_summary[year_label] = {
+                "revenue": revenue,
+                "ebitda": ebitda,
+                "ebit": ebit,
+                "net_income": net_income,
+                "ebitda_margin": ebitda / revenue if revenue else 0.0,
+                "ebit_margin": ebit / revenue if revenue else 0.0,
+                "net_margin": net_income / revenue if revenue else 0.0,
+            }
+
+        cashflow_summary = {}
+        min_cash = None
+        for row in cashflow_result:
+            year_label = f"Year {row['year']}"
+            cashflow_summary[year_label] = {
+                "operating_cf": row.get("operating_cf", 0.0),
+                "free_cashflow": row.get("free_cashflow", 0.0),
+                "cash_balance": row.get("cash_balance", 0.0),
+            }
+            cash_balance = row.get("cash_balance", 0.0)
+            min_cash = cash_balance if min_cash is None else min(
+                min_cash, cash_balance
+            )
+
+        balance_summary = {}
+        balance_checks = {}
+        for row in balance_sheet:
+            year_label = f"Year {row['year']}"
+            balance_summary[year_label] = {
+                "cash": row.get("cash", 0.0),
+                "debt": row.get("financial_debt", 0.0),
+                "equity": row.get("equity_end", 0.0),
+                "balance_check": row.get("balance_check", 0.0),
+            }
+            balance_checks[year_label] = row.get("balance_check", 0.0)
+
+        peak_debt = max(
+            (row.get("opening_debt", 0.0) for row in debt_schedule),
+            default=0.0,
+        )
+        avg_dscr = (
+            sum(row.get("dscr", 0.0) for row in debt_schedule) / len(debt_schedule)
+            if debt_schedule
+            else 0.0
+        )
+        covenant_breaches = [
+            f"Year {row['year']}"
+            for row in debt_schedule
+            if row.get("covenant_breach")
+        ]
+
+        valuation_runtime = input_model.valuation_runtime
+        seller_multiple = valuation_runtime["seller_ebit_multiple"]
+        reference_year = valuation_runtime["reference_year"]
+        buyer_discount_rate = valuation_runtime["buyer_discount_rate"]
+        valuation_start_year = valuation_runtime["valuation_start_year"]
+        debt_at_close = valuation_runtime["debt_at_close_eur"]
+        transaction_cost_pct = valuation_runtime["transaction_cost_pct"]
+        include_terminal_value = valuation_runtime["include_terminal_value"]
+
+        pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
+        ebit_ref = pnl_table.loc[f"Year {reference_year}", "ebit"]
+        seller_ev = ebit_ref * seller_multiple
+        net_debt_close = (
+            balance_sheet[0]["financial_debt"] - balance_sheet[0]["cash"]
+            if balance_sheet
+            else 0.0
+        )
+        seller_equity_value = seller_ev - net_debt_close
+
+        free_cashflows = [row.get("free_cashflow", 0.0) for row in cashflow_result]
+        cumulative_pv = 0.0
+        for year_index, fcf in enumerate(free_cashflows):
+            if year_index >= valuation_start_year:
+                exponent = year_index - valuation_start_year + 1
+                discount_factor = (
+                    1 / ((1 + buyer_discount_rate) ** exponent)
+                    if buyer_discount_rate
+                    else 1.0
+                )
+            else:
+                discount_factor = 0.0
+            cumulative_pv += fcf * discount_factor
+        terminal_value = 0.0
+        terminal_pv = 0.0
+        if include_terminal_value and buyer_discount_rate and free_cashflows:
+            terminal_value = free_cashflows[-1] / buyer_discount_rate
+            last_exponent = max(1, len(free_cashflows) - valuation_start_year)
+            terminal_pv = terminal_value / (
+                (1 + buyer_discount_rate) ** last_exponent
+            )
+        enterprise_value_dcf = cumulative_pv + terminal_pv
+        transaction_costs = enterprise_value_dcf * transaction_cost_pct
+        buyer_equity_value = (
+            enterprise_value_dcf - debt_at_close - transaction_costs
+        )
+        valuation_gap = buyer_equity_value - seller_equity_value
+
+        sponsor_irr = st.session_state.get("equity.sponsor_irr")
+        investor_irr = st.session_state.get("equity.investor_irr")
+
+        equity_assumptions = input_model.equity_assumptions
+        sponsor_equity = equity_assumptions["sponsor_equity_eur"]
+        investor_equity = equity_assumptions["investor_equity_eur"]
+        total_equity = sponsor_equity + investor_equity
+        investor_pct = investor_equity / total_equity if total_equity else 0.0
+        exit_year = equity_assumptions["exit_year"]
+        exit_multiple = equity_assumptions["exit_multiple"]
+        exit_year_index = min(max(exit_year, 0), 4)
+        ebitda_exit = pnl_result[f"Year {exit_year_index}"]["ebitda"]
+        net_debt_exit = (
+            balance_sheet[exit_year_index]["financial_debt"]
+            - balance_sheet[exit_year_index]["cash"]
+        )
+        enterprise_value_exit = ebitda_exit * exit_multiple
+        equity_value_exit = enterprise_value_exit - net_debt_exit
+        investor_exit_proceeds = equity_value_exit * investor_pct
+        investor_moic = (
+            investor_exit_proceeds / abs(investor_equity)
+            if investor_equity
+            else 0.0
+        )
+
+        return {
+            "meta": {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "git_commit": _get_git_commit(),
+                "scenario": scenario,
+                "currency": "EUR",
+                "planning_horizon_years": horizon_years,
+            },
+            "assumptions": {
+                "tables": assumptions_state,
+                "utilization_by_year": utilization_by_year,
+            },
+            "outputs": {
+                "pnl": pnl_summary,
+                "cashflow": {
+                    "by_year": cashflow_summary,
+                    "minimum_cash_balance": min_cash or 0.0,
+                },
+                "balance_sheet": {
+                    "by_year": balance_summary,
+                    "balance_check": balance_checks,
+                },
+                "financing": {
+                    "peak_debt": peak_debt,
+                    "average_dscr": avg_dscr,
+                    "covenant_breaches": covenant_breaches,
+                },
+                "valuation": {
+                    "seller_enterprise_value": seller_ev,
+                    "seller_equity_value": seller_equity_value,
+                    "buyer_enterprise_value": enterprise_value_dcf,
+                    "buyer_equity_value": buyer_equity_value,
+                    "valuation_gap": valuation_gap,
+                },
+                "equity_case": {
+                    "sponsor_irr": sponsor_irr,
+                    "investor_irr": investor_irr,
+                    "investor_moic": investor_moic,
+                },
+            },
+            "page_structure": _build_page_structure_snapshot(),
+            "logic_notes": [
+                "Revenue = FTE × Workdays × Utilization × Day Rate",
+                "Guaranteed Revenue = Revenue × Guarantee %",
+                "EBITDA = Revenue − Personnel Costs − Operating Expenses",
+                "EBIT = EBITDA − Depreciation",
+                "Free Cashflow = Operating CF − Capex",
+                "Operating CF = EBITDA − Taxes Paid − Working Capital Change",
+                "Debt Service = Interest + Scheduled Repayment",
+                "DSCR = CFADS / Debt Service",
+                "Equity Exit Value = Exit Multiple × EBITDA − Net Debt",
+            ],
+        }
+
+    def _build_model_snapshot_zip(snapshot_payload):
+        snapshot_text = json.dumps(snapshot_payload, indent=2)
+        readme_text = (
+            "Model snapshot for GPT analysis.\n\n"
+            "Contents:\n"
+            "- snapshot.json: full model state (assumptions, outputs, layout)\n"
+            "- README.txt: this file\n"
+        )
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("snapshot.json", snapshot_text)
+            zf.writestr("README.txt", readme_text)
+        buffer.seek(0)
+        return buffer
+
     def _build_model_snapshot_text():
         scenario = input_model.scenario_selection["selected_scenario"].value
         scenario_key = scenario.lower()
@@ -3039,15 +3371,56 @@ def run_app():
 
     if page == "Model Settings":
         st.header("Model Settings")
-        st.write("Model transparency, export, and technical controls")
+        st.caption("Model transparency, export, and technical controls")
 
-        st.markdown("### Model Snapshot")
-        if st.button("Copy Full Model Snapshot", key="copy_model_snapshot"):
-            st.session_state["model_snapshot_text"] = _build_model_snapshot_text()
-        if st.session_state.get("model_snapshot_text"):
+        st.markdown("### Developer Tools")
+        st.markdown(
+            """
+            <div style="background:#f3f4f6;padding:12px 14px;border-radius:6px;">
+              <strong>Model Snapshot</strong><br/>
+              <span style="color:#6b7280;">For internal / AI-assisted analysis only</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if st.button(
+            "Generate Model Snapshot for GPT",
+            key="generate_model_snapshot",
+        ):
+            payload = _build_model_snapshot_payload()
+            st.session_state["model_snapshot_payload"] = payload
+            st.session_state["model_snapshot_text"] = json.dumps(
+                payload, indent=2
+            )
+            st.session_state["model_snapshot_zip"] = _build_model_snapshot_zip(
+                payload
+            )
+
+        if st.session_state.get("model_snapshot_payload"):
+            st.download_button(
+                "Download Snapshot ZIP",
+                data=st.session_state["model_snapshot_zip"],
+                file_name="model_snapshot.zip",
+                mime="application/zip",
+            )
+            if st.button(
+                "Copy GPT Prompt",
+                key="copy_gpt_prompt",
+            ):
+                st.session_state["model_snapshot_prompt"] = (
+                    "Here is the full model snapshot. "
+                    "Use this as ground truth."
+                )
+            if st.session_state.get("model_snapshot_prompt"):
+                st.text_area(
+                    "GPT Prompt",
+                    value=st.session_state["model_snapshot_prompt"],
+                    height=80,
+                )
             st.text_area(
-                "Snapshot",
-                value=st.session_state["model_snapshot_text"],
+                "Snapshot (JSON)",
+                value=st.session_state.get("model_snapshot_text", ""),
                 height=420,
             )
 
