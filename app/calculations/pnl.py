@@ -103,6 +103,8 @@ def calculate_pnl(input_model):
 
     pnl_by_year = {}
 
+    reference_volume_eur = 20_000_000
+
     for year_index in range(planning_horizon_years):
         # Grow FTEs and rates by their respective growth assumptions.
         consultants_fte = consultants_fte_start * (
@@ -137,9 +139,11 @@ def calculate_pnl(input_model):
         elif year_index == 2:
             guarantee_pct = guarantee_year_3
 
-        # Revenue guarantees only split total revenue for risk visibility.
-        guaranteed_revenue = total_revenue * guarantee_pct
-        non_guaranteed_revenue = total_revenue * (1 - guarantee_pct)
+        # Revenue guarantees classify revenue; they do not change total revenue.
+        guaranteed_revenue = min(
+            total_revenue, guarantee_pct * reference_volume_eur
+        )
+        non_guaranteed_revenue = total_revenue - guaranteed_revenue
         revenue = total_revenue
 
         # Consultant personnel cost: base + bonus + payroll burden, inflated.

@@ -843,6 +843,7 @@ def _build_pnl_excel(input_model):
         for row_idx, item in enumerate(line_items, start=2):
             ws_pnl.cell(row=row_idx, column=1, value=item)
 
+        reference_volume_cell = "20000000"
         for year_index in range(5):
             col = year_col(2 + year_index)
             fte = f"({assumption_cells['Consulting FTE']}*(1+{assumption_cells['FTE Growth %']})^{year_index})"
@@ -858,9 +859,9 @@ def _build_pnl_excel(input_model):
                 guarantee_pct = assumption_cells["Guarantee % Year 3"]
 
             total_revenue = f"={fte}*{workdays}*{utilization}*{day_rate}"
-            # Guarantees split total revenue for risk visibility only.
-            guaranteed = f"={col}5*{guarantee_pct}"
-            non_guaranteed = f"={col}5*(1-{guarantee_pct})"
+            # Guarantees classify revenue only; total revenue stays operational.
+            guaranteed = f"=MIN({col}5,{guarantee_pct}*{reference_volume_cell})"
+            non_guaranteed = f"={col}5-{col}3"
 
             consultant_cost = (
                 f"={fte}*{assumption_cells['Consultant Base Cost (EUR)']}*"
@@ -3950,6 +3951,7 @@ def run_app():
                 }
             line_items[name][year_label] = value
 
+        reference_volume = 20_000_000
         for year_index in year_indexes:
             consultants_fte = fte_field.value * (
                 (1 + fte_growth_field.value) ** year_index
@@ -3972,9 +3974,11 @@ def run_app():
             total_revenue = (
                 consultants_fte * billable_days * utilization * day_rate
             )
-            # Guarantees split total revenue for risk transparency only.
-            guaranteed_revenue = total_revenue * guarantee_pct
-            non_guaranteed_revenue = total_revenue * (1 - guarantee_pct)
+            # Guarantees classify revenue only; total revenue stays operational.
+            guaranteed_revenue = min(
+                total_revenue, guarantee_pct * reference_volume
+            )
+            non_guaranteed_revenue = total_revenue - guaranteed_revenue
 
             # Consultant all-in cost per FTE drives compensation directly.
             consultant_cost_per_fte = consultant_base_cost
