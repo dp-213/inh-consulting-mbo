@@ -1436,6 +1436,38 @@ def run_app():
             _set_line_value("Taxes", year_label, taxes)
             _set_line_value("Net Income (Jahresueberschuss)", year_label, net_income)
 
+            revenue_per_consultant = (
+                total_revenue / consultants_fte if consultants_fte else 0
+            )
+            ebitda_margin = ebitda / total_revenue if total_revenue else 0
+            ebit_margin = ebit / total_revenue if total_revenue else 0
+            personnel_cost_ratio = (
+                total_personnel / total_revenue if total_revenue else 0
+            )
+            guaranteed_pct = (
+                guaranteed_revenue / total_revenue if total_revenue else 0
+            )
+            non_guaranteed_pct = (
+                non_guaranteed_revenue / total_revenue if total_revenue else 0
+            )
+            net_margin = net_income / total_revenue if total_revenue else 0
+            opex_ratio = total_operating / total_revenue if total_revenue else 0
+
+            _set_line_value(
+                "Revenue per Consultant",
+                year_label,
+                revenue_per_consultant,
+            )
+            _set_line_value("EBITDA Margin", year_label, ebitda_margin)
+            _set_line_value("EBIT Margin", year_label, ebit_margin)
+            _set_line_value("Personnel Cost Ratio", year_label, personnel_cost_ratio)
+            _set_line_value("Guaranteed Revenue %", year_label, guaranteed_pct)
+            _set_line_value(
+                "Non-Guaranteed Revenue %", year_label, non_guaranteed_pct
+            )
+            _set_line_value("Net Margin", year_label, net_margin)
+            _set_line_value("Opex Ratio", year_label, opex_ratio)
+
         row_order = [
             "Revenue",
             "Guaranteed Revenue",
@@ -1531,57 +1563,6 @@ def run_app():
             return styles
 
         _render_pnl_html(pnl_statement, section_rows, bold_rows)
-        consultant_counts = [
-            fte_field.value * ((1 + fte_growth_field.value) ** idx)
-            for idx in year_indexes
-        ]
-        for year_index in year_indexes:
-            year_label = f"Year {year_index}"
-            year_revenue = pnl_table.iloc[year_index]["revenue"]
-            year_ebitda = pnl_table.iloc[year_index]["ebitda"]
-            year_ebit = pnl_table.iloc[year_index]["ebit"]
-            year_personnel = pnl_table.iloc[year_index]["personnel_costs"]
-            year_consultants = consultant_counts[year_index]
-
-            revenue_per_consultant = (
-                year_revenue / year_consultants if year_consultants else 0
-            )
-            ebitda_margin = (
-                year_ebitda / year_revenue if year_revenue else 0
-            )
-            ebit_margin = (
-                year_ebit / year_revenue if year_revenue else 0
-            )
-            personnel_cost_ratio = (
-                year_personnel / year_revenue if year_revenue else 0
-            )
-
-            _set_line_value(
-                "Revenue per Consultant",
-                year_label,
-                revenue_per_consultant,
-            )
-            _set_line_value("EBITDA Margin", year_label, ebitda_margin)
-            _set_line_value("EBIT Margin", year_label, ebit_margin)
-            _set_line_value("Personnel Cost Ratio", year_label, personnel_cost_ratio)
-            guaranteed_pct = (
-                guaranteed_revenue / total_revenue if total_revenue else 0
-            )
-            non_guaranteed_pct = (
-                non_guaranteed_revenue / total_revenue if total_revenue else 0
-            )
-            net_margin = net_income / total_revenue if total_revenue else 0
-            opex_ratio = (
-                total_operating / total_revenue if total_revenue else 0
-            )
-            _set_line_value("Guaranteed Revenue %", year_label, guaranteed_pct)
-            _set_line_value(
-                "Non-Guaranteed Revenue %", year_label, non_guaranteed_pct
-            )
-            _set_line_value("Net Margin", year_label, net_margin)
-            _set_line_value("Opex Ratio", year_label, opex_ratio)
-
-        # KPIs moved into dedicated lines within the P&L table.
 
         # Table rendered via HTML for full-width layout.
 
