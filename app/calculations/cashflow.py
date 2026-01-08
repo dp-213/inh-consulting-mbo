@@ -102,14 +102,14 @@ def calculate_cashflow(input_model, pnl_result):
         free_cashflow = operating_cf + investing_cf
 
         # Financing cash flow includes interest, debt repayment, and initial funding.
-    financing_cf = (
-        debt_drawdown
-        + equity_amount
-        - interest
-        - principal_repayment
-        if i == 0
-        else -(interest + principal_repayment)
-    )
+        financing_cf = (
+            debt_drawdown
+            + equity_amount
+            - interest
+            - principal_repayment
+            if i == 0
+            else -(interest + principal_repayment)
+        )
 
         net_cashflow = free_cashflow + financing_cf
         opening_cash = cash_balance
