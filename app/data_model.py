@@ -459,13 +459,13 @@ def create_demo_input_model():
     ].value = 80000
     input_model.operating_assumptions[
         "revenue_guarantee_pct_year_1"
-    ].value = 0.10
+    ].value = 0.80
     input_model.operating_assumptions[
         "revenue_guarantee_pct_year_2"
-    ].value = 0.05
+    ].value = 0.60
     input_model.operating_assumptions[
         "revenue_guarantee_pct_year_3"
-    ].value = 0.00
+    ].value = 0.60
 
     input_model.transaction_and_financing[
         "special_repayment_amount_eur"

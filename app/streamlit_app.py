@@ -254,7 +254,10 @@ def _render_pnl_html(pnl_statement, section_rows, bold_rows):
         for col in columns:
             value = row[col]
             if col != "Line Item":
-                value = format_currency(value)
+                if label in {"EBITDA Margin", "EBIT Margin", "Personnel Cost Ratio"}:
+                    value = format_pct(value)
+                else:
+                    value = format_currency(value)
             cell_value = "&nbsp;" if value in ("", None) else escape(value)
             cells.append(f"<td>{cell_value}</td>")
         body_rows.append(f"<tr class=\"{row_class}\">{''.join(cells)}</tr>")
@@ -1480,11 +1483,16 @@ def run_app():
             "EBT",
             "Taxes",
             "Net Income (Jahresueberschuss)",
+            "KPI",
+            "Revenue per Consultant",
+            "EBITDA Margin",
+            "EBIT Margin",
+            "Personnel Cost Ratio",
         ]
 
         label_rows = []
         for label in row_order:
-            if label in ("Revenue", "Personnel Costs", "Operating Expenses"):
+            if label in ("Revenue", "Personnel Costs", "Operating Expenses", "KPI"):
                 label_rows.append(
                     {
                         "Line Item": label,
@@ -1528,7 +1536,7 @@ def run_app():
             "EBT",
             "Net Income (Jahresueberschuss)",
         }
-        section_rows = {"Revenue", "Personnel Costs", "Operating Expenses"}
+        section_rows = {"Revenue", "Personnel Costs", "Operating Expenses", "KPI"}
 
         def _style_pnl(df):
             styles = pd.DataFrame("", index=df.index, columns=df.columns)
@@ -1576,15 +1584,18 @@ def run_app():
             / 3
         )
 
-        kpi_strip = st.columns(5)
-        kpi_strip[0].metric(
-            "Revenue per Consultant",
-            format_currency(revenue_per_consultant),
-        )
-        kpi_strip[1].metric("EBITDA Margin", format_pct(ebitda_margin))
-        kpi_strip[2].metric("EBIT Margin", format_pct(ebit_margin))
-        kpi_strip[3].metric("Personnel Cost Ratio", format_pct(personnel_cost_ratio))
-        kpi_strip[4].metric("Revenue Guarantee %", format_pct(revenue_guarantee_pct))
+        for year_index in year_indexes:
+            year_label = f"Year {year_index}"
+            _set_line_value(
+                "Revenue per Consultant",
+                year_label,
+                revenue_per_consultant,
+            )
+            _set_line_value("EBITDA Margin", year_label, ebitda_margin)
+            _set_line_value("EBIT Margin", year_label, ebit_margin)
+            _set_line_value("Personnel Cost Ratio", year_label, personnel_cost_ratio)
+
+        # KPIs moved into dedicated lines within the P&L table.
 
         # Table rendered via HTML for full-width layout.
 
