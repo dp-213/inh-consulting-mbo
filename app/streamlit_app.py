@@ -2587,7 +2587,11 @@ def run_app():
             href = f"?page={quote(label)}"
             active = " active" if page == label else ""
             st.markdown(
-                f"<div class=\"nav-item{active}\"><a href=\"{href}\">{label}</a></div>",
+                (
+                    f"<div class=\"nav-item{active}\">"
+                    f"<a href=\"{href}\" target=\"_self\">{label}</a>"
+                    "</div>"
+                ),
                 unsafe_allow_html=True,
             )
 
