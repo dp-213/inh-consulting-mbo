@@ -577,6 +577,16 @@ def render_general_assumptions(input_model):
 
 
 def render_advanced_assumptions(input_model):
+    def _local_clamp_pct(value):
+        if value is None or pd.isna(value):
+            return 0.0
+        return max(0.0, min(float(value), 1.0))
+
+    def _local_non_negative(value):
+        if value is None or pd.isna(value):
+            return 0.0
+        return max(0.0, float(value))
+
     st.header("Assumptions")
     st.write("Master input sheet – all model assumptions in one place")
 
@@ -655,19 +665,19 @@ def render_advanced_assumptions(input_model):
     for _, row in revenue_edit.iterrows():
         param = row["Parameter"]
         if param == "Utilization (%)":
-            st.session_state["scenario_parameters.utilization_rate.base"] = _clamp_pct(row["Base"])
-            st.session_state["scenario_parameters.utilization_rate.best"] = _clamp_pct(row["Best"])
-            st.session_state["scenario_parameters.utilization_rate.worst"] = _clamp_pct(row["Worst"])
+            st.session_state["scenario_parameters.utilization_rate.base"] = _local_clamp_pct(row["Base"])
+            st.session_state["scenario_parameters.utilization_rate.best"] = _local_clamp_pct(row["Best"])
+            st.session_state["scenario_parameters.utilization_rate.worst"] = _local_clamp_pct(row["Worst"])
         elif param == "Day Rate (EUR)":
-            st.session_state["scenario_parameters.day_rate_eur.base"] = _non_negative(row["Base"])
-            st.session_state["scenario_parameters.day_rate_eur.best"] = _non_negative(row["Best"])
-            st.session_state["scenario_parameters.day_rate_eur.worst"] = _non_negative(row["Worst"])
+            st.session_state["scenario_parameters.day_rate_eur.base"] = _local_non_negative(row["Base"])
+            st.session_state["scenario_parameters.day_rate_eur.best"] = _local_non_negative(row["Best"])
+            st.session_state["scenario_parameters.day_rate_eur.worst"] = _local_non_negative(row["Worst"])
         elif param == "Consulting FTE":
-            st.session_state["operating_assumptions.consulting_fte_start"] = _non_negative(row["Base"])
+            st.session_state["operating_assumptions.consulting_fte_start"] = _local_non_negative(row["Base"])
         elif param == "Workdays per Year":
-            st.session_state["operating_assumptions.work_days_per_year"] = _non_negative(row["Base"])
+            st.session_state["operating_assumptions.work_days_per_year"] = _local_non_negative(row["Base"])
         elif param == "Day Rate Growth (% p.a.)":
-            st.session_state["operating_assumptions.day_rate_growth_pct"] = _clamp_pct(row["Base"])
+            st.session_state["operating_assumptions.day_rate_growth_pct"] = _local_clamp_pct(row["Base"])
 
     st.markdown("### Revenue Guarantees")
     guarantee_df = pd.DataFrame(assumptions_state["revenue_guarantees"])
@@ -690,7 +700,7 @@ def render_advanced_assumptions(input_model):
     for _, row in guarantee_edit.iterrows():
         key = guarantee_map.get(row["Year"])
         if key:
-            st.session_state[key] = _clamp_pct(row["Guarantee %"])
+            st.session_state[key] = _local_clamp_pct(row["Guarantee %"])
 
     st.markdown("### Personnel Costs")
     personnel_df = pd.DataFrame(assumptions_state["personnel_costs"])
@@ -711,18 +721,18 @@ def render_advanced_assumptions(input_model):
         if role == "Consultant Base Salary":
             st.session_state[
                 "personnel_cost_assumptions.avg_consultant_base_cost_eur_per_year"
-            ] = _non_negative(row["Base Value (EUR)"])
-            st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
+            ] = _local_non_negative(row["Base Value (EUR)"])
+            st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _local_clamp_pct(row["Growth (%)"])
         elif role == "Consultant Variable (% Revenue)":
-            st.session_state["personnel_cost_assumptions.bonus_pct_of_base"] = _clamp_pct(row["Base Value (EUR)"])
+            st.session_state["personnel_cost_assumptions.bonus_pct_of_base"] = _local_clamp_pct(row["Base Value (EUR)"])
         elif role == "Backoffice Cost per FTE":
             st.session_state[
                 "operating_assumptions.avg_backoffice_salary_eur_per_year"
-            ] = _non_negative(row["Base Value (EUR)"])
-            st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _clamp_pct(row["Growth (%)"])
+            ] = _local_non_negative(row["Base Value (EUR)"])
+            st.session_state["personnel_cost_assumptions.wage_inflation_pct"] = _local_clamp_pct(row["Growth (%)"])
         elif role == "Management / MD Cost":
-            st.session_state["personnel_costs.management_md_cost_eur"] = _non_negative(row["Base Value (EUR)"])
-            st.session_state["personnel_costs.management_md_growth_pct"] = _clamp_pct(row["Growth (%)"])
+            st.session_state["personnel_costs.management_md_cost_eur"] = _local_non_negative(row["Base Value (EUR)"])
+            st.session_state["personnel_costs.management_md_growth_pct"] = _local_clamp_pct(row["Growth (%)"])
 
     st.markdown("### Operating Expenses (Opex)")
     opex_df = pd.DataFrame(assumptions_state["opex"])
@@ -742,13 +752,13 @@ def render_advanced_assumptions(input_model):
     for _, row in opex_edit.iterrows():
         category = row["Category"]
         if category == "External Consulting":
-            st.session_state["overhead_and_variable_costs.legal_audit_eur_per_year"] = _non_negative(row["Value"])
+            st.session_state["overhead_and_variable_costs.legal_audit_eur_per_year"] = _local_non_negative(row["Value"])
         elif category == "IT":
-            st.session_state["overhead_and_variable_costs.it_and_software_eur_per_year"] = _non_negative(row["Value"])
+            st.session_state["overhead_and_variable_costs.it_and_software_eur_per_year"] = _local_non_negative(row["Value"])
         elif category == "Office":
-            st.session_state["overhead_and_variable_costs.rent_eur_per_year"] = _non_negative(row["Value"])
+            st.session_state["overhead_and_variable_costs.rent_eur_per_year"] = _local_non_negative(row["Value"])
         elif category == "Other Services":
-            st.session_state["overhead_and_variable_costs.other_overhead_eur_per_year"] = _non_negative(row["Value"])
+            st.session_state["overhead_and_variable_costs.other_overhead_eur_per_year"] = _local_non_negative(row["Value"])
 
     st.markdown("### Financing Assumptions")
     financing_df = pd.DataFrame(assumptions_state["financing"])
@@ -767,13 +777,13 @@ def render_advanced_assumptions(input_model):
     for _, row in financing_edit.iterrows():
         parameter = row["Parameter"]
         if parameter == "Senior Debt Amount":
-            st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = _non_negative(row["Value"])
+            st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = _local_non_negative(row["Value"])
         elif parameter == "Interest Rate":
-            st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _clamp_pct(row["Value"])
+            st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _local_clamp_pct(row["Value"])
         elif parameter == "Amortisation Years":
             st.session_state["financing.amortization_period_years"] = int(max(1, row["Value"]))
         elif parameter == "Transaction Fees (%)":
-            st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
+            st.session_state["valuation.transaction_cost_pct"] = _local_clamp_pct(row["Value"])
 
     st.markdown("### Equity & Investor Assumptions")
     equity_df = pd.DataFrame(assumptions_state["equity"])
@@ -792,9 +802,9 @@ def render_advanced_assumptions(input_model):
     for _, row in equity_edit.iterrows():
         parameter = row["Parameter"]
         if parameter == "Sponsor Equity Contribution":
-            st.session_state["equity.sponsor_equity_eur"] = _non_negative(row["Value"])
+            st.session_state["equity.sponsor_equity_eur"] = _local_non_negative(row["Value"])
         elif parameter == "Investor Equity Contribution":
-            st.session_state["equity.investor_equity_eur"] = _non_negative(row["Value"])
+            st.session_state["equity.investor_equity_eur"] = _local_non_negative(row["Value"])
         elif parameter == "Investor Exit Year":
             try:
                 exit_val = int(float(row["Value"]))
@@ -823,15 +833,15 @@ def render_advanced_assumptions(input_model):
     for _, row in cashflow_edit.iterrows():
         parameter = row["Parameter"]
         if parameter == "Tax Cash Rate":
-            st.session_state["cashflow.tax_cash_rate_pct"] = _clamp_pct(row["Value"])
+            st.session_state["cashflow.tax_cash_rate_pct"] = _local_clamp_pct(row["Value"])
         elif parameter == "Tax Payment Lag":
             st.session_state["cashflow.tax_payment_lag_years"] = int(max(0, min(1, row["Value"])))
         elif parameter == "Capex (% of Revenue)":
-            st.session_state["cashflow.capex_pct_revenue"] = _clamp_pct(row["Value"])
+            st.session_state["cashflow.capex_pct_revenue"] = _local_clamp_pct(row["Value"])
         elif parameter == "Working Capital (% of Revenue)":
-            st.session_state["cashflow.working_capital_pct_revenue"] = _clamp_pct(row["Value"])
+            st.session_state["cashflow.working_capital_pct_revenue"] = _local_clamp_pct(row["Value"])
         elif parameter == "Opening Cash Balance":
-            st.session_state["cashflow.opening_cash_balance_eur"] = _non_negative(row["Value"])
+            st.session_state["cashflow.opening_cash_balance_eur"] = _local_non_negative(row["Value"])
 
     st.markdown("### Balance Sheet Assumptions")
     balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
@@ -850,11 +860,11 @@ def render_advanced_assumptions(input_model):
     for _, row in balance_edit.iterrows():
         parameter = row["Parameter"]
         if parameter == "Opening Equity":
-            st.session_state["balance_sheet.opening_equity_eur"] = _non_negative(row["Value"])
+            st.session_state["balance_sheet.opening_equity_eur"] = _local_non_negative(row["Value"])
         elif parameter == "Depreciation Rate":
-            st.session_state["balance_sheet.depreciation_rate_pct"] = _clamp_pct(row["Value"])
+            st.session_state["balance_sheet.depreciation_rate_pct"] = _local_clamp_pct(row["Value"])
         elif parameter == "Minimum Cash Balance":
-            st.session_state["balance_sheet.minimum_cash_balance_eur"] = _non_negative(row["Value"])
+            st.session_state["balance_sheet.minimum_cash_balance_eur"] = _local_non_negative(row["Value"])
 
     st.markdown("### Valuation Assumptions")
     valuation_df = pd.DataFrame(assumptions_state["valuation"])
@@ -877,13 +887,13 @@ def render_advanced_assumptions(input_model):
         elif parameter == "Reference Year":
             st.session_state["valuation.reference_year"] = int(max(0, min(4, row["Value"])))
         elif parameter == "Discount Rate (WACC)":
-            st.session_state["valuation.buyer_discount_rate"] = _clamp_pct(row["Value"])
+            st.session_state["valuation.buyer_discount_rate"] = _local_clamp_pct(row["Value"])
         elif parameter == "Valuation Start Year":
             st.session_state["valuation.valuation_start_year"] = int(max(0, min(4, row["Value"])))
         elif parameter == "Debt at Close":
-            st.session_state["valuation.debt_at_close_eur"] = _non_negative(row["Value"])
+            st.session_state["valuation.debt_at_close_eur"] = _local_non_negative(row["Value"])
         elif parameter == "Transaction Costs (%)":
-            st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
+            st.session_state["valuation.transaction_cost_pct"] = _local_clamp_pct(row["Value"])
 
     _apply_assumptions_state()
 
