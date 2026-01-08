@@ -17,7 +17,9 @@ def run_model():
     balance_sheet = calculate_balance_sheet(
         input_model, cashflow_result, debt_schedule
     )
-    investment_result = calculate_investment(input_model, cashflow_result)
+    investment_result = calculate_investment(
+        input_model, cashflow_result, pnl_result
+    )
 
     # Collect all outputs in one dictionary.
     model_results = {

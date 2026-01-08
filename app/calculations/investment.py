@@ -1,4 +1,4 @@
-def calculate_investment(input_model, cashflow_result):
+def calculate_investment(input_model, cashflow_result, pnl_result=None):
     """
     Calculate basic equity investment performance metrics.
     Returns a dictionary with initial equity, cashflows, exit value, and IRR.
@@ -7,13 +7,31 @@ def calculate_investment(input_model, cashflow_result):
     equity_amount = input_model.transaction_and_financing[
         "equity_contribution_eur"
     ].value
-    exit_multiple = input_model.assumptions["exit_multiple"]
-    growth_rate = input_model.assumptions["growth_rate"]
-    base_ebit = input_model.operations["ebit"]
-    years = input_model.general["projection_years"]
+    exit_multiple = input_model.valuation_assumptions["multiple_valuation"][
+        "seller_multiple"
+    ].value
+    exit_multiple = 0 if exit_multiple is None else exit_multiple
 
     # Estimate exit value from the final year EBIT and exit multiple.
-    final_year_ebit = base_ebit * ((1 + growth_rate) ** max(years - 1, 0))
+    final_year_ebit = 0
+    if pnl_result is not None:
+        if isinstance(pnl_result, dict):
+            year_key_map = {}
+            for year_label in pnl_result.keys():
+                try:
+                    year_key = int(str(year_label).split()[-1])
+                except (ValueError, IndexError):
+                    year_key = year_label
+                year_key_map[year_key] = year_label
+            if year_key_map:
+                last_year_key = max(year_key_map.keys())
+                final_year_ebit = pnl_result[year_key_map[last_year_key]].get(
+                    "ebit", 0
+                )
+        else:
+            if pnl_result:
+                final_year_ebit = pnl_result[-1].get("ebit", 0)
+
     exit_value = final_year_ebit * exit_multiple
 
     # Build equity cashflows: initial outflow, then yearly net cashflows.

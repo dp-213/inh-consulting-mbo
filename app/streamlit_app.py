@@ -65,7 +65,7 @@ def run_app():
         input_model, cashflow_result, debt_schedule
     )
     investment_result = run_model.calculate_investment(
-        input_model, cashflow_result
+        input_model, cashflow_result, pnl_result
     )
 
     tab_pnl, tab_cashflow, tab_debt, tab_equity = st.tabs(
