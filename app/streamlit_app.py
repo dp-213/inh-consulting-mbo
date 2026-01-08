@@ -232,6 +232,9 @@ def run_app():
     st.title("Financial Model")
 
     base_model = create_demo_input_model()
+    st.session_state.setdefault("edit_guarantee", False)
+    st.session_state.setdefault("edit_consultant_comp", False)
+    st.session_state.setdefault("edit_operating_expenses", False)
 
     # Navigation for question-driven layout.
     with st.sidebar:
@@ -254,7 +257,7 @@ def run_app():
             st.markdown("## Quick Assumptions")
             if st.session_state.get("edit_guarantee"):
                 if st.button("Close", key="hide_guarantee"):
-                    st.session_state["edit_guarantee"] = False
+                    st.session_state["edit_guarantee"] = not st.session_state["edit_guarantee"]
                 scenario_options = ["Base", "Best", "Worst"]
                 selected_scenario = st.session_state.get(
                     "scenario_selection.selected_scenario",
@@ -385,7 +388,7 @@ def run_app():
 
             if st.session_state.get("edit_consultant_comp"):
                 if st.button("Close", key="hide_consultant_comp"):
-                    st.session_state["edit_consultant_comp"] = False
+                    st.session_state["edit_consultant_comp"] = not st.session_state["edit_consultant_comp"]
                 base_cost_field = _get_field_by_path(
                     base_model.__dict__,
                     ["personnel_cost_assumptions", "avg_consultant_base_cost_eur_per_year"],
@@ -446,7 +449,7 @@ def run_app():
 
             if st.session_state.get("edit_operating_expenses"):
                 if st.button("Close", key="hide_operating_expenses"):
-                    st.session_state["edit_operating_expenses"] = False
+                    st.session_state["edit_operating_expenses"] = not st.session_state["edit_operating_expenses"]
                 legal_field = _get_field_by_path(
                     base_model.__dict__,
                     ["overhead_and_variable_costs", "legal_audit_eur_per_year"],
@@ -1203,22 +1206,22 @@ def run_app():
         edit_cols[0].markdown("**Edit assumptions**")
         if edit_cols[1].button(
             "✎ Guarantees",
-            key="edit_guarantee",
+            key="edit_guarantee_button",
             help="Edit revenue guarantees",
         ):
-            st.session_state["edit_guarantee"] = True
+            st.session_state["edit_guarantee"] = not st.session_state["edit_guarantee"]
         if edit_cols[2].button(
             "✎ Consultant",
-            key="edit_consultant_comp",
+            key="edit_consultant_comp_button",
             help="Edit consultant compensation",
         ):
-            st.session_state["edit_consultant_comp"] = True
+            st.session_state["edit_consultant_comp"] = not st.session_state["edit_consultant_comp"]
         if edit_cols[3].button(
             "✎ Opex",
-            key="edit_operating_expenses",
+            key="edit_operating_expenses_button",
             help="Edit operating expenses",
         ):
-            st.session_state["edit_operating_expenses"] = True
+            st.session_state["edit_operating_expenses"] = not st.session_state["edit_operating_expenses"]
 
 
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
@@ -1436,13 +1439,6 @@ def run_app():
                     )
 
         pnl_statement = pd.DataFrame(label_rows)
-        pnl_statement["Line Item"] = pnl_statement["Line Item"].replace(
-            {
-                "Guaranteed Revenue": "Guaranteed Revenue (edit ✎)",
-                "Consultant Compensation": "Consultant Compensation (edit ✎)",
-                "Operating Expenses": "Operating Expenses (edit ✎)",
-            }
-        )
         format_map = {
             "Year 0": format_currency,
             "Year 1": format_currency,
@@ -1476,14 +1472,15 @@ def run_app():
         pnl_styled = (
             pnl_statement.style.apply(_style_pnl, axis=None)
             .format(format_map)
+            .hide(axis="index")
             .set_table_styles(
                 [
-                    {"selector": "th", "props": [("text-align", "right"), ("font-weight", "600"), ("border", "0px"), ("padding", "4px 10px"), ("white-space", "nowrap"), ("line-height", "1.1")]},
-                    {"selector": "th:first-child", "props": [("text-align", "left"), ("width", "32%")]},
-                    {"selector": "th:not(:first-child)", "props": [("width", "13.6%")]},
-                    {"selector": "td", "props": [("border", "0px"), ("padding", "3px 10px"), ("white-space", "nowrap"), ("line-height", "1.1")]},
-                    {"selector": "td:first-child", "props": [("width", "32%")]},
-                    {"selector": "td:not(:first-child)", "props": [("width", "13.6%")]},
+                    {"selector": "th", "props": [("text-align", "right"), ("font-weight", "600"), ("border", "0px"), ("padding", "3px 8px"), ("white-space", "nowrap"), ("line-height", "1.1")]},
+                    {"selector": "th:first-child", "props": [("text-align", "left"), ("width", "40%")]},
+                    {"selector": "th:not(:first-child)", "props": [("width", "12%")]},
+                    {"selector": "td", "props": [("border", "0px"), ("padding", "2px 8px"), ("white-space", "nowrap"), ("line-height", "1.1")]},
+                    {"selector": "td:first-child", "props": [("width", "40%")]},
+                    {"selector": "td:not(:first-child)", "props": [("width", "12%")]},
                     {"selector": "table", "props": [("border-collapse", "collapse"), ("width", "100%"), ("table-layout", "fixed")]},
                 ]
             )
