@@ -457,7 +457,7 @@ def create_demo_input_model():
     input_model.operating_assumptions[
         "avg_backoffice_salary_eur_per_year"
     ].value = 80000
-    input_model.scenario_parameters["day_rate_eur"]["base"].value = 1900
+    input_model.scenario_parameters["day_rate_eur"]["base"].value = 2150
     input_model.operating_assumptions[
         "revenue_guarantee_pct_year_1"
     ].value = 0.80
