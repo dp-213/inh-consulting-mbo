@@ -464,12 +464,12 @@ def create_demo_input_model():
     input_model.operating_assumptions["backoffice_fte_start"].value = 18
     input_model.operating_assumptions["backoffice_fte_growth_pct"].value = 0.0
 
-    input_model.scenario_parameters["utilization_rate"]["base"].value = 0.65
-    input_model.scenario_parameters["utilization_rate"]["best"].value = 0.65
-    input_model.scenario_parameters["utilization_rate"]["worst"].value = 0.65
-    input_model.scenario_parameters["day_rate_eur"]["base"].value = 1800
-    input_model.scenario_parameters["day_rate_eur"]["best"].value = 1800
-    input_model.scenario_parameters["day_rate_eur"]["worst"].value = 1800
+    input_model.scenario_parameters["utilization_rate"]["base"].value = 0.68
+    input_model.scenario_parameters["utilization_rate"]["best"].value = 0.68
+    input_model.scenario_parameters["utilization_rate"]["worst"].value = 0.68
+    input_model.scenario_parameters["day_rate_eur"]["base"].value = 2125
+    input_model.scenario_parameters["day_rate_eur"]["best"].value = 2125
+    input_model.scenario_parameters["day_rate_eur"]["worst"].value = 2125
     input_model.operating_assumptions[
         "revenue_guarantee_pct_year_1"
     ].value = 0.80
@@ -482,7 +482,7 @@ def create_demo_input_model():
 
     input_model.personnel_cost_assumptions[
         "avg_consultant_base_cost_eur_per_year"
-    ].value = 210000
+    ].value = 150000
     input_model.personnel_cost_assumptions["bonus_pct_of_base"].value = 0.0
     input_model.personnel_cost_assumptions[
         "payroll_burden_pct_of_comp"
