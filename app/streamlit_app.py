@@ -3972,6 +3972,12 @@ def run_app():
             input_model.scenario_selection["selected_scenario"].value,
         )
         scenario_key = selected_scenario.lower()
+        utilization_by_year = getattr(input_model, "utilization_by_year", None)
+        if not isinstance(utilization_by_year, list) or len(utilization_by_year) < 5:
+            base_util = input_model.scenario_parameters["utilization_rate"][
+                scenario_key
+            ].value
+            utilization_by_year = [base_util] * 5
 
         utilization_field = _get_field_by_path(
             input_model.__dict__,
