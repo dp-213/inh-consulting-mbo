@@ -1646,6 +1646,7 @@ def _build_pnl_excel(input_model):
 
         ws_equity.cell(row=cashflow_start + 2, column=1, value="Sponsor Cashflow")
         ws_equity.cell(row=cashflow_start + 3, column=1, value="Investor Cashflow")
+        ws_equity.cell(row=cashflow_start + 4, column=1, value="Sponsor Residual Equity Value")
 
         sponsor_pct_cell = f"B{equity_calc_start + 3}"
         investor_pct_cell = f"B{equity_calc_start + 4}"
@@ -1655,11 +1656,14 @@ def _build_pnl_excel(input_model):
             col = year_col(2 + year_index)
             ws_equity[f"{col}{cashflow_start + 2}"] = (
                 f"=IF({year_index}=0,-{sponsor_cell},"
-                f"IF({year_index}={exit_year_cell},{equity_value_exit_cell}*{sponsor_pct_cell},0))"
+                f"IF({year_index}={exit_year_cell},{equity_value_exit_cell},0))"
             )
             ws_equity[f"{col}{cashflow_start + 3}"] = (
                 f"=IF({year_index}=0,-{investor_cell},"
                 f"IF({year_index}={exit_year_cell},{equity_value_exit_cell}*{investor_pct_cell},0))"
+            )
+            ws_equity[f"{col}{cashflow_start + 4}"] = (
+                f"=IF({year_index}={exit_year_cell},{equity_value_exit_cell},0)"
             )
 
         kpi_start = cashflow_start + 6
@@ -1678,7 +1682,7 @@ def _build_pnl_excel(input_model):
         ws_equity.cell(
             row=kpi_start + 2,
             column=3,
-            value=f"={equity_value_exit_cell}*{sponsor_pct_cell}",
+            value=f"={equity_value_exit_cell}",
         )
         ws_equity.cell(
             row=kpi_start + 3,
@@ -1688,7 +1692,7 @@ def _build_pnl_excel(input_model):
         ws_equity.cell(
             row=kpi_start + 2,
             column=4,
-            value=f"=IF({sponsor_cell}=0,0,C{kpi_start + 2}/{sponsor_cell})",
+            value="=\"—\"",
         )
         ws_equity.cell(
             row=kpi_start + 3,
@@ -1721,7 +1725,6 @@ def run_app():
     st.session_state.setdefault("edit_balance_sheet_assumptions", False)
     st.session_state.setdefault("edit_valuation_assumptions", False)
     st.session_state.setdefault("edit_financing_assumptions", False)
-    st.session_state.setdefault("edit_equity_assumptions", False)
     if not st.session_state.get("defaults_initialized"):
         _seed_session_defaults(base_model)
         st.session_state["defaults_initialized"] = True
@@ -2353,73 +2356,75 @@ def run_app():
                 },
             ]
             _render_inline_controls("Financing Drivers", financing_controls, columns=1)
-        if page == "Equity Case" and st.session_state.get(
-            "edit_equity_assumptions"
-        ):
-            st.markdown("## Equity Assumptions")
-            equity_defaults = _default_equity_assumptions(base_model)
-            sponsor_equity = st.number_input(
-                "Sponsor Equity Contribution (EUR)",
-                value=_get_current_value(
-                    "equity.sponsor_equity_eur",
-                    equity_defaults["sponsor_equity_eur"],
-                ),
-                step=100000.0,
-                format="%.0f",
-            )
-            st.session_state["equity.sponsor_equity_eur"] = sponsor_equity
-            investor_equity = st.number_input(
-                "Investor Equity Contribution (EUR)",
-                value=_get_current_value(
-                    "equity.investor_equity_eur",
-                    equity_defaults["investor_equity_eur"],
-                ),
-                step=100000.0,
-                format="%.0f",
-            )
-            st.session_state["equity.investor_equity_eur"] = investor_equity
-            total_equity = sponsor_equity + investor_equity
-            sponsor_pct = (
-                sponsor_equity / total_equity if total_equity else 0.0
-            )
-            investor_pct = (
-                investor_equity / total_equity if total_equity else 0.0
-            )
-            st.caption(
-                f"Ownership Split: Sponsor {format_pct(sponsor_pct)}, "
-                f"Investor {format_pct(investor_pct)}"
-            )
-            exit_year = st.selectbox(
-                "Exit Year",
-                ["Year 3", "Year 4", "Year 5", "Year 6", "Year 7"],
-                index=[
-                    "Year 3",
-                    "Year 4",
-                    "Year 5",
-                    "Year 6",
-                    "Year 7",
-                ].index(
-                    f"Year {_get_current_value('equity.exit_year', equity_defaults['exit_year'])}"
-                    if _get_current_value(
-                        "equity.exit_year", equity_defaults["exit_year"]
-                    )
-                    >= 3
-                    else "Year 3"
-                ),
-            )
-            st.session_state["equity.exit_year"] = int(exit_year.split()[-1])
-            st.session_state["equity.exit_method"] = "Exit Multiple"
-            exit_multiple = st.number_input(
-                "Exit Multiple (x EBITDA)",
-                value=_get_current_value(
-                    "equity.exit_multiple",
-                    equity_defaults["exit_multiple"],
-                ),
-                step=0.1,
-                format="%.2f",
-            )
-            st.session_state["equity.exit_multiple"] = exit_multiple
-            st.caption("Distribution Rule: Pro-rata to ownership.")
+        if page == "Equity Case":
+            with st.expander("Equity Assumptions", expanded=True):
+                equity_defaults = _default_equity_assumptions(base_model)
+                st.markdown("**Entry**")
+                sponsor_equity = st.number_input(
+                    "Sponsor Equity Contribution (EUR)",
+                    value=_get_current_value(
+                        "equity.sponsor_equity_eur",
+                        equity_defaults["sponsor_equity_eur"],
+                    ),
+                    step=100000.0,
+                    format="%.0f",
+                )
+                st.session_state["equity.sponsor_equity_eur"] = sponsor_equity
+                investor_equity = st.number_input(
+                    "Investor Equity Contribution (EUR)",
+                    value=_get_current_value(
+                        "equity.investor_equity_eur",
+                        equity_defaults["investor_equity_eur"],
+                    ),
+                    step=100000.0,
+                    format="%.0f",
+                )
+                st.session_state["equity.investor_equity_eur"] = investor_equity
+                total_equity = sponsor_equity + investor_equity
+                sponsor_pct = (
+                    sponsor_equity / total_equity if total_equity else 0.0
+                )
+                investor_pct = (
+                    investor_equity / total_equity if total_equity else 0.0
+                )
+                st.caption(
+                    f"Ownership Split: Sponsor {format_pct(sponsor_pct)}, "
+                    f"Investor {format_pct(investor_pct)}"
+                )
+                st.markdown("**Investor Exit**")
+                exit_year = st.selectbox(
+                    "Exit Year",
+                    ["Year 3", "Year 4", "Year 5", "Year 6", "Year 7"],
+                    index=[
+                        "Year 3",
+                        "Year 4",
+                        "Year 5",
+                        "Year 6",
+                        "Year 7",
+                    ].index(
+                        f"Year {_get_current_value('equity.exit_year', equity_defaults['exit_year'])}"
+                        if _get_current_value(
+                            "equity.exit_year", equity_defaults["exit_year"]
+                        )
+                        >= 3
+                        else "Year 3"
+                    ),
+                )
+                st.session_state["equity.exit_year"] = int(
+                    exit_year.split()[-1]
+                )
+                exit_multiple = st.number_input(
+                    "Exit Multiple (x EBITDA)",
+                    value=_get_current_value(
+                        "equity.exit_multiple",
+                        equity_defaults["exit_multiple"],
+                    ),
+                    step=0.1,
+                    format="%.2f",
+                )
+                st.session_state["equity.exit_multiple"] = exit_multiple
+                st.markdown("**Distribution Logic**")
+                st.caption("Distribution Rule: Pro-rata to ownership.")
 
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = st.session_state.get(
@@ -4863,12 +4868,6 @@ def run_app():
     if page == "Equity Case":
         st.header("Equity Case")
         st.write("Sponsor and investor economics with explicit entry and exit.")
-        if st.button(
-            "Edit Equity Assumptions",
-            key="edit_equity_assumptions_button",
-            help="Open equity assumptions in the sidebar",
-        ):
-            st.session_state["edit_equity_assumptions"] = True
 
         equity_defaults = _default_equity_assumptions(input_model)
         sponsor_equity = st.session_state.get(
@@ -4902,13 +4901,15 @@ def run_app():
 
         sponsor_cashflows = []
         investor_cashflows = []
+        sponsor_residual_value = equity_value_exit
+        investor_exit_proceeds = equity_value_exit * investor_pct
         for year_index in range(8):
             if year_index == 0:
                 sponsor_cf = -sponsor_equity
                 investor_cf = -investor_equity
             elif year_index == exit_year:
-                sponsor_cf = equity_value_exit * sponsor_pct
-                investor_cf = equity_value_exit * investor_pct
+                sponsor_cf = sponsor_residual_value
+                investor_cf = investor_exit_proceeds
             else:
                 sponsor_cf = 0.0
                 investor_cf = 0.0
@@ -4920,21 +4921,25 @@ def run_app():
         st.session_state["equity.sponsor_irr"] = sponsor_irr
         st.session_state["equity.investor_irr"] = investor_irr
 
-        kpi_row_1 = st.columns(3)
-        kpi_row_2 = st.columns(3)
-        kpi_row_1[0].metric("Sponsor Equity (EUR)", format_currency(sponsor_equity))
-        kpi_row_1[1].metric("Investor Equity (EUR)", format_currency(investor_equity))
-        kpi_row_1[2].metric(
-            "Ownership Split",
-            f"{format_pct(sponsor_pct)} / {format_pct(investor_pct)}",
+        st.markdown("### Headline Metrics")
+        investor_cols = st.columns(4)
+        sponsor_cols = st.columns(4)
+        investor_cols[0].metric(
+            "Investor Equity (EUR)", format_currency(investor_equity)
         )
-        kpi_row_2[0].metric(
+        investor_cols[1].metric("Exit Year", f"Year {exit_year}")
+        investor_cols[2].metric(
             "Exit Equity Value (EUR)", format_currency(equity_value_exit)
         )
-        kpi_row_2[1].metric(
-            "Levered Sponsor IRR", format_pct(sponsor_irr)
+        investor_cols[3].metric("Investor IRR", format_pct(investor_irr))
+        sponsor_cols[0].metric(
+            "Sponsor Equity (EUR)", format_currency(sponsor_equity)
         )
-        kpi_row_2[2].metric("Investor IRR", format_pct(investor_irr))
+        sponsor_cols[1].metric(
+            "Ownership at Entry", format_pct(sponsor_pct)
+        )
+        sponsor_cols[2].metric("Ownership Post Exit", "100%")
+        sponsor_cols[3].metric("Sponsor IRR", format_pct(sponsor_irr))
 
         st.markdown("### Sources & Uses")
         purchase_price = input_model.transaction_and_financing[
@@ -5089,6 +5094,13 @@ def run_app():
                 "Line Item": "Investor Cashflow",
                 **{f"Year {i}": investor_cashflows[i] for i in range(8)},
             },
+            {
+                "Line Item": "Sponsor Residual Equity Value",
+                **{
+                    f"Year {i}": sponsor_residual_value if i == exit_year else 0
+                    for i in range(8)
+                },
+            },
         ]
         cashflow_table = pd.DataFrame(cashflow_rows)
         year_labels = [f"Year {i}" for i in range(8)]
@@ -5101,13 +5113,7 @@ def run_app():
             year_labels=year_labels,
         )
 
-        sponsor_exit_proceeds = equity_value_exit * sponsor_pct
-        investor_exit_proceeds = equity_value_exit * investor_pct
-        sponsor_moic = (
-            (sponsor_exit_proceeds / abs(sponsor_equity))
-            if sponsor_equity
-            else 0
-        )
+        sponsor_residual = sponsor_residual_value
         investor_moic = (
             (investor_exit_proceeds / abs(investor_equity))
             if investor_equity
@@ -5120,8 +5126,8 @@ def run_app():
                 {
                     "Investor": "Sponsor",
                     "Invested Equity": format_currency(sponsor_equity),
-                    "Exit Proceeds": format_currency(sponsor_exit_proceeds),
-                    "MOIC": f"{sponsor_moic:.2f}x",
+                    "Exit Proceeds": format_currency(sponsor_residual),
+                    "MOIC": "—",
                     "IRR": format_pct(sponsor_irr),
                 },
                 {
@@ -5141,7 +5147,7 @@ def run_app():
             st.write(
                 f"Management contributes {format_currency(sponsor_equity)} of equity, "
                 "which is insufficient to fund the transaction alone. "
-                f"An investor contributes {format_currency(investor_equity)}, "
+                f"An external investor contributes {format_currency(investor_equity)}, "
                 f"resulting in an initial ownership split of "
                 f"{format_pct(sponsor_pct)} sponsor and {format_pct(investor_pct)} investor."
             )
@@ -5151,19 +5157,19 @@ def run_app():
                 f"{format_currency(total_equity)} of equity."
             )
             st.write(
-                f"At exit year {exit_year}, the business is valued using an "
-                f"EBITDA multiple of {exit_multiple:.2f}x. This yields an equity "
-                f"value of {format_currency(equity_value_exit)}, distributed "
-                "pro-rata to ownership."
+                f"The investor exits in year {exit_year} using an EBITDA multiple "
+                f"of {exit_multiple:.2f}x. This implies an equity value of "
+                f"{format_currency(equity_value_exit)}, and the investor receives "
+                f"{format_currency(investor_exit_proceeds)} on exit."
             )
             st.write(
                 "During the holding period, no interim distributions are modeled. "
-                "The investor exits fully in the exit year and does not receive "
-                "cashflows thereafter. Management retains 100% ownership post-exit."
+                "The investor exits fully in the exit year, while management "
+                "retains 100% ownership thereafter."
             )
             st.write(
-                "Returns are driven primarily by the exit multiple, leverage at "
-                "close, and the level of net debt at exit."
+                "Sponsor returns are driven by the residual equity value after the "
+                "investor exits, as well as leverage and exit valuation."
             )
 
 
