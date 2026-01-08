@@ -1,6 +1,7 @@
 import io
 import json
 import subprocess
+from urllib.parse import quote
 from datetime import datetime
 import zipfile
 import pandas as pd
@@ -48,7 +49,6 @@ def _format_section_title(section_key):
 def render_general_assumptions(input_model):
     st.header("Assumptions")
     st.write("Master input sheet – all model assumptions in one place")
-    st.info("Scenario selection controls which Revenue Model inputs are active.")
 
 
 def render_advanced_assumptions(input_model):
@@ -2509,6 +2509,10 @@ def run_app():
           div[data-testid="stSidebar"] > div {
             padding: 1rem 0.85rem;
           }
+          div[data-testid="stSidebar"] {
+            min-width: 280px;
+            max-width: 280px;
+          }
           .nav-section {
             font-size: 0.7rem;
             letter-spacing: 0.12em;
@@ -2517,50 +2521,25 @@ def run_app():
             margin-top: 0.9rem;
             margin-bottom: 0.35rem;
           }
-          .nav-section.settings {
-            color: #4b5563;
-          }
           .nav-item {
             padding: 0.35rem 0.6rem 0.35rem 0.8rem;
             border-radius: 4px;
             margin-bottom: 0.2rem;
             color: #374151;
           }
+          .nav-item a {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+          }
+          .nav-item:hover {
+            background: #eef2f7;
+          }
           .nav-item.active {
             background: #e9eef7;
             border-left: 3px solid #3b82f6;
             color: #111827;
-          }
-          .nav-divider {
-            height: 1px;
-            background: #d1d5db;
-            margin: 0.8rem 0 0.6rem;
-          }
-          .nav-settings-block {
-            background: #eef1f5;
-            padding: 0.6rem 0.5rem;
-            border-radius: 6px;
-            margin-top: 0.4rem;
-          }
-          .nav-settings-block button,
-          .nav-settings-block .nav-item {
-            font-size: 0.9rem;
-          }
-          div[data-testid="stSidebar"] .stButton > button,
-          div[data-testid="stSidebar"] button {
-            width: 100%;
-            justify-content: flex-start;
-            border-radius: 4px;
-            padding: 0.35rem 0.6rem 0.35rem 0.8rem;
-            background: transparent;
-            color: #374151;
-            border: 1px solid transparent;
-            font-weight: 400;
-          }
-          div[data-testid="stSidebar"] .stButton > button:hover,
-          div[data-testid="stSidebar"] button:hover {
-            background: #edf2f7;
-            border-color: transparent;
+            font-weight: 600;
           }
         </style>
         """
@@ -2580,14 +2559,6 @@ def run_app():
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        st.markdown("**MBO Financial Model**")
-        st.markdown("OVERVIEW")
-        st.markdown("OPERATING MODEL")
-        st.markdown("PLANNING")
-        st.markdown("FINANCING")
-        st.markdown("VALUATION")
-        st.markdown("<div style=\"font-size:0.75rem;color:#6b7280;\">SETTINGS</div>", unsafe_allow_html=True)
-
         nav_options = [
             "Overview",
             "Operating Model (P&L)",
@@ -2595,18 +2566,52 @@ def run_app():
             "Balance Sheet",
             "Revenue Model",
             "Cost Model",
-            "Advanced Assumptions",
+            "Other Assumptions",
             "Financing & Debt",
             "Equity Case",
             "Valuation & Purchase Price",
             "Model Settings",
         ]
-        page = st.sidebar.radio(
-            "Navigation",
-            nav_options,
-            key="page",
-            label_visibility="collapsed",
-        )
+
+        query_params = st.experimental_get_query_params()
+        query_page = query_params.get("page", [None])[0]
+        if query_page in nav_options:
+            st.session_state["page"] = query_page
+
+        page = st.session_state["page"]
+
+        st.markdown("**MBO Financial Model**")
+        st.markdown("<div class=\"nav-section\">OVERVIEW</div>", unsafe_allow_html=True)
+
+        def _nav_link(label):
+            href = f"?page={quote(label)}"
+            active = " active" if page == label else ""
+            st.markdown(
+                f"<div class=\"nav-item{active}\"><a href=\"{href}\">{label}</a></div>",
+                unsafe_allow_html=True,
+            )
+
+        _nav_link("Overview")
+
+        st.markdown("<div class=\"nav-section\">OPERATING MODEL</div>", unsafe_allow_html=True)
+        _nav_link("Operating Model (P&L)")
+        _nav_link("Cashflow & Liquidity")
+        _nav_link("Balance Sheet")
+
+        st.markdown("<div class=\"nav-section\">PLANNING</div>", unsafe_allow_html=True)
+        _nav_link("Revenue Model")
+        _nav_link("Cost Model")
+        _nav_link("Other Assumptions")
+
+        st.markdown("<div class=\"nav-section\">FINANCING</div>", unsafe_allow_html=True)
+        _nav_link("Financing & Debt")
+        _nav_link("Equity Case")
+
+        st.markdown("<div class=\"nav-section\">VALUATION</div>", unsafe_allow_html=True)
+        _nav_link("Valuation & Purchase Price")
+
+        st.markdown("<div class=\"nav-section\">SETTINGS</div>", unsafe_allow_html=True)
+        _nav_link("Model Settings")
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
@@ -2705,8 +2710,8 @@ def run_app():
         _apply_assumptions_state()
         return
 
-    if page == "Advanced Assumptions":
-        st.header("Advanced Assumptions")
+    if page == "Other Assumptions":
+        st.header("Other Assumptions")
         st.write("Master input sheet – all remaining assumptions.")
 
         scenario_options = ["Base", "Best", "Worst"]
@@ -2731,7 +2736,6 @@ def run_app():
             value=st.session_state.get("assumptions.auto_sync", True),
             key="assumptions.auto_sync",
         )
-        st.info("Changes here affect all pages instantly.")
         st.session_state["scenario_selection.selected_scenario"] = selected_scenario
         render_advanced_assumptions(input_model)
         return
@@ -2929,7 +2933,7 @@ def run_app():
             if economics_verdict.startswith("⚠️")
             else "unattractive"
         )
-        st.info(
+        st.write(
             "This case appears "
             f"{attractiveness} based on entry valuation, cash generation, "
             f"and financing capacity. The key risks are {risk_text}. "
@@ -4385,7 +4389,7 @@ def run_app():
             if abs(row["balance_check"]) > 1e-2
         ]
         if reconciliation_issues:
-            st.warning(
+            st.caption(
                 "Balance check (Assets - Liabilities - Equity) is not zero in "
                 f"{', '.join(reconciliation_issues)}."
             )
