@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import hashlib
 from datetime import datetime
 import zipfile
 import pandas as pd
@@ -33,20 +34,32 @@ if _APP_DIR not in sys.path:
 
 try:
     from .data_model import InputModel, create_demo_input_model
-    from .calculations.investment import _calculate_irr
+    from .calculations.investment import _calculate_irr, calculate_investment
+    from .calculations.pnl import calculate_pnl
+    from .calculations.cashflow import calculate_cashflow
+    from .calculations.debt import calculate_debt_schedule
+    from .calculations.balance_sheet import calculate_balance_sheet
     from .run_model import run_model
     from .revenue_model import render_revenue_model_assumptions
     from .cost_model import render_cost_model_assumptions
 except (ImportError, KeyError):
     try:
         from app.data_model import InputModel, create_demo_input_model
-        from app.calculations.investment import _calculate_irr
+        from app.calculations.investment import _calculate_irr, calculate_investment
+        from app.calculations.pnl import calculate_pnl
+        from app.calculations.cashflow import calculate_cashflow
+        from app.calculations.debt import calculate_debt_schedule
+        from app.calculations.balance_sheet import calculate_balance_sheet
         from app.run_model import run_model
         from app.revenue_model import render_revenue_model_assumptions
         from app.cost_model import render_cost_model_assumptions
     except (ImportError, KeyError):
         from data_model import InputModel, create_demo_input_model
-        from calculations.investment import _calculate_irr
+        from calculations.investment import _calculate_irr, calculate_investment
+        from calculations.pnl import calculate_pnl
+        from calculations.cashflow import calculate_cashflow
+        from calculations.debt import calculate_debt_schedule
+        from calculations.balance_sheet import calculate_balance_sheet
         from run_model import run_model
         from revenue_model import render_revenue_model_assumptions
         from cost_model import render_cost_model_assumptions
@@ -3121,6 +3134,10 @@ def run_app(page_override=None):
 
     _apply_assumptions_state()
 
+    def _hash_payload(payload):
+        payload_str = json.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(payload_str.encode("utf-8")).hexdigest()
+
     def _render_input_scenario_selector():
         if st.session_state.get("page_key") not in {
             "Revenue Model",
@@ -3229,20 +3246,148 @@ def run_app(page_override=None):
         if page in output_selector_pages:
             _render_output_scenario_selector()
         output_scenario = st.session_state["output_scenario"]
-        model_results = run_model(
-            st.session_state["assumptions"],
-            scenario=output_scenario,
-            input_model=input_model,
+
+        revenue_state = st.session_state["assumptions"]["revenue_model"]
+        cost_state = st.session_state["assumptions"]["cost_model"]
+        financing_state = st.session_state["assumptions"]["financing"]
+        cashflow_state = st.session_state["assumptions"]["cashflow"]
+        balance_state = st.session_state["assumptions"]["balance_sheet"]
+        valuation_state = st.session_state["assumptions"]["valuation"]
+
+        revenue_hash = _hash_payload(
+            {"scenario": output_scenario, "revenue": revenue_state}
         )
-        pnl_list = model_results["pnl"]
+        if st.session_state.get("cache.revenue_hash") != revenue_hash:
+            revenue_final_by_year, revenue_components_by_year = build_revenue_model_outputs(
+                st.session_state["assumptions"], output_scenario
+            )
+            st.session_state["cache.revenue_hash"] = revenue_hash
+            st.session_state["cache.revenue_outputs"] = (
+                revenue_final_by_year,
+                revenue_components_by_year,
+            )
+        else:
+            revenue_final_by_year, revenue_components_by_year = st.session_state[
+                "cache.revenue_outputs"
+            ]
+
+        cost_hash = _hash_payload(
+            {"cost": cost_state, "revenue_final": revenue_final_by_year}
+        )
+        if st.session_state.get("cache.cost_hash") != cost_hash:
+            cost_model_totals = build_cost_model_outputs(
+                st.session_state["assumptions"], revenue_final_by_year
+            )
+            st.session_state["cache.cost_hash"] = cost_hash
+            st.session_state["cache.cost_outputs"] = cost_model_totals
+        else:
+            cost_model_totals = st.session_state["cache.cost_outputs"]
+
+        input_model.revenue_final_by_year = revenue_final_by_year
+        input_model.revenue_components_by_year = revenue_components_by_year
+        input_model.cost_model_totals_by_year = cost_model_totals
+
+        debt_inputs = {
+            "senior_debt_amount": input_model.financing_assumptions[
+                "senior_debt_amount"
+            ],
+            "interest_rate_pct": input_model.financing_assumptions[
+                "interest_rate_pct"
+            ],
+            "amortization_type": input_model.financing_assumptions[
+                "amortization_type"
+            ],
+            "amortization_period_years": input_model.financing_assumptions[
+                "amortization_period_years"
+            ],
+            "grace_period_years": input_model.financing_assumptions[
+                "grace_period_years"
+            ],
+            "special_repayment_year": input_model.financing_assumptions[
+                "special_repayment_year"
+            ],
+            "special_repayment_amount_eur": input_model.financing_assumptions[
+                "special_repayment_amount_eur"
+            ],
+            "minimum_dscr": input_model.financing_assumptions["minimum_dscr"],
+        }
+        debt_hash = _hash_payload({"financing": financing_state, "debt": debt_inputs})
+        if st.session_state.get("cache.debt_hash") != debt_hash:
+            debt_schedule = calculate_debt_schedule(input_model)
+            st.session_state["cache.debt_hash"] = debt_hash
+            st.session_state["cache.debt_schedule"] = debt_schedule
+        else:
+            debt_schedule = st.session_state["cache.debt_schedule"]
+
+        pnl_hash = _hash_payload(
+            {
+                "revenue_final": revenue_final_by_year,
+                "cost_totals": cost_model_totals,
+                "debt": debt_schedule,
+            }
+        )
+        if st.session_state.get("cache.pnl_hash") != pnl_hash:
+            pnl_list = calculate_pnl(
+                input_model,
+                revenue_final_by_year=revenue_final_by_year,
+                cost_totals_by_year=cost_model_totals,
+                debt_schedule=debt_schedule,
+            )
+            st.session_state["cache.pnl_hash"] = pnl_hash
+            st.session_state["cache.pnl_list"] = pnl_list
+        else:
+            pnl_list = st.session_state["cache.pnl_list"]
         pnl_result = {f"Year {row['year']}": row for row in pnl_list}
-        cashflow_result = model_results["cashflow"]
-        debt_schedule = model_results["debt_schedule"]
-        balance_sheet = model_results["balance_sheet"]
-        investment_result = model_results["investment"]
-        revenue_final_by_year = input_model.revenue_final_by_year
-        revenue_components_by_year = input_model.revenue_components_by_year
-        cost_model_totals = input_model.cost_model_totals_by_year
+
+        cashflow_hash = _hash_payload(
+            {
+                "pnl": pnl_list,
+                "debt": debt_schedule,
+                "cashflow": cashflow_state,
+            }
+        )
+        if st.session_state.get("cache.cashflow_hash") != cashflow_hash:
+            cashflow_result = calculate_cashflow(
+                input_model, pnl_list, debt_schedule
+            )
+            st.session_state["cache.cashflow_hash"] = cashflow_hash
+            st.session_state["cache.cashflow_result"] = cashflow_result
+        else:
+            cashflow_result = st.session_state["cache.cashflow_result"]
+
+        balance_hash = _hash_payload(
+            {
+                "cashflow": cashflow_result,
+                "debt": debt_schedule,
+                "pnl": pnl_list,
+                "balance": balance_state,
+            }
+        )
+        if st.session_state.get("cache.balance_hash") != balance_hash:
+            balance_sheet = calculate_balance_sheet(
+                input_model, cashflow_result, debt_schedule, pnl_list
+            )
+            st.session_state["cache.balance_hash"] = balance_hash
+            st.session_state["cache.balance_sheet"] = balance_sheet
+        else:
+            balance_sheet = st.session_state["cache.balance_sheet"]
+
+        investment_hash = _hash_payload(
+            {
+                "cashflow": cashflow_result,
+                "pnl": pnl_list,
+                "balance": balance_sheet,
+                "valuation": valuation_state,
+            }
+        )
+        if st.session_state.get("cache.investment_hash") != investment_hash:
+            investment_result = calculate_investment(
+                input_model, cashflow_result, pnl_list, balance_sheet
+            )
+            st.session_state["cache.investment_hash"] = investment_hash
+            st.session_state["cache.investment_result"] = investment_result
+        else:
+            investment_result = st.session_state["cache.investment_result"]
     editor_css = """
     <style>
       .rdg-cell[aria-readonly="true"] {
