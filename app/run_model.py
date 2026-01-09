@@ -28,24 +28,15 @@ def run_model(assumptions_state=None, scenario="Base", input_model=None):
 
     # Run the integrated model in the required order.
     debt_schedule = calculate_debt_schedule(input_model)
-    pnl_base = calculate_pnl(
-        input_model,
-        revenue_final_by_year=revenue_final_by_year,
-        cost_totals_by_year=cost_model_totals,
-        debt_schedule=debt_schedule,
-    )
-    cashflow_result = calculate_cashflow(input_model, pnl_base, debt_schedule)
-    depreciation_by_year = {
-        row["year"]: row.get("depreciation", 0.0) for row in cashflow_result
-    }
     pnl_result = calculate_pnl(
         input_model,
-        depreciation_by_year,
         revenue_final_by_year=revenue_final_by_year,
         cost_totals_by_year=cost_model_totals,
         debt_schedule=debt_schedule,
     )
-    debt_schedule = calculate_debt_schedule(input_model, cashflow_result)
+    cashflow_result = calculate_cashflow(
+        input_model, pnl_result, debt_schedule
+    )
     balance_sheet = calculate_balance_sheet(
         input_model, cashflow_result, debt_schedule, pnl_result
     )
