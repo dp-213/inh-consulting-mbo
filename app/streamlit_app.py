@@ -2242,7 +2242,7 @@ def _build_pnl_excel(input_model):
     return output
 
 
-def run_app():
+def run_app(page_override=None):
     st.title("Financial Model")
     st.markdown(
         """
@@ -2879,7 +2879,8 @@ def run_app():
 
     # Navigation for question-driven layout.
     st.session_state.setdefault("page", "Operating Model (P&L)")
-    with st.sidebar:
+    if page_override is None:
+        with st.sidebar:
         editor_css = """
         <style>
           .rdg-cell[aria-readonly="true"] {
@@ -2926,6 +2927,10 @@ def run_app():
         )
         st.session_state["page"] = selected_page
         page = st.session_state["page"]
+        assumptions_state = st.session_state["assumptions"]
+        page = st.session_state["page"]
+    else:
+        page = page_override
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
