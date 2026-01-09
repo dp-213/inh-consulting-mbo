@@ -1,6 +1,8 @@
 import io
 import json
+import os
 import subprocess
+import sys
 from datetime import datetime
 import zipfile
 import pandas as pd
@@ -22,13 +24,20 @@ NAV_OPTIONS = [
     "Model Settings",
 ]
 
+_APP_DIR = os.path.dirname(__file__)
+_ROOT_DIR = os.path.dirname(_APP_DIR)
+if _ROOT_DIR not in sys.path:
+    sys.path.insert(0, _ROOT_DIR)
+if _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
+
 try:
     from .data_model import InputModel, create_demo_input_model
     from .calculations.investment import _calculate_irr
     from .run_model import run_model
     from .revenue_model import render_revenue_model_assumptions
     from .cost_model import render_cost_model_assumptions
-except ImportError:
+except (ImportError, KeyError):
     from data_model import InputModel, create_demo_input_model
     from calculations.investment import _calculate_irr
     from run_model import run_model
