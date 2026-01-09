@@ -2904,19 +2904,18 @@ def run_app():
           .nav-item {
             display: block;
             color: #6b7280;
-            text-decoration: none;
             padding: 0.15rem 0 0.15rem 0.25rem;
             cursor: pointer;
           }
           .nav-item:hover {
             color: #111827;
-            text-decoration: none;
           }
           .nav-item.active {
             font-weight: 600;
             color: #111827;
             border-left: 3px solid #3b82f6;
             padding-left: 0.35rem;
+            background: #eef2f7;
           }
         </style>
         """
@@ -2934,26 +2933,31 @@ def run_app():
             "SETTINGS": ["Model Settings"],
         }
 
-        query_page = st.query_params.get("page")
-        if isinstance(query_page, list):
-            query_page = query_page[0] if query_page else None
-        if query_page:
-            st.session_state["page"] = query_page
+        clicked_page = st.query_params.get("page")
+        if isinstance(clicked_page, list):
+            clicked_page = clicked_page[0] if clicked_page else None
+        if clicked_page:
+            st.session_state["page"] = clicked_page
 
         current_page = st.session_state["page"]
 
-        def _nav_link(label):
+        def _nav_item(label):
             active_class = "active" if label == current_page else ""
             st.markdown(
-                f'<a class="nav-item {active_class}" href="?page={label}">{label}</a>',
+                f'<div class="nav-item {active_class}" '
+                f'onclick="window.location.search=\'?page={label}\'">'
+                f'{label}</div>',
                 unsafe_allow_html=True,
             )
 
         st.markdown("**MBO Financial Model**")
         for section, items in nav_items.items():
-            st.markdown(f'<div class="nav-section">{section}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="nav-section">{section}</div>',
+                unsafe_allow_html=True,
+            )
             for item in items:
-                _nav_link(item)
+                _nav_item(item)
 
         page = st.session_state["page"]
         assumptions_state = st.session_state["assumptions"]
