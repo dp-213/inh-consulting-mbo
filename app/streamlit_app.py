@@ -3387,13 +3387,20 @@ def run_app(page_override=None):
         st.dataframe(robustness_table, use_container_width=True)
 
         st.markdown("### D. Risk Flags (What can kill the deal?)")
-        min_dscr_value = min(row["dscr"] for row in debt_schedule)
+        dscr_values = [
+            row["dscr"]
+            for row in debt_schedule
+            if isinstance(row.get("dscr"), (int, float))
+        ]
+        min_dscr_value = min(dscr_values) if dscr_values else 0
         dscr_threshold = input_model.financing_assumptions["minimum_dscr"]
         early_years = {0, 1}
         covenant_early = [
             row
             for row in debt_schedule
-            if row["year"] in early_years and row["dscr"] < dscr_threshold
+            if row["year"] in early_years
+            and isinstance(row.get("dscr"), (int, float))
+            and row["dscr"] < dscr_threshold
         ]
         debt_after_guarantee = any(
             row["year"] >= 3 and row["opening_debt"] > 0
