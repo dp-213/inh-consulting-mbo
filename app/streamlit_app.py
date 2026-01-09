@@ -2305,17 +2305,19 @@ def run_app():
             background-color: #f9fafb !important;
             color: #111827 !important;
           }
-          [data-testid="stAppViewContainer"] div[data-testid="stRadio"] > div {
+          .scenario-toggle [data-testid="stRadio"] > div {
             display: inline-flex;
-            gap: 8px;
+            gap: 6px;
           }
-          [data-testid="stAppViewContainer"] div[data-testid="stRadio"] label {
+          .scenario-toggle [data-testid="stRadio"] label {
             border: 1px solid #d1d5db;
-            border-radius: 6px;
-            padding: 6px 12px;
+            border-radius: 999px;
+            padding: 4px 10px;
             margin: 0;
+            font-size: 0.8rem;
+            line-height: 1.2;
           }
-          [data-testid="stAppViewContainer"] div[data-testid="stRadio"] input:checked + div {
+          .scenario-toggle [data-testid="stRadio"] input:checked + div {
             background: #eef2f7;
             border-color: #9ca3af;
             font-weight: 600;
@@ -2786,6 +2788,7 @@ def run_app():
         current = st.session_state.get("active_scenario", "Base")
         label_map = {"Worst": "Worst Case", "Base": "Base Case", "Best": "Best Case"}
         reverse_map = {"Worst Case": "Worst", "Base Case": "Base", "Best Case": "Best"}
+        st.markdown('<div class="scenario-toggle">', unsafe_allow_html=True)
         selected_label = st.radio(
             "",
             labels,
@@ -2794,6 +2797,7 @@ def run_app():
             key="active_scenario_choice",
             label_visibility="collapsed",
         )
+        st.markdown("</div>", unsafe_allow_html=True)
         st.session_state["active_scenario"] = reverse_map[selected_label]
 
     # Global scenario selector (active scenario for all pages).
@@ -3105,7 +3109,6 @@ def run_app():
     if page == "Revenue Model":
         st.header("Revenue Model")
         _render_scenario_selector()
-        st.caption(f"Revenue Model — {selected_scenario} Case")
         render_revenue_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
@@ -3113,7 +3116,6 @@ def run_app():
     if page == "Cost Model":
         st.header("Cost Model")
         _render_scenario_selector()
-        st.caption(f"Cost Model — {selected_scenario} Case")
         render_cost_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
@@ -3121,7 +3123,6 @@ def run_app():
     if page == "Other Assumptions":
         st.header("Other Assumptions")
         _render_scenario_selector()
-        st.caption(f"Other Assumptions — {selected_scenario} Case")
         st.write("Master input sheet – all remaining assumptions.")
         st.toggle(
             "Auto-apply scenario values",
@@ -3923,9 +3924,6 @@ def run_app():
     if page == "Operating Model (P&L)":
         st.header("Operating Model (P&L)")
         _render_scenario_selector()
-        st.caption(f"Operating Model (P&L) — {selected_scenario} Case")
-        st.write("Consolidated income statement (5-year plan)")
-        scenario_options = ["Base", "Best", "Worst"]
         selected_scenario = st.session_state.get(
             "scenario_selection.selected_scenario",
             input_model.scenario_selection["selected_scenario"].value,
@@ -4583,7 +4581,6 @@ def run_app():
     if page == "Cashflow & Liquidity":
         st.header("Cashflow & Liquidity")
         _render_scenario_selector()
-        st.caption(f"Cashflow & Liquidity — {selected_scenario} Case")
         st.write("Consolidated cashflow statement (5-year plan)")
         cashflow_line_items = {}
 
@@ -4853,7 +4850,6 @@ def run_app():
     if page == "Balance Sheet":
         st.header("Balance Sheet")
         _render_scenario_selector()
-        st.caption(f"Balance Sheet — {selected_scenario} Case")
         st.write("Simplified balance sheet (5-year plan)")
         balance_line_items = {}
 
@@ -5133,7 +5129,6 @@ def run_app():
     if page == "Financing & Debt":
         st.header("Financing & Debt")
         _render_scenario_selector()
-        st.caption(f"Financing & Debt — {selected_scenario} Case")
         st.write("Debt structure, service and bankability (5-year plan)")
         financing_assumptions = input_model.financing_assumptions
         cashflow_by_year = {row["year"]: row for row in cashflow_result}
@@ -5294,7 +5289,6 @@ def run_app():
     if page == "Equity Case":
         st.header("Equity Case")
         _render_scenario_selector()
-        st.caption(f"Equity Case — {selected_scenario} Case")
         st.write("Management Buy-Out with external minority investor.")
 
         equity_defaults = _default_equity_assumptions(input_model)
