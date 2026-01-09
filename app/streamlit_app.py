@@ -4,6 +4,8 @@ import os
 import subprocess
 import sys
 import hashlib
+import time
+from contextlib import contextmanager
 from datetime import datetime
 import zipfile
 import pandas as pd
@@ -292,6 +294,22 @@ def _build_model_snapshot_zip(payload):
 
 
 def render_advanced_assumptions(input_model, show_header=True):
+    debug_timings = st.session_state.get("debug.show_timings", False)
+    if debug_timings:
+        st.session_state["debug.timings"] = []
+
+    @contextmanager
+    def _timed(label):
+        if not debug_timings:
+            yield
+            return
+        start = time.perf_counter()
+        yield
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        st.session_state["debug.timings"].append(
+            {"Block": label, "ms": round(elapsed_ms, 2)}
+        )
+
     def _local_clamp_pct(value):
         if value is None or pd.isna(value):
             return 0.0
@@ -311,152 +329,239 @@ def render_advanced_assumptions(input_model, show_header=True):
     st.markdown("### Financing Assumptions")
     financing_df = pd.DataFrame(assumptions_state["financing"])
     financing_display = _apply_unit_display(financing_df)
-    financing_edit = st.data_editor(
-        financing_display,
-        hide_index=True,
-        key="assumptions.financing",
-        column_config={
-            "Parameter": st.column_config.TextColumn(disabled=True),
-            "Unit": st.column_config.TextColumn(disabled=True),
-            "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.TextColumn(),
-        },
-        use_container_width=True,
-    )
-    financing_edit = _restore_unit_values(financing_edit)
-    assumptions_state["financing"] = financing_edit.to_dict("records")
-    for _, row in financing_edit.iterrows():
-        parameter = row["Parameter"]
-        if parameter == "Senior Debt Amount":
-            senior_debt_amount = _local_non_negative(row["Value"])
-            st.session_state["financing.senior_debt_amount"] = senior_debt_amount
-            st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = senior_debt_amount
-        elif parameter == "Interest Rate":
-            st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _local_clamp_pct(row["Value"])
-        elif parameter == "Amortisation Years":
-            st.session_state["financing.amortization_period_years"] = int(max(1, row["Value"]))
-        elif parameter == "Transaction Fees (%)":
-            st.session_state["valuation.transaction_cost_pct"] = _local_clamp_pct(row["Value"])
+    draft_financing_key = "draft.assumptions.financing"
+    if draft_financing_key not in st.session_state:
+        st.session_state[draft_financing_key] = financing_display
+    with st.form("form.assumptions.financing"):
+        financing_edit = st.data_editor(
+            st.session_state[draft_financing_key],
+            hide_index=True,
+            key=draft_financing_key,
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+                "Value": st.column_config.TextColumn(),
+            },
+            use_container_width=True,
+        )
+        financing_submit = st.form_submit_button("Apply changes")
+    if financing_submit:
+        with _timed("Assumptions: Financing apply"):
+            financing_edit = _restore_unit_values(financing_edit)
+            assumptions_state["financing"] = financing_edit.to_dict("records")
+            param_map = {
+                row["Parameter"]: row["Value"]
+                for row in assumptions_state["financing"]
+            }
+            if "Senior Debt Amount" in param_map:
+                senior_debt_amount = _local_non_negative(
+                    param_map["Senior Debt Amount"]
+                )
+                st.session_state["financing.senior_debt_amount"] = senior_debt_amount
+                st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = senior_debt_amount
+            if "Interest Rate" in param_map:
+                st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _local_clamp_pct(
+                    param_map["Interest Rate"]
+                )
+            if "Amortisation Years" in param_map:
+                st.session_state["financing.amortization_period_years"] = int(
+                    max(1, param_map["Amortisation Years"])
+                )
+            if "Transaction Fees (%)" in param_map:
+                st.session_state["valuation.transaction_cost_pct"] = _local_clamp_pct(
+                    param_map["Transaction Fees (%)"]
+                )
+        st.rerun()
 
     st.markdown("### Equity & Investor Assumptions")
     equity_df = pd.DataFrame(assumptions_state["equity"])
     equity_display = _apply_unit_display(equity_df)
-    equity_edit = st.data_editor(
-        equity_display,
-        hide_index=True,
-        key="assumptions.equity",
-        column_config={
-            "Parameter": st.column_config.TextColumn(disabled=True),
-            "Unit": st.column_config.TextColumn(disabled=True),
-            "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.TextColumn(),
-        },
-        use_container_width=True,
-    )
-    equity_edit = _restore_unit_values(equity_edit)
-    assumptions_state["equity"] = equity_edit.to_dict("records")
-    for _, row in equity_edit.iterrows():
-        parameter = row["Parameter"]
-        if parameter == "Sponsor Equity Contribution":
-            st.session_state["equity.sponsor_equity_eur"] = _local_non_negative(row["Value"])
-        elif parameter == "Investor Equity Contribution":
-            st.session_state["equity.investor_equity_eur"] = _local_non_negative(row["Value"])
-        elif parameter == "Investor Exit Year":
-            try:
-                exit_val = int(float(row["Value"]))
-            except (TypeError, ValueError):
-                exit_val = _default_equity_assumptions(input_model)["exit_year"]
-            st.session_state["equity.exit_year"] = int(
-                max(3, min(7, exit_val))
-            )
-        elif parameter == "Exit Multiple (x EBITDA)":
-            st.session_state["equity.exit_multiple"] = float(row["Value"])
+    draft_equity_key = "draft.assumptions.equity"
+    if draft_equity_key not in st.session_state:
+        st.session_state[draft_equity_key] = equity_display
+    with st.form("form.assumptions.equity"):
+        equity_edit = st.data_editor(
+            st.session_state[draft_equity_key],
+            hide_index=True,
+            key=draft_equity_key,
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+                "Value": st.column_config.TextColumn(),
+            },
+            use_container_width=True,
+        )
+        equity_submit = st.form_submit_button("Apply changes")
+    if equity_submit:
+        with _timed("Assumptions: Equity apply"):
+            equity_edit = _restore_unit_values(equity_edit)
+            assumptions_state["equity"] = equity_edit.to_dict("records")
+            param_map = {
+                row["Parameter"]: row["Value"]
+                for row in assumptions_state["equity"]
+            }
+            if "Sponsor Equity Contribution" in param_map:
+                st.session_state["equity.sponsor_equity_eur"] = _local_non_negative(
+                    param_map["Sponsor Equity Contribution"]
+                )
+            if "Investor Equity Contribution" in param_map:
+                st.session_state["equity.investor_equity_eur"] = _local_non_negative(
+                    param_map["Investor Equity Contribution"]
+                )
+            if "Investor Exit Year" in param_map:
+                try:
+                    exit_val = int(float(param_map["Investor Exit Year"]))
+                except (TypeError, ValueError):
+                    exit_val = _default_equity_assumptions(input_model)["exit_year"]
+                st.session_state["equity.exit_year"] = int(
+                    max(3, min(7, exit_val))
+                )
+            if "Exit Multiple (x EBITDA)" in param_map:
+                st.session_state["equity.exit_multiple"] = float(
+                    param_map["Exit Multiple (x EBITDA)"]
+                )
+        st.rerun()
 
     st.markdown("### Cashflow Assumptions")
     cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
     cashflow_display = _apply_unit_display(cashflow_df)
-    cashflow_edit = st.data_editor(
-        cashflow_display,
-        hide_index=True,
-        key="assumptions.cashflow",
-        column_config={
-            "Parameter": st.column_config.TextColumn(disabled=True),
-            "Unit": st.column_config.TextColumn(disabled=True),
-            "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.TextColumn(),
-        },
-        use_container_width=True,
-    )
-    cashflow_edit = _restore_unit_values(cashflow_edit)
-    assumptions_state["cashflow"] = cashflow_edit.to_dict("records")
-    for _, row in cashflow_edit.iterrows():
-        parameter = row["Parameter"]
-        if parameter == "Tax Cash Rate":
-            st.session_state["cashflow.tax_cash_rate_pct"] = _local_clamp_pct(row["Value"])
-        elif parameter == "Tax Payment Lag":
-            st.session_state["cashflow.tax_payment_lag_years"] = int(max(0, min(1, row["Value"])))
-        elif parameter == "Capex (% of Revenue)":
-            st.session_state["cashflow.capex_pct_revenue"] = _local_clamp_pct(row["Value"])
-        elif parameter == "Working Capital (% of Revenue)":
-            st.session_state["cashflow.working_capital_pct_revenue"] = _local_clamp_pct(row["Value"])
-        elif parameter == "Opening Cash Balance":
-            st.session_state["cashflow.opening_cash_balance_eur"] = _local_non_negative(row["Value"])
+    draft_cashflow_key = "draft.assumptions.cashflow"
+    if draft_cashflow_key not in st.session_state:
+        st.session_state[draft_cashflow_key] = cashflow_display
+    with st.form("form.assumptions.cashflow"):
+        cashflow_edit = st.data_editor(
+            st.session_state[draft_cashflow_key],
+            hide_index=True,
+            key=draft_cashflow_key,
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+                "Value": st.column_config.TextColumn(),
+            },
+            use_container_width=True,
+        )
+        cashflow_submit = st.form_submit_button("Apply changes")
+    if cashflow_submit:
+        cashflow_edit = _restore_unit_values(cashflow_edit)
+        assumptions_state["cashflow"] = cashflow_edit.to_dict("records")
+        param_map = {
+            row["Parameter"]: row["Value"]
+            for row in assumptions_state["cashflow"]
+        }
+        if "Tax Cash Rate" in param_map:
+            st.session_state["cashflow.tax_cash_rate_pct"] = _local_clamp_pct(
+                param_map["Tax Cash Rate"]
+            )
+        if "Tax Payment Lag" in param_map:
+            st.session_state["cashflow.tax_payment_lag_years"] = int(
+                max(0, min(1, param_map["Tax Payment Lag"]))
+            )
+        if "Capex (% of Revenue)" in param_map:
+            st.session_state["cashflow.capex_pct_revenue"] = _local_clamp_pct(
+                param_map["Capex (% of Revenue)"]
+            )
+        if "Working Capital (% of Revenue)" in param_map:
+            st.session_state["cashflow.working_capital_pct_revenue"] = _local_clamp_pct(
+                param_map["Working Capital (% of Revenue)"]
+            )
+        if "Opening Cash Balance" in param_map:
+            st.session_state["cashflow.opening_cash_balance_eur"] = _local_non_negative(
+                param_map["Opening Cash Balance"]
+            )
+        st.rerun()
 
     st.markdown("### Balance Sheet Assumptions")
     balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
     balance_display = _apply_unit_display(balance_df)
-    balance_edit = st.data_editor(
-        balance_display,
-        hide_index=True,
-        key="assumptions.balance_sheet",
-        column_config={
-            "Parameter": st.column_config.TextColumn(disabled=True),
-            "Unit": st.column_config.TextColumn(disabled=True),
-            "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.TextColumn(),
-        },
-        use_container_width=True,
-    )
-    balance_edit = _restore_unit_values(balance_edit)
-    assumptions_state["balance_sheet"] = balance_edit.to_dict("records")
-    for _, row in balance_edit.iterrows():
-        parameter = row["Parameter"]
-        if parameter == "Opening Equity":
-            st.session_state["balance_sheet.opening_equity_eur"] = _local_non_negative(row["Value"])
-        elif parameter == "Depreciation Rate":
-            st.session_state["balance_sheet.depreciation_rate_pct"] = _local_clamp_pct(row["Value"])
-        elif parameter == "Minimum Cash Balance":
-            st.session_state["balance_sheet.minimum_cash_balance_eur"] = _local_non_negative(row["Value"])
+    draft_balance_key = "draft.assumptions.balance_sheet"
+    if draft_balance_key not in st.session_state:
+        st.session_state[draft_balance_key] = balance_display
+    with st.form("form.assumptions.balance_sheet"):
+        balance_edit = st.data_editor(
+            st.session_state[draft_balance_key],
+            hide_index=True,
+            key=draft_balance_key,
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+                "Value": st.column_config.TextColumn(),
+            },
+            use_container_width=True,
+        )
+        balance_submit = st.form_submit_button("Apply changes")
+    if balance_submit:
+        balance_edit = _restore_unit_values(balance_edit)
+        assumptions_state["balance_sheet"] = balance_edit.to_dict("records")
+        param_map = {
+            row["Parameter"]: row["Value"]
+            for row in assumptions_state["balance_sheet"]
+        }
+        if "Opening Equity" in param_map:
+            st.session_state["balance_sheet.opening_equity_eur"] = _local_non_negative(
+                param_map["Opening Equity"]
+            )
+        if "Depreciation Rate" in param_map:
+            st.session_state["balance_sheet.depreciation_rate_pct"] = _local_clamp_pct(
+                param_map["Depreciation Rate"]
+            )
+        if "Minimum Cash Balance" in param_map:
+            st.session_state["balance_sheet.minimum_cash_balance_eur"] = _local_non_negative(
+                param_map["Minimum Cash Balance"]
+            )
+        st.rerun()
 
     st.markdown("### Valuation Assumptions")
     valuation_df = pd.DataFrame(assumptions_state["valuation"])
     valuation_display = _apply_unit_display(valuation_df)
-    valuation_edit = st.data_editor(
-        valuation_display,
-        hide_index=True,
-        key="assumptions.valuation",
-        column_config={
-            "Parameter": st.column_config.TextColumn(disabled=True),
-            "Unit": st.column_config.TextColumn(disabled=True),
-            "Notes": st.column_config.TextColumn(disabled=True),
-            "Value": st.column_config.TextColumn(),
-        },
-        use_container_width=True,
-    )
-    valuation_edit = _restore_unit_values(valuation_edit)
-    assumptions_state["valuation"] = valuation_edit.to_dict("records")
-    for _, row in valuation_edit.iterrows():
-        parameter = row["Parameter"]
-        if parameter == "Seller EBITDA Multiple":
-            st.session_state["valuation.seller_ebit_multiple"] = float(row["Value"])
-        elif parameter == "Reference Year":
-            st.session_state["valuation.reference_year"] = int(max(0, min(4, row["Value"])))
-        elif parameter == "Discount Rate (WACC)":
-            st.session_state["valuation.buyer_discount_rate"] = _local_clamp_pct(row["Value"])
-        elif parameter == "Valuation Start Year":
-            st.session_state["valuation.valuation_start_year"] = int(max(0, min(4, row["Value"])))
-        elif parameter == "Transaction Costs (%)":
-            st.session_state["valuation.transaction_cost_pct"] = _local_clamp_pct(row["Value"])
+    draft_valuation_key = "draft.assumptions.valuation"
+    if draft_valuation_key not in st.session_state:
+        st.session_state[draft_valuation_key] = valuation_display
+    with st.form("form.assumptions.valuation"):
+        valuation_edit = st.data_editor(
+            st.session_state[draft_valuation_key],
+            hide_index=True,
+            key=draft_valuation_key,
+            column_config={
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+                "Value": st.column_config.TextColumn(),
+            },
+            use_container_width=True,
+        )
+        valuation_submit = st.form_submit_button("Apply changes")
+    if valuation_submit:
+        valuation_edit = _restore_unit_values(valuation_edit)
+        assumptions_state["valuation"] = valuation_edit.to_dict("records")
+        param_map = {
+            row["Parameter"]: row["Value"]
+            for row in assumptions_state["valuation"]
+        }
+        if "Seller EBITDA Multiple" in param_map:
+            st.session_state["valuation.seller_ebit_multiple"] = float(
+                param_map["Seller EBITDA Multiple"]
+            )
+        if "Reference Year" in param_map:
+            st.session_state["valuation.reference_year"] = int(
+                max(0, min(4, param_map["Reference Year"]))
+            )
+        if "Discount Rate (WACC)" in param_map:
+            st.session_state["valuation.buyer_discount_rate"] = _local_clamp_pct(
+                param_map["Discount Rate (WACC)"]
+            )
+        if "Valuation Start Year" in param_map:
+            st.session_state["valuation.valuation_start_year"] = int(
+                max(0, min(4, param_map["Valuation Start Year"]))
+            )
+        if "Transaction Costs (%)" in param_map:
+            st.session_state["valuation.transaction_cost_pct"] = _local_clamp_pct(
+                param_map["Transaction Costs (%)"]
+            )
+        st.rerun()
 
     apply_fn = globals().get("_apply_assumptions_state")
     if callable(apply_fn):
@@ -480,6 +585,12 @@ def format_int(value):
     if value is None or pd.isna(value):
         return ""
     return f"{int(round(value)):,}"
+
+
+def format_two_decimals(value):
+    if value is None or pd.isna(value) or value == "":
+        return ""
+    return f"{value:.2f}"
 
 
 def _clamp_pct(value):
@@ -1400,6 +1511,56 @@ def _render_custom_table_html(
     row_formatters=None,
     year_labels=None,
 ):
+    if year_labels is None:
+        year_labels = ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"]
+    row_formatters = row_formatters or {}
+    formatter_keys = {
+        label: _formatter_key_from_callable(formatter)
+        for label, formatter in row_formatters.items()
+    }
+    columns = ["Line Item"] + year_labels
+    rows = tuple(
+        tuple(row)
+        for row in statement[columns].itertuples(index=False, name=None)
+    )
+    table_html = _build_custom_table_html_cached(
+        rows,
+        tuple(year_labels),
+        tuple(sorted(section_rows)),
+        tuple(sorted(bold_rows)),
+        tuple(sorted(formatter_keys.items())),
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
+def _formatter_key_from_callable(formatter):
+    if formatter is format_pct:
+        return "pct"
+    if formatter is format_int:
+        return "int"
+    if formatter is format_two_decimals:
+        return "two_decimals"
+    return "currency"
+
+
+def _format_value_by_key(value, key):
+    if key == "pct":
+        return format_pct(value)
+    if key == "int":
+        return format_int(value)
+    if key == "two_decimals":
+        return format_two_decimals(value)
+    return format_currency(value)
+
+
+@st.cache_data(show_spinner=False)
+def _build_custom_table_html_cached(
+    rows,
+    year_labels,
+    section_rows,
+    bold_rows,
+    formatter_key_items,
+):
     def escape(text):
         return (
             str(text)
@@ -1408,32 +1569,32 @@ def _render_custom_table_html(
             .replace(">", "&gt;")
         )
 
-    if year_labels is None:
-        year_labels = ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4"]
-    columns = ["Line Item"] + year_labels
+    columns = ["Line Item"] + list(year_labels)
     header_cells = "".join(f"<th>{escape(col)}</th>" for col in columns)
-    row_formatters = row_formatters or {}
+    formatter_keys = dict(formatter_key_items)
+    section_set = set(section_rows)
+    bold_set = set(bold_rows)
 
     body_rows = []
-    for _, row in statement.iterrows():
-        label = row["Line Item"]
+    for row in rows:
+        label = row[0]
         row_class = ""
-        if label in section_rows:
+        if label in section_set:
             row_class = "section-row"
-        elif label in bold_rows:
+        elif label in bold_set:
             row_class = "total-row"
         cells = []
-        for col in columns:
-            value = row[col]
+        for col_index, col in enumerate(columns):
+            value = row[col_index]
             cell_class = ""
             if col != "Line Item":
-                formatter = row_formatters.get(label, format_currency)
+                formatter_key = formatter_keys.get(label, "currency")
                 if value is None or value == "" or pd.isna(value):
                     value = ""
                 else:
-                    value = formatter(value)
+                    value = _format_value_by_key(value, formatter_key)
                 try:
-                    if float(row[col]) < 0:
+                    if float(row[col_index]) < 0:
                         cell_class = "negative"
                 except (TypeError, ValueError):
                     if label == "Covenant Breach" and value == "YES":
@@ -1482,7 +1643,7 @@ def _render_custom_table_html(
         f"<thead><tr>{header_cells}</tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody></table>"
     )
-    st.markdown(table_html, unsafe_allow_html=True)
+    return table_html
 
 
 def _build_pnl_excel(input_model, pnl_result, cashflow_result, debt_schedule):
@@ -2623,6 +2784,23 @@ def _build_pnl_excel(input_model, pnl_result, cashflow_result, debt_schedule):
 
 def run_app(page_override=None):
     st.title("Financial Model")
+    debug_timings = st.sidebar.checkbox(
+        "Debug: show timings", key="debug.show_timings"
+    )
+    if debug_timings:
+        st.session_state["debug.timings"] = []
+
+    @contextmanager
+    def _timed(label):
+        if not debug_timings:
+            yield
+            return
+        start = time.perf_counter()
+        yield
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        st.session_state["debug.timings"].append(
+            {"Block": label, "ms": round(elapsed_ms, 2)}
+        )
     st.markdown(
         """
         <style>
@@ -3185,13 +3363,14 @@ def run_app(page_override=None):
     # Build input model and collect editable values from the assumptions page.
     selected_scenario = input_scenario
     scenario_key = selected_scenario.lower()
-    input_model = create_demo_input_model()
-    for section_key, section_value in input_model.__dict__.items():
-        if isinstance(section_value, dict):
-            edited_values = _collect_values_from_session(
-                section_value, section_key
-            )
-            _apply_section_values(section_value, edited_values)
+    with _timed("Assumptions: build input model"):
+        input_model = create_demo_input_model()
+        for section_key, section_value in input_model.__dict__.items():
+            if isinstance(section_value, dict):
+                edited_values = _collect_values_from_session(
+                    section_value, section_key
+                )
+                _apply_section_values(section_value, edited_values)
 
     input_model.scenario_selection["selected_scenario"].value = selected_scenario
     input_model.utilization_by_year = st.session_state.get(
@@ -3216,21 +3395,22 @@ def run_app(page_override=None):
         input_model.balance_sheet_assumptions[key] = st.session_state.get(
             f"balance_sheet.{key}", default_value
         )
-    input_model.financing_assumptions = _default_financing_assumptions(
-        input_model
-    )
-    for key, default_value in input_model.financing_assumptions.items():
-        input_model.financing_assumptions[key] = st.session_state.get(
-            f"financing.{key}", default_value
+    with _timed("Assumptions: sync financing"):
+        input_model.financing_assumptions = _default_financing_assumptions(
+            input_model
         )
-    senior_debt_amount = st.session_state.get("financing.senior_debt_amount")
-    if senior_debt_amount is None:
-        raise ValueError("Senior Debt Amount missing from financing assumptions.")
-    input_model.financing_assumptions["senior_debt_amount"] = senior_debt_amount
-    input_model.financing_assumptions["initial_debt_eur"] = senior_debt_amount
-    input_model.transaction_and_financing[
-        "senior_term_loan_start_eur"
-    ].value = senior_debt_amount
+        for key, default_value in input_model.financing_assumptions.items():
+            input_model.financing_assumptions[key] = st.session_state.get(
+                f"financing.{key}", default_value
+            )
+        senior_debt_amount = st.session_state.get("financing.senior_debt_amount")
+        if senior_debt_amount is None:
+            raise ValueError("Senior Debt Amount missing from financing assumptions.")
+        input_model.financing_assumptions["senior_debt_amount"] = senior_debt_amount
+        input_model.financing_assumptions["initial_debt_eur"] = senior_debt_amount
+        input_model.transaction_and_financing[
+            "senior_term_loan_start_eur"
+        ].value = senior_debt_amount
     input_model.valuation_runtime = _default_valuation_assumptions(input_model)
     for key, default_value in input_model.valuation_runtime.items():
         input_model.valuation_runtime[key] = st.session_state.get(
@@ -3312,14 +3492,15 @@ def run_app(page_override=None):
                 {"scenario": output_scenario, "revenue": revenue_state}
             )
             if st.session_state.get("cache.revenue_hash") != revenue_hash:
-                revenue_final_by_year, revenue_components_by_year = build_revenue_model_outputs(
-                    st.session_state["assumptions"], output_scenario
-                )
-                st.session_state["cache.revenue_hash"] = revenue_hash
-                st.session_state["cache.revenue_outputs"] = (
-                    revenue_final_by_year,
-                    revenue_components_by_year,
-                )
+                with _timed("Compute: revenue"):
+                    revenue_final_by_year, revenue_components_by_year = build_revenue_model_outputs(
+                        st.session_state["assumptions"], output_scenario
+                    )
+                    st.session_state["cache.revenue_hash"] = revenue_hash
+                    st.session_state["cache.revenue_outputs"] = (
+                        revenue_final_by_year,
+                        revenue_components_by_year,
+                    )
             else:
                 revenue_final_by_year, revenue_components_by_year = st.session_state[
                     "cache.revenue_outputs"
@@ -3329,11 +3510,12 @@ def run_app(page_override=None):
                 {"cost": cost_state, "revenue_final": revenue_final_by_year}
             )
             if st.session_state.get("cache.cost_hash") != cost_hash:
-                cost_model_totals = build_cost_model_outputs(
-                    st.session_state["assumptions"], revenue_final_by_year
-                )
-                st.session_state["cache.cost_hash"] = cost_hash
-                st.session_state["cache.cost_outputs"] = cost_model_totals
+                with _timed("Compute: cost"):
+                    cost_model_totals = build_cost_model_outputs(
+                        st.session_state["assumptions"], revenue_final_by_year
+                    )
+                    st.session_state["cache.cost_hash"] = cost_hash
+                    st.session_state["cache.cost_outputs"] = cost_model_totals
             else:
                 cost_model_totals = st.session_state["cache.cost_outputs"]
 
@@ -3368,9 +3550,10 @@ def run_app(page_override=None):
             }
             debt_hash = _hash_payload({"financing": financing_state, "debt": debt_inputs})
             if st.session_state.get("cache.debt_hash") != debt_hash:
-                debt_schedule = calculate_debt_schedule(input_model)
-                st.session_state["cache.debt_hash"] = debt_hash
-                st.session_state["cache.debt_schedule"] = debt_schedule
+                with _timed("Compute: debt"):
+                    debt_schedule = calculate_debt_schedule(input_model)
+                    st.session_state["cache.debt_hash"] = debt_hash
+                    st.session_state["cache.debt_schedule"] = debt_schedule
             else:
                 debt_schedule = st.session_state["cache.debt_schedule"]
 
@@ -3383,14 +3566,15 @@ def run_app(page_override=None):
                 }
             )
             if st.session_state.get("cache.pnl_hash") != pnl_hash:
-                pnl_list = calculate_pnl(
-                    input_model,
-                    revenue_final_by_year=revenue_final_by_year,
-                    cost_totals_by_year=cost_model_totals,
-                    debt_schedule=debt_schedule,
-                )
-                st.session_state["cache.pnl_hash"] = pnl_hash
-                st.session_state["cache.pnl_list"] = pnl_list
+                with _timed("Compute: pnl"):
+                    pnl_list = calculate_pnl(
+                        input_model,
+                        revenue_final_by_year=revenue_final_by_year,
+                        cost_totals_by_year=cost_model_totals,
+                        debt_schedule=debt_schedule,
+                    )
+                    st.session_state["cache.pnl_hash"] = pnl_hash
+                    st.session_state["cache.pnl_list"] = pnl_list
             else:
                 pnl_list = st.session_state["cache.pnl_list"]
             pnl_result = {f"Year {row['year']}": row for row in pnl_list}
@@ -3404,11 +3588,12 @@ def run_app(page_override=None):
                 }
             )
             if st.session_state.get("cache.cashflow_hash") != cashflow_hash:
-                cashflow_result = calculate_cashflow(
-                    input_model, pnl_list, debt_schedule
-                )
-                st.session_state["cache.cashflow_hash"] = cashflow_hash
-                st.session_state["cache.cashflow_result"] = cashflow_result
+                with _timed("Compute: cashflow"):
+                    cashflow_result = calculate_cashflow(
+                        input_model, pnl_list, debt_schedule
+                    )
+                    st.session_state["cache.cashflow_hash"] = cashflow_hash
+                    st.session_state["cache.cashflow_result"] = cashflow_result
             else:
                 cashflow_result = st.session_state["cache.cashflow_result"]
 
@@ -3422,11 +3607,12 @@ def run_app(page_override=None):
                 }
             )
             if st.session_state.get("cache.balance_hash") != balance_hash:
-                balance_sheet = calculate_balance_sheet(
-                    input_model, cashflow_result, debt_schedule, pnl_list
-                )
-                st.session_state["cache.balance_hash"] = balance_hash
-                st.session_state["cache.balance_sheet"] = balance_sheet
+                with _timed("Compute: balance_sheet"):
+                    balance_sheet = calculate_balance_sheet(
+                        input_model, cashflow_result, debt_schedule, pnl_list
+                    )
+                    st.session_state["cache.balance_hash"] = balance_hash
+                    st.session_state["cache.balance_sheet"] = balance_sheet
             else:
                 balance_sheet = st.session_state["cache.balance_sheet"]
 
@@ -3440,11 +3626,12 @@ def run_app(page_override=None):
                 }
             )
             if st.session_state.get("cache.investment_hash") != investment_hash:
-                investment_result = calculate_investment(
-                    input_model, cashflow_result, pnl_list, balance_sheet
-                )
-                st.session_state["cache.investment_hash"] = investment_hash
-                st.session_state["cache.investment_result"] = investment_result
+                with _timed("Compute: investment"):
+                    investment_result = calculate_investment(
+                        input_model, cashflow_result, pnl_list, balance_sheet
+                    )
+                    st.session_state["cache.investment_hash"] = investment_hash
+                    st.session_state["cache.investment_result"] = investment_result
             else:
                 investment_result = st.session_state["cache.investment_result"]
     editor_css = """
@@ -3471,18 +3658,23 @@ def run_app(page_override=None):
         for col in display_df.columns:
             if col not in config:
                 config[col] = st.column_config.TextColumn()
-        edited = st.data_editor(
-            display_df,
-            hide_index=True,
-            key=key,
-            column_config=config,
-            use_container_width=True,
-        )
-        return _restore_unit_values(edited)
+        draft_key = f"draft.{key}"
+        if draft_key not in st.session_state:
+            st.session_state[draft_key] = display_df
+        with st.form(f"form.{key}"):
+            edited = st.data_editor(
+                st.session_state[draft_key],
+                hide_index=True,
+                key=draft_key,
+                column_config=config,
+                use_container_width=True,
+            )
+            submitted = st.form_submit_button("Apply changes")
+        return edited, submitted
 
     if page == "Cashflow & Liquidity":
         cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
-        edited_cashflow = _sidebar_editor(
+        edited_cashflow, cashflow_submit = _sidebar_editor(
             "Cashflow Assumptions",
             "sidebar.cashflow",
             cashflow_df,
@@ -3492,12 +3684,15 @@ def run_app(page_override=None):
                 "Notes": st.column_config.TextColumn(disabled=True),
             },
         )
-        assumptions_state["cashflow"] = edited_cashflow.to_dict("records")
-        _apply_assumptions_state()
+        if cashflow_submit:
+            edited_cashflow = _restore_unit_values(edited_cashflow)
+            assumptions_state["cashflow"] = edited_cashflow.to_dict("records")
+            _apply_assumptions_state()
+            st.rerun()
 
     if page == "Balance Sheet":
         balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
-        edited_balance = _sidebar_editor(
+        edited_balance, balance_submit = _sidebar_editor(
             "Balance Sheet Assumptions",
             "sidebar.balance_sheet",
             balance_df,
@@ -3507,13 +3702,16 @@ def run_app(page_override=None):
                 "Notes": st.column_config.TextColumn(disabled=True),
             },
         )
-        assumptions_state["balance_sheet"] = edited_balance.to_dict("records")
-        _apply_assumptions_state()
+        if balance_submit:
+            edited_balance = _restore_unit_values(edited_balance)
+            assumptions_state["balance_sheet"] = edited_balance.to_dict("records")
+            _apply_assumptions_state()
+            st.rerun()
 
     if page == "Financing & Debt":
         with st.expander("Financing Assumptions", expanded=False):
             financing_df = pd.DataFrame(assumptions_state["financing"])
-            edited_financing = _sidebar_editor(
+            edited_financing, financing_submit = _sidebar_editor(
                 "Financing Assumptions",
                 "sidebar.financing",
                 financing_df,
@@ -3523,13 +3721,16 @@ def run_app(page_override=None):
                     "Notes": st.column_config.TextColumn(disabled=True),
                 },
             )
-            assumptions_state["financing"] = edited_financing.to_dict("records")
-            _apply_assumptions_state()
+            if financing_submit:
+                edited_financing = _restore_unit_values(edited_financing)
+                assumptions_state["financing"] = edited_financing.to_dict("records")
+                _apply_assumptions_state()
+                st.rerun()
 
     if page == "Valuation & Purchase Price":
         with st.expander("Valuation Assumptions", expanded=False):
             valuation_df = pd.DataFrame(assumptions_state["valuation"])
-            edited_valuation = _sidebar_editor(
+            edited_valuation, valuation_submit = _sidebar_editor(
                 "Valuation Assumptions",
                 "sidebar.valuation",
                 valuation_df,
@@ -3539,13 +3740,16 @@ def run_app(page_override=None):
                     "Notes": st.column_config.TextColumn(disabled=True),
                 },
             )
-            assumptions_state["valuation"] = edited_valuation.to_dict("records")
-            _apply_assumptions_state()
+            if valuation_submit:
+                edited_valuation = _restore_unit_values(edited_valuation)
+                assumptions_state["valuation"] = edited_valuation.to_dict("records")
+                _apply_assumptions_state()
+                st.rerun()
 
     if page == "Equity Case":
         with st.expander("Equity Assumptions", expanded=False):
             equity_df = pd.DataFrame(assumptions_state["equity"])
-            edited_equity = _sidebar_editor(
+            edited_equity, equity_submit = _sidebar_editor(
                 "Equity Assumptions",
                 "sidebar.equity",
                 equity_df,
@@ -3555,8 +3759,11 @@ def run_app(page_override=None):
                     "Notes": st.column_config.TextColumn(disabled=True),
                 },
             )
-            assumptions_state["equity"] = edited_equity.to_dict("records")
-            _apply_assumptions_state()
+            if equity_submit:
+                edited_equity = _restore_unit_values(edited_equity)
+                assumptions_state["equity"] = edited_equity.to_dict("records")
+                _apply_assumptions_state()
+                st.rerun()
 
     if page == "Revenue Model":
         st.title("Revenue Model")
@@ -4445,9 +4652,7 @@ def run_app(page_override=None):
                 "Equity Value (Buyer View)",
             }
             dcf_formatters = {
-                "Discount Factor": lambda value: f"{value:.2f}"
-                if value not in ("", None)
-                else "",
+                "Discount Factor": format_two_decimals,
             }
             _render_custom_table_html(
                 dcf_table, set(), dcf_total_rows, dcf_formatters
@@ -5294,25 +5499,18 @@ def run_app(page_override=None):
             st.session_state["cache.pnl_excel_hash"] = st.session_state.get(
                 "cache.pnl_hash"
             )
-        if st.session_state.get("cache.pnl_excel_bytes") is None:
-            if st.session_state.get("pnl_excel_requested"):
-                pnl_excel = _build_pnl_excel(
-                    input_model, pnl_result, cashflow_result, debt_schedule
-                )
-                st.session_state["cache.pnl_excel_bytes"] = pnl_excel.getvalue()
-            else:
-                st.session_state["cache.pnl_excel_bytes"] = b""
-        def _request_pnl_excel():
-            st.session_state["pnl_excel_requested"] = True
-        if st.session_state.get("pnl_excel_requested"):
-            st.session_state["pnl_excel_requested"] = False
-        st.download_button(
-            "Download P&L as Excel",
-            data=st.session_state.get("cache.pnl_excel_bytes", b""),
-            file_name="Financial_Model_PnL.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            on_click=_request_pnl_excel,
-        )
+        if st.button("Generate Excel", key="generate_pnl_excel"):
+            pnl_excel = _build_pnl_excel(
+                input_model, pnl_result, cashflow_result, debt_schedule
+            )
+            st.session_state["cache.pnl_excel_bytes"] = pnl_excel.getvalue()
+        if st.session_state.get("cache.pnl_excel_bytes"):
+            st.download_button(
+                "Download P&L as Excel",
+                data=st.session_state["cache.pnl_excel_bytes"],
+                file_name="Financial_Model_PnL.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 
     if page == "Cashflow & Liquidity":
         st.title("Cashflow & Liquidity")
@@ -6233,6 +6431,14 @@ def run_app(page_override=None):
                 {},
                 year_labels=year_labels,
             )
+
+    if debug_timings and st.session_state.get("debug.timings"):
+        timings_df = pd.DataFrame(st.session_state["debug.timings"])
+        st.sidebar.dataframe(
+            timings_df,
+            use_container_width=True,
+            height=220,
+        )
 
 
 def _render_sidebar():
