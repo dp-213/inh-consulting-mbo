@@ -332,11 +332,12 @@ def render_advanced_assumptions(input_model, show_header=True):
     draft_financing_key = "draft.assumptions.financing"
     if draft_financing_key not in st.session_state:
         st.session_state[draft_financing_key] = financing_display
+    widget_financing_key = "widget.assumptions.financing"
     with st.form("form.assumptions.financing"):
         financing_edit = st.data_editor(
             st.session_state[draft_financing_key],
             hide_index=True,
-            key=draft_financing_key,
+            key=widget_financing_key,
             column_config={
                 "Parameter": st.column_config.TextColumn(disabled=True),
                 "Unit": st.column_config.TextColumn(disabled=True),
@@ -350,6 +351,9 @@ def render_advanced_assumptions(input_model, show_header=True):
         with _timed("Assumptions: Financing apply"):
             financing_edit = _restore_unit_values(financing_edit)
             assumptions_state["financing"] = financing_edit.to_dict("records")
+            st.session_state[draft_financing_key] = _apply_unit_display(
+                pd.DataFrame(assumptions_state["financing"])
+            )
             param_map = {
                 row["Parameter"]: row["Value"]
                 for row in assumptions_state["financing"]
@@ -380,11 +384,12 @@ def render_advanced_assumptions(input_model, show_header=True):
     draft_equity_key = "draft.assumptions.equity"
     if draft_equity_key not in st.session_state:
         st.session_state[draft_equity_key] = equity_display
+    widget_equity_key = "widget.assumptions.equity"
     with st.form("form.assumptions.equity"):
         equity_edit = st.data_editor(
             st.session_state[draft_equity_key],
             hide_index=True,
-            key=draft_equity_key,
+            key=widget_equity_key,
             column_config={
                 "Parameter": st.column_config.TextColumn(disabled=True),
                 "Unit": st.column_config.TextColumn(disabled=True),
@@ -398,6 +403,9 @@ def render_advanced_assumptions(input_model, show_header=True):
         with _timed("Assumptions: Equity apply"):
             equity_edit = _restore_unit_values(equity_edit)
             assumptions_state["equity"] = equity_edit.to_dict("records")
+            st.session_state[draft_equity_key] = _apply_unit_display(
+                pd.DataFrame(assumptions_state["equity"])
+            )
             param_map = {
                 row["Parameter"]: row["Value"]
                 for row in assumptions_state["equity"]
@@ -430,11 +438,12 @@ def render_advanced_assumptions(input_model, show_header=True):
     draft_cashflow_key = "draft.assumptions.cashflow"
     if draft_cashflow_key not in st.session_state:
         st.session_state[draft_cashflow_key] = cashflow_display
+    widget_cashflow_key = "widget.assumptions.cashflow"
     with st.form("form.assumptions.cashflow"):
         cashflow_edit = st.data_editor(
             st.session_state[draft_cashflow_key],
             hide_index=True,
-            key=draft_cashflow_key,
+            key=widget_cashflow_key,
             column_config={
                 "Parameter": st.column_config.TextColumn(disabled=True),
                 "Unit": st.column_config.TextColumn(disabled=True),
@@ -447,6 +456,9 @@ def render_advanced_assumptions(input_model, show_header=True):
     if cashflow_submit:
         cashflow_edit = _restore_unit_values(cashflow_edit)
         assumptions_state["cashflow"] = cashflow_edit.to_dict("records")
+        st.session_state[draft_cashflow_key] = _apply_unit_display(
+            pd.DataFrame(assumptions_state["cashflow"])
+        )
         param_map = {
             row["Parameter"]: row["Value"]
             for row in assumptions_state["cashflow"]
@@ -479,11 +491,12 @@ def render_advanced_assumptions(input_model, show_header=True):
     draft_balance_key = "draft.assumptions.balance_sheet"
     if draft_balance_key not in st.session_state:
         st.session_state[draft_balance_key] = balance_display
+    widget_balance_key = "widget.assumptions.balance_sheet"
     with st.form("form.assumptions.balance_sheet"):
         balance_edit = st.data_editor(
             st.session_state[draft_balance_key],
             hide_index=True,
-            key=draft_balance_key,
+            key=widget_balance_key,
             column_config={
                 "Parameter": st.column_config.TextColumn(disabled=True),
                 "Unit": st.column_config.TextColumn(disabled=True),
@@ -496,6 +509,9 @@ def render_advanced_assumptions(input_model, show_header=True):
     if balance_submit:
         balance_edit = _restore_unit_values(balance_edit)
         assumptions_state["balance_sheet"] = balance_edit.to_dict("records")
+        st.session_state[draft_balance_key] = _apply_unit_display(
+            pd.DataFrame(assumptions_state["balance_sheet"])
+        )
         param_map = {
             row["Parameter"]: row["Value"]
             for row in assumptions_state["balance_sheet"]
@@ -520,11 +536,12 @@ def render_advanced_assumptions(input_model, show_header=True):
     draft_valuation_key = "draft.assumptions.valuation"
     if draft_valuation_key not in st.session_state:
         st.session_state[draft_valuation_key] = valuation_display
+    widget_valuation_key = "widget.assumptions.valuation"
     with st.form("form.assumptions.valuation"):
         valuation_edit = st.data_editor(
             st.session_state[draft_valuation_key],
             hide_index=True,
-            key=draft_valuation_key,
+            key=widget_valuation_key,
             column_config={
                 "Parameter": st.column_config.TextColumn(disabled=True),
                 "Unit": st.column_config.TextColumn(disabled=True),
@@ -537,6 +554,9 @@ def render_advanced_assumptions(input_model, show_header=True):
     if valuation_submit:
         valuation_edit = _restore_unit_values(valuation_edit)
         assumptions_state["valuation"] = valuation_edit.to_dict("records")
+        st.session_state[draft_valuation_key] = _apply_unit_display(
+            pd.DataFrame(assumptions_state["valuation"])
+        )
         param_map = {
             row["Parameter"]: row["Value"]
             for row in assumptions_state["valuation"]
@@ -3659,17 +3679,20 @@ def run_app(page_override=None):
             if col not in config:
                 config[col] = st.column_config.TextColumn()
         draft_key = f"draft.{key}"
+        widget_key = f"widget.{key}"
         if draft_key not in st.session_state:
             st.session_state[draft_key] = display_df
         with st.form(f"form.{key}"):
             edited = st.data_editor(
                 st.session_state[draft_key],
                 hide_index=True,
-                key=draft_key,
+                key=widget_key,
                 column_config=config,
                 use_container_width=True,
             )
             submitted = st.form_submit_button("Apply changes")
+        if submitted:
+            st.session_state[draft_key] = edited
         return edited, submitted
 
     if page == "Cashflow & Liquidity":
