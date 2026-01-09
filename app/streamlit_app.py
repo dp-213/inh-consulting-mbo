@@ -2877,10 +2877,8 @@ def run_app(page_override=None):
         input_model, cashflow_result, pnl_list, balance_sheet
     )
 
-    # Navigation for question-driven layout.
-    st.session_state.setdefault("page", "Operating Model (P&L)")
-    if page_override is None:
-        with st.sidebar:
+    page = page_override or "Operating Model (P&L)"
+    with st.sidebar:
         editor_css = """
         <style>
           .rdg-cell[aria-readonly="true"] {
@@ -2896,41 +2894,6 @@ def run_app(page_override=None):
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        st.markdown("MBO Financial Model")
-        st.markdown("OPERATING MODEL")
-        st.markdown("PLANNING")
-        st.markdown("FINANCING")
-        st.markdown("VALUATION")
-        st.markdown("SETTINGS")
-
-        nav_options = [
-            "Operating Model (P&L)",
-            "Cashflow & Liquidity",
-            "Balance Sheet",
-            "Revenue Model",
-            "Cost Model",
-            "Other Assumptions",
-            "Financing & Debt",
-            "Equity Case",
-            "Valuation & Purchase Price",
-            "Model Settings",
-        ]
-        current_page = st.session_state["page"]
-        if current_page not in nav_options:
-            current_page = "Operating Model (P&L)"
-            st.session_state["page"] = current_page
-        selected_page = st.sidebar.selectbox(
-            "",
-            nav_options,
-            index=nav_options.index(current_page),
-            key="page_select",
-        )
-        st.session_state["page"] = selected_page
-        page = st.session_state["page"]
-        assumptions_state = st.session_state["assumptions"]
-        page = st.session_state["page"]
-    else:
-        page = page_override
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
