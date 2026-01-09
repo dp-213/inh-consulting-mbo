@@ -3265,6 +3265,41 @@ def run_app(page_override=None):
             _render_output_scenario_selector()
         output_scenario = st.session_state["output_scenario"]
 
+        needs_pnl = page in {
+            "Overview",
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "Financing & Debt",
+            "Equity Case",
+            "Valuation & Purchase Price",
+        }
+        needs_cashflow = page in {
+            "Overview",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "Financing & Debt",
+            "Equity Case",
+            "Valuation & Purchase Price",
+        }
+        needs_balance = page in {
+            "Balance Sheet",
+            "Equity Case",
+            "Valuation & Purchase Price",
+            "Overview",
+        }
+        needs_investment = page in {
+            "Equity Case",
+            "Valuation & Purchase Price",
+        }
+        needs_debt = needs_pnl or needs_cashflow or needs_balance
+        if page == "Model Settings":
+            needs_pnl = True
+            needs_cashflow = True
+            needs_balance = True
+            needs_investment = True
+            needs_debt = True
+
         revenue_state = st.session_state["assumptions"]["revenue_model"]
         cost_state = st.session_state["assumptions"]["cost_model"]
         financing_state = st.session_state["assumptions"]["financing"]
@@ -3272,140 +3307,146 @@ def run_app(page_override=None):
         balance_state = st.session_state["assumptions"]["balance_sheet"]
         valuation_state = st.session_state["assumptions"]["valuation"]
 
-        revenue_hash = _hash_payload(
-            {"scenario": output_scenario, "revenue": revenue_state}
-        )
-        if st.session_state.get("cache.revenue_hash") != revenue_hash:
-            revenue_final_by_year, revenue_components_by_year = build_revenue_model_outputs(
-                st.session_state["assumptions"], output_scenario
+        if needs_pnl or needs_cashflow or needs_balance or needs_investment:
+            revenue_hash = _hash_payload(
+                {"scenario": output_scenario, "revenue": revenue_state}
             )
-            st.session_state["cache.revenue_hash"] = revenue_hash
-            st.session_state["cache.revenue_outputs"] = (
-                revenue_final_by_year,
-                revenue_components_by_year,
+            if st.session_state.get("cache.revenue_hash") != revenue_hash:
+                revenue_final_by_year, revenue_components_by_year = build_revenue_model_outputs(
+                    st.session_state["assumptions"], output_scenario
+                )
+                st.session_state["cache.revenue_hash"] = revenue_hash
+                st.session_state["cache.revenue_outputs"] = (
+                    revenue_final_by_year,
+                    revenue_components_by_year,
+                )
+            else:
+                revenue_final_by_year, revenue_components_by_year = st.session_state[
+                    "cache.revenue_outputs"
+                ]
+
+            cost_hash = _hash_payload(
+                {"cost": cost_state, "revenue_final": revenue_final_by_year}
             )
-        else:
-            revenue_final_by_year, revenue_components_by_year = st.session_state[
-                "cache.revenue_outputs"
-            ]
+            if st.session_state.get("cache.cost_hash") != cost_hash:
+                cost_model_totals = build_cost_model_outputs(
+                    st.session_state["assumptions"], revenue_final_by_year
+                )
+                st.session_state["cache.cost_hash"] = cost_hash
+                st.session_state["cache.cost_outputs"] = cost_model_totals
+            else:
+                cost_model_totals = st.session_state["cache.cost_outputs"]
 
-        cost_hash = _hash_payload(
-            {"cost": cost_state, "revenue_final": revenue_final_by_year}
-        )
-        if st.session_state.get("cache.cost_hash") != cost_hash:
-            cost_model_totals = build_cost_model_outputs(
-                st.session_state["assumptions"], revenue_final_by_year
-            )
-            st.session_state["cache.cost_hash"] = cost_hash
-            st.session_state["cache.cost_outputs"] = cost_model_totals
-        else:
-            cost_model_totals = st.session_state["cache.cost_outputs"]
+            input_model.revenue_final_by_year = revenue_final_by_year
+            input_model.revenue_components_by_year = revenue_components_by_year
+            input_model.cost_model_totals_by_year = cost_model_totals
 
-        input_model.revenue_final_by_year = revenue_final_by_year
-        input_model.revenue_components_by_year = revenue_components_by_year
-        input_model.cost_model_totals_by_year = cost_model_totals
-
-        debt_inputs = {
-            "senior_debt_amount": input_model.financing_assumptions[
-                "senior_debt_amount"
-            ],
-            "interest_rate_pct": input_model.financing_assumptions[
-                "interest_rate_pct"
-            ],
-            "amortization_type": input_model.financing_assumptions[
-                "amortization_type"
-            ],
-            "amortization_period_years": input_model.financing_assumptions[
-                "amortization_period_years"
-            ],
-            "grace_period_years": input_model.financing_assumptions[
-                "grace_period_years"
-            ],
-            "special_repayment_year": input_model.financing_assumptions[
-                "special_repayment_year"
-            ],
-            "special_repayment_amount_eur": input_model.financing_assumptions[
-                "special_repayment_amount_eur"
-            ],
-            "minimum_dscr": input_model.financing_assumptions["minimum_dscr"],
-        }
-        debt_hash = _hash_payload({"financing": financing_state, "debt": debt_inputs})
-        if st.session_state.get("cache.debt_hash") != debt_hash:
-            debt_schedule = calculate_debt_schedule(input_model)
-            st.session_state["cache.debt_hash"] = debt_hash
-            st.session_state["cache.debt_schedule"] = debt_schedule
-        else:
-            debt_schedule = st.session_state["cache.debt_schedule"]
-
-        pnl_hash = _hash_payload(
-            {
-                "revenue_final": revenue_final_by_year,
-                "cost_totals": cost_model_totals,
-                "debt": debt_schedule,
+        if needs_debt:
+            debt_inputs = {
+                "senior_debt_amount": input_model.financing_assumptions[
+                    "senior_debt_amount"
+                ],
+                "interest_rate_pct": input_model.financing_assumptions[
+                    "interest_rate_pct"
+                ],
+                "amortization_type": input_model.financing_assumptions[
+                    "amortization_type"
+                ],
+                "amortization_period_years": input_model.financing_assumptions[
+                    "amortization_period_years"
+                ],
+                "grace_period_years": input_model.financing_assumptions[
+                    "grace_period_years"
+                ],
+                "special_repayment_year": input_model.financing_assumptions[
+                    "special_repayment_year"
+                ],
+                "special_repayment_amount_eur": input_model.financing_assumptions[
+                    "special_repayment_amount_eur"
+                ],
+                "minimum_dscr": input_model.financing_assumptions["minimum_dscr"],
             }
-        )
-        if st.session_state.get("cache.pnl_hash") != pnl_hash:
-            pnl_list = calculate_pnl(
-                input_model,
-                revenue_final_by_year=revenue_final_by_year,
-                cost_totals_by_year=cost_model_totals,
-                debt_schedule=debt_schedule,
-            )
-            st.session_state["cache.pnl_hash"] = pnl_hash
-            st.session_state["cache.pnl_list"] = pnl_list
-        else:
-            pnl_list = st.session_state["cache.pnl_list"]
-        pnl_result = {f"Year {row['year']}": row for row in pnl_list}
+            debt_hash = _hash_payload({"financing": financing_state, "debt": debt_inputs})
+            if st.session_state.get("cache.debt_hash") != debt_hash:
+                debt_schedule = calculate_debt_schedule(input_model)
+                st.session_state["cache.debt_hash"] = debt_hash
+                st.session_state["cache.debt_schedule"] = debt_schedule
+            else:
+                debt_schedule = st.session_state["cache.debt_schedule"]
 
-        cashflow_hash = _hash_payload(
-            {
-                "pnl": pnl_list,
-                "debt": debt_schedule,
-                "cashflow": cashflow_state,
-            }
-        )
-        if st.session_state.get("cache.cashflow_hash") != cashflow_hash:
-            cashflow_result = calculate_cashflow(
-                input_model, pnl_list, debt_schedule
+        if needs_pnl:
+            pnl_hash = _hash_payload(
+                {
+                    "revenue_final": revenue_final_by_year,
+                    "cost_totals": cost_model_totals,
+                    "debt": debt_schedule,
+                }
             )
-            st.session_state["cache.cashflow_hash"] = cashflow_hash
-            st.session_state["cache.cashflow_result"] = cashflow_result
-        else:
-            cashflow_result = st.session_state["cache.cashflow_result"]
+            if st.session_state.get("cache.pnl_hash") != pnl_hash:
+                pnl_list = calculate_pnl(
+                    input_model,
+                    revenue_final_by_year=revenue_final_by_year,
+                    cost_totals_by_year=cost_model_totals,
+                    debt_schedule=debt_schedule,
+                )
+                st.session_state["cache.pnl_hash"] = pnl_hash
+                st.session_state["cache.pnl_list"] = pnl_list
+            else:
+                pnl_list = st.session_state["cache.pnl_list"]
+            pnl_result = {f"Year {row['year']}": row for row in pnl_list}
 
-        balance_hash = _hash_payload(
-            {
-                "cashflow": cashflow_result,
-                "debt": debt_schedule,
-                "pnl": pnl_list,
-                "balance": balance_state,
-            }
-        )
-        if st.session_state.get("cache.balance_hash") != balance_hash:
-            balance_sheet = calculate_balance_sheet(
-                input_model, cashflow_result, debt_schedule, pnl_list
+        if needs_cashflow:
+            cashflow_hash = _hash_payload(
+                {
+                    "pnl": pnl_list,
+                    "debt": debt_schedule,
+                    "cashflow": cashflow_state,
+                }
             )
-            st.session_state["cache.balance_hash"] = balance_hash
-            st.session_state["cache.balance_sheet"] = balance_sheet
-        else:
-            balance_sheet = st.session_state["cache.balance_sheet"]
+            if st.session_state.get("cache.cashflow_hash") != cashflow_hash:
+                cashflow_result = calculate_cashflow(
+                    input_model, pnl_list, debt_schedule
+                )
+                st.session_state["cache.cashflow_hash"] = cashflow_hash
+                st.session_state["cache.cashflow_result"] = cashflow_result
+            else:
+                cashflow_result = st.session_state["cache.cashflow_result"]
 
-        investment_hash = _hash_payload(
-            {
-                "cashflow": cashflow_result,
-                "pnl": pnl_list,
-                "balance": balance_sheet,
-                "valuation": valuation_state,
-            }
-        )
-        if st.session_state.get("cache.investment_hash") != investment_hash:
-            investment_result = calculate_investment(
-                input_model, cashflow_result, pnl_list, balance_sheet
+        if needs_balance:
+            balance_hash = _hash_payload(
+                {
+                    "cashflow": cashflow_result,
+                    "debt": debt_schedule,
+                    "pnl": pnl_list,
+                    "balance": balance_state,
+                }
             )
-            st.session_state["cache.investment_hash"] = investment_hash
-            st.session_state["cache.investment_result"] = investment_result
-        else:
-            investment_result = st.session_state["cache.investment_result"]
+            if st.session_state.get("cache.balance_hash") != balance_hash:
+                balance_sheet = calculate_balance_sheet(
+                    input_model, cashflow_result, debt_schedule, pnl_list
+                )
+                st.session_state["cache.balance_hash"] = balance_hash
+                st.session_state["cache.balance_sheet"] = balance_sheet
+            else:
+                balance_sheet = st.session_state["cache.balance_sheet"]
+
+        if needs_investment:
+            investment_hash = _hash_payload(
+                {
+                    "cashflow": cashflow_result,
+                    "pnl": pnl_list,
+                    "balance": balance_sheet,
+                    "valuation": valuation_state,
+                }
+            )
+            if st.session_state.get("cache.investment_hash") != investment_hash:
+                investment_result = calculate_investment(
+                    input_model, cashflow_result, pnl_list, balance_sheet
+                )
+                st.session_state["cache.investment_hash"] = investment_hash
+                st.session_state["cache.investment_result"] = investment_result
+            else:
+                investment_result = st.session_state["cache.investment_result"]
     editor_css = """
     <style>
       .rdg-cell[aria-readonly="true"] {
@@ -5246,14 +5287,31 @@ def run_app(page_override=None):
                 kpi_table.loc[metric] = kpi_table.loc[metric].apply(formatter)
             st.dataframe(kpi_table, use_container_width=True)
 
-        pnl_excel = _build_pnl_excel(
-            input_model, pnl_result, cashflow_result, debt_schedule
-        )
+        if st.session_state.get("cache.pnl_excel_hash") != st.session_state.get(
+            "cache.pnl_hash"
+        ):
+            st.session_state["cache.pnl_excel_bytes"] = None
+            st.session_state["cache.pnl_excel_hash"] = st.session_state.get(
+                "cache.pnl_hash"
+            )
+        if st.session_state.get("cache.pnl_excel_bytes") is None:
+            if st.session_state.get("pnl_excel_requested"):
+                pnl_excel = _build_pnl_excel(
+                    input_model, pnl_result, cashflow_result, debt_schedule
+                )
+                st.session_state["cache.pnl_excel_bytes"] = pnl_excel.getvalue()
+            else:
+                st.session_state["cache.pnl_excel_bytes"] = b""
+        def _request_pnl_excel():
+            st.session_state["pnl_excel_requested"] = True
+        if st.session_state.get("pnl_excel_requested"):
+            st.session_state["pnl_excel_requested"] = False
         st.download_button(
             "Download P&L as Excel",
-            data=pnl_excel.getvalue(),
+            data=st.session_state.get("cache.pnl_excel_bytes", b""),
             file_name="Financial_Model_PnL.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            on_click=_request_pnl_excel,
         )
 
     if page == "Cashflow & Liquidity":
