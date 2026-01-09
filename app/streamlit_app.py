@@ -3794,56 +3794,59 @@ def run_app(page_override=None):
 
         with st.expander("Seller Valuation (Multiple-Based)", expanded=False):
             st.write("Seller expectation range based on EBIT multiple.")
-        seller_multiple_low = seller_multiple
-        seller_multiple_mid = seller_multiple
-        seller_multiple_high = seller_multiple
-        seller_ev_low = ebit_ref * seller_multiple_low
-        seller_ev_mid = ebit_ref * seller_multiple_mid
-        seller_ev_high = ebit_ref * seller_multiple_high
-        seller_equity_low = seller_ev_low - net_debt_close
-        seller_equity_mid = seller_ev_mid - net_debt_close
-        seller_equity_high = seller_ev_high - net_debt_close
-        seller_range_table = pd.DataFrame(
-            [
-                {
-                    "Metric": "Reference EBIT (Year)",
-                    "Low": f"Year {reference_year}",
-                    "Mid": f"Year {reference_year}",
-                    "High": f"Year {reference_year}",
-                },
-                {
-                    "Metric": "Applied EBIT Multiple",
-                    "Low": f"{seller_multiple_low:.2f}x",
-                    "Mid": f"{seller_multiple_mid:.2f}x",
-                    "High": f"{seller_multiple_high:.2f}x",
-                },
-                {
-                    "Metric": "Enterprise Value (EV)",
-                    "Low": format_currency(seller_ev_low),
-                    "Mid": format_currency(seller_ev_mid),
-                    "High": format_currency(seller_ev_high),
-                },
-                {
-                    "Metric": "Net Debt at Close",
-                    "Low": format_currency(net_debt_close),
-                    "Mid": format_currency(net_debt_close),
-                    "High": format_currency(net_debt_close),
-                },
-                {
-                    "Metric": "Equity Value (Seller View)",
-                    "Low": format_currency(seller_equity_low),
-                    "Mid": format_currency(seller_equity_mid),
-                    "High": format_currency(seller_equity_high),
-                },
-            ]
-        )
+            seller_multiple_low = seller_multiple
+            seller_multiple_mid = seller_multiple
+            seller_multiple_high = seller_multiple
+            seller_ev_low = ebit_ref * seller_multiple_low
+            seller_ev_mid = ebit_ref * seller_multiple_mid
+            seller_ev_high = ebit_ref * seller_multiple_high
+            seller_equity_low = seller_ev_low - net_debt_close
+            seller_equity_mid = seller_ev_mid - net_debt_close
+            seller_equity_high = seller_ev_high - net_debt_close
+            seller_range_table = pd.DataFrame(
+                [
+                    {
+                        "Metric": "Reference EBIT (Year)",
+                        "Low": f"Year {reference_year}",
+                        "Mid": f"Year {reference_year}",
+                        "High": f"Year {reference_year}",
+                    },
+                    {
+                        "Metric": "Applied EBIT Multiple",
+                        "Low": f"{seller_multiple_low:.2f}x",
+                        "Mid": f"{seller_multiple_mid:.2f}x",
+                        "High": f"{seller_multiple_high:.2f}x",
+                    },
+                    {
+                        "Metric": "Enterprise Value (EV)",
+                        "Low": format_currency(seller_ev_low),
+                        "Mid": format_currency(seller_ev_mid),
+                        "High": format_currency(seller_ev_high),
+                    },
+                    {
+                        "Metric": "Net Debt at Close",
+                        "Low": format_currency(net_debt_close),
+                        "Mid": format_currency(net_debt_close),
+                        "High": format_currency(net_debt_close),
+                    },
+                    {
+                        "Metric": "Equity Value (Seller View)",
+                        "Low": format_currency(seller_equity_low),
+                        "Mid": format_currency(seller_equity_mid),
+                        "High": format_currency(seller_equity_high),
+                    },
+                ]
+            )
             st.dataframe(seller_range_table, use_container_width=True)
             seller_table = pd.DataFrame.from_dict(seller_rows, orient="index")
             seller_table = seller_table[
                 [f"Year {i}" for i in range(5)]
             ].reset_index()
             seller_table.rename(columns={"index": "Line Item"}, inplace=True)
-            seller_total_rows = {"Enterprise Value (EV)", "Equity Value (Seller View)"}
+            seller_total_rows = {
+                "Enterprise Value (EV)",
+                "Equity Value (Seller View)",
+            }
             seller_formatters = {
                 "Applied EBIT Multiple": lambda value: f"{value:.2f}x"
                 if value not in ("", None)
@@ -3860,17 +3863,17 @@ def run_app(page_override=None):
             )
             st.caption("Note: No terminal value included (conservative downside view).")
 
-        dcf_rows = {
-            "Free Cashflow": {},
-            "Discount Factor": {},
-            "Present Value of FCF": {},
-            "Cumulative PV of FCF": {},
-            "Terminal Value": {},
-            "PV of 5Y FCF (no terminal)": {},
-            "Net Debt at Close": {},
-            "Transaction Costs": {},
-            "Equity Value (Buyer View)": {},
-        }
+            dcf_rows = {
+                "Free Cashflow": {},
+                "Discount Factor": {},
+                "Present Value of FCF": {},
+                "Cumulative PV of FCF": {},
+                "Terminal Value": {},
+                "PV of 5Y FCF (no terminal)": {},
+                "Net Debt at Close": {},
+                "Transaction Costs": {},
+                "Equity Value (Buyer View)": {},
+            }
             cumulative_pv = 0.0
             for year_index, fcf in enumerate(free_cashflows):
                 year_label = f"Year {year_index}"
