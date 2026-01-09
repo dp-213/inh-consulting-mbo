@@ -22,18 +22,18 @@ NAV_OPTIONS = [
     "Model Settings",
 ]
 
-from data_model import InputModel, create_demo_input_model
-from calculations.pnl import calculate_pnl
-from calculations.cashflow import calculate_cashflow
-from calculations.debt import calculate_debt_schedule
-from calculations.balance_sheet import calculate_balance_sheet
-from calculations.investment import calculate_investment
-from calculations.investment import _calculate_irr
-from revenue_model import (
+from app.data_model import InputModel, create_demo_input_model
+from app.calculations.pnl import calculate_pnl
+from app.calculations.cashflow import calculate_cashflow
+from app.calculations.debt import calculate_debt_schedule
+from app.calculations.balance_sheet import calculate_balance_sheet
+from app.calculations.investment import calculate_investment
+from app.calculations.investment import _calculate_irr
+from app.revenue_model import (
     render_revenue_model_assumptions,
     build_revenue_model_outputs,
 )
-from cost_model import (
+from app.cost_model import (
     render_cost_model_assumptions,
     build_cost_model_outputs,
 )
