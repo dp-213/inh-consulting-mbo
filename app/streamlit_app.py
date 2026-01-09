@@ -2900,21 +2900,23 @@ def run_app():
             margin: 0.8rem 0 0.35rem;
           }
           .nav-item {
-            display: block;
-            color: #6b7280;
-            text-decoration: none;
-            padding: 0.15rem 0 0.15rem 0.25rem;
+            display: block !important;
+            color: #6b7280 !important;
+            text-decoration: none !important;
+            padding: 0.2rem 0 0.2rem 0.35rem !important;
+            border-left: 3px solid transparent !important;
+            background: transparent !important;
+            cursor: pointer !important;
           }
           .nav-item:hover {
-            color: #111827;
-            text-decoration: none;
+            color: #111827 !important;
+            text-decoration: none !important;
           }
           .nav-item.active {
-            font-weight: 600;
-            color: #111827;
-            border-left: 3px solid #3b82f6;
-            padding-left: 0.35rem;
-            background: #eef2f7;
+            font-weight: 600 !important;
+            color: #111827 !important;
+            border-left: 3px solid #3b82f6 !important;
+            background: #eef2f7 !important;
           }
         </style>
         """
