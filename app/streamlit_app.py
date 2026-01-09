@@ -2937,6 +2937,13 @@ def run_app():
             min-width: 280px;
             max-width: 280px;
           }
+          .nav-section {
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin: 0.85rem 0 0.35rem;
+          }
           div[data-testid="stRadio"] label {
             display: flex;
             flex-direction: column;
@@ -2963,35 +2970,6 @@ def run_app():
             color: #111827;
             font-weight: 600;
           }
-          div[data-testid="stRadio"] label:nth-child(1)::before,
-          div[data-testid="stRadio"] label:nth-child(4)::before,
-          div[data-testid="stRadio"] label:nth-child(7)::before,
-          div[data-testid="stRadio"] label:nth-child(9)::before,
-          div[data-testid="stRadio"] label:nth-child(10)::before {
-            display: block;
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin: 0.9rem 0 0.35rem;
-            width: 100%;
-          }
-          div[data-testid="stRadio"] label:nth-child(1)::before {
-            content: "OPERATING MODEL";
-            margin-top: 0;
-          }
-          div[data-testid="stRadio"] label:nth-child(4)::before {
-            content: "PLANNING";
-          }
-          div[data-testid="stRadio"] label:nth-child(7)::before {
-            content: "FINANCING";
-          }
-          div[data-testid="stRadio"] label:nth-child(9)::before {
-            content: "VALUATION";
-          }
-          div[data-testid="stRadio"] label:nth-child(10)::before {
-            content: "SETTINGS";
-          }
         </style>
         """
         st.markdown(nav_css, unsafe_allow_html=True)
@@ -3010,26 +2988,36 @@ def run_app():
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        nav_options = [
-            "Operating Model (P&L)",
-            "Cashflow & Liquidity",
-            "Balance Sheet",
-            "Revenue Model",
-            "Cost Model",
-            "Other Assumptions",
-            "Financing & Debt",
-            "Equity Case",
-            "Valuation & Purchase Price",
-            "Model Settings",
+        nav_groups = [
+            (
+                "OPERATING MODEL",
+                ["Operating Model (P&L)", "Cashflow & Liquidity", "Balance Sheet"],
+                "nav_operating",
+            ),
+            ("PLANNING", ["Revenue Model", "Cost Model", "Other Assumptions"], "nav_planning"),
+            ("FINANCING", ["Financing & Debt", "Equity Case"], "nav_financing"),
+            ("VALUATION", ["Valuation & Purchase Price"], "nav_valuation"),
+            ("SETTINGS", ["Model Settings"], "nav_settings"),
         ]
 
         st.markdown("**MBO Financial Model**")
-        page = st.sidebar.radio(
-            "",
-            nav_options,
-            key="page",
-            label_visibility="collapsed",
-        )
+        current_page = st.session_state.get("page", "Operating Model (P&L)")
+        page = current_page
+        for header, options, key in nav_groups:
+            if current_page not in options and key in st.session_state:
+                del st.session_state[key]
+            st.markdown(f"<div class=\"nav-section\">{header}</div>", unsafe_allow_html=True)
+            index = options.index(current_page) if current_page in options else None
+            selection = st.radio(
+                "",
+                options,
+                index=index,
+                key=key,
+                label_visibility="collapsed",
+            )
+            if selection and selection != page:
+                page = selection
+                st.session_state["page"] = selection
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
