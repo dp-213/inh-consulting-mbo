@@ -2305,22 +2305,35 @@ def run_app():
             background-color: #f9fafb !important;
             color: #111827 !important;
           }
+          .scenario-toggle {
+            margin-top: 8px;
+            margin-bottom: 12px;
+          }
           .scenario-toggle [data-testid="stRadio"] > div {
-            display: inline-flex;
-            gap: 6px;
+            display: flex;
+            gap: 8px;
           }
           .scenario-toggle [data-testid="stRadio"] label {
             border: 1px solid #d1d5db;
-            border-radius: 999px;
-            padding: 4px 10px;
+            border-radius: 6px;
+            padding: 0 16px;
+            height: 40px;
+            min-width: 96px;
             margin: 0;
-            font-size: 0.8rem;
-            line-height: 1.2;
+            font-size: 14px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
           }
           .scenario-toggle [data-testid="stRadio"] input:checked + div {
             background: #eef2f7;
-            border-color: #9ca3af;
-            font-weight: 600;
+            border-color: #d1d5db;
+            font-weight: 500;
+          }
+          .scenario-toggle [data-testid="stRadio"] label div {
+            width: 100%;
+            text-align: center;
           }
         </style>
         """,
@@ -3922,7 +3935,7 @@ def run_app():
             )
 
     if page == "Operating Model (P&L)":
-        st.header("Operating Model (P&L)")
+        st.header("P&L")
         _render_scenario_selector()
         selected_scenario = st.session_state.get(
             "scenario_selection.selected_scenario",
