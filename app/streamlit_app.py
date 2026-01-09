@@ -1,5 +1,6 @@
 import io
 import json
+import urllib.parse
 import subprocess
 from datetime import datetime
 import zipfile
@@ -2894,47 +2895,83 @@ def run_app():
 
         nav_css = """
         <style>
-          div[data-testid="stSidebar"] button {
-            text-align: left;
-            width: 100%;
+          .nav-section {
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin: 0.8rem 0 0.35rem;
+          }
+          .nav-item {
+            display: block;
+            color: #111827;
+            text-decoration: none;
+            padding: 0.15rem 0 0.15rem 0.25rem;
             white-space: nowrap;
+          }
+          .nav-item:hover {
+            color: #111827;
+            text-decoration: none;
+          }
+          .nav-item.active {
+            font-weight: 600;
+            background: #eef2f7;
+            border-left: 3px solid #3b82f6;
+            padding-left: 0.35rem;
           }
         </style>
         """
         st.markdown(nav_css, unsafe_allow_html=True)
 
-        st.markdown("**MBO Financial Model**")
-        st.markdown("OPERATING MODEL")
-        if st.sidebar.button("Operating Model (P&L)", key="nav_operating_model"):
-            st.session_state["page"] = "Operating Model (P&L)"
-        if st.sidebar.button("Cashflow & Liquidity", key="nav_cashflow"):
-            st.session_state["page"] = "Cashflow & Liquidity"
-        if st.sidebar.button("Balance Sheet", key="nav_balance_sheet"):
-            st.session_state["page"] = "Balance Sheet"
-
-        st.markdown("PLANNING")
-        if st.sidebar.button("Revenue Model", key="nav_revenue_model"):
-            st.session_state["page"] = "Revenue Model"
-        if st.sidebar.button("Cost Model", key="nav_cost_model"):
-            st.session_state["page"] = "Cost Model"
-        if st.sidebar.button("Other Assumptions", key="nav_other_assumptions"):
-            st.session_state["page"] = "Other Assumptions"
-
-        st.markdown("FINANCING")
-        if st.sidebar.button("Financing & Debt", key="nav_financing_debt"):
-            st.session_state["page"] = "Financing & Debt"
-        if st.sidebar.button("Equity Case", key="nav_equity_case"):
-            st.session_state["page"] = "Equity Case"
-
-        st.markdown("VALUATION")
-        if st.sidebar.button("Valuation & Purchase Price", key="nav_valuation"):
-            st.session_state["page"] = "Valuation & Purchase Price"
-
-        st.markdown("SETTINGS")
-        if st.sidebar.button("Model Settings", key="nav_model_settings"):
-            st.session_state["page"] = "Model Settings"
+        nav_options = [
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "Revenue Model",
+            "Cost Model",
+            "Other Assumptions",
+            "Financing & Debt",
+            "Equity Case",
+            "Valuation & Purchase Price",
+            "Model Settings",
+        ]
+        query_page = st.query_params.get("page")
+        if isinstance(query_page, list):
+            query_page = query_page[0] if query_page else None
+        if query_page in nav_options:
+            st.session_state["page"] = query_page
 
         page = st.session_state["page"]
+
+        def _nav_link(label):
+            target = urllib.parse.quote(label, safe="")
+            active_class = "active" if label == page else ""
+            st.markdown(
+                f'<a class="nav-item {active_class}" href="?page={target}">{label}</a>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("**MBO Financial Model**")
+
+        st.markdown('<div class="nav-section">OPERATING MODEL</div>', unsafe_allow_html=True)
+        _nav_link("Operating Model (P&L)")
+        _nav_link("Cashflow & Liquidity")
+        _nav_link("Balance Sheet")
+
+        st.markdown('<div class="nav-section">PLANNING</div>', unsafe_allow_html=True)
+        _nav_link("Revenue Model")
+        _nav_link("Cost Model")
+        _nav_link("Other Assumptions")
+
+        st.markdown('<div class="nav-section">FINANCING</div>', unsafe_allow_html=True)
+        _nav_link("Financing & Debt")
+        _nav_link("Equity Case")
+
+        st.markdown('<div class="nav-section">VALUATION</div>', unsafe_allow_html=True)
+        _nav_link("Valuation & Purchase Price")
+
+        st.markdown('<div class="nav-section">SETTINGS</div>', unsafe_allow_html=True)
+        _nav_link("Model Settings")
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
