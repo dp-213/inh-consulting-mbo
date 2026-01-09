@@ -2309,18 +2309,20 @@ def run_app():
             margin-top: 8px;
             margin-bottom: 12px;
           }
-          .scenario-bar {
-            display: flex;
-            width: 460px;
-            height: 40px;
-            padding: 4px;
-            gap: 4px;
-            border-radius: 8px;
-            background-color: #f3f4f6;
+          .scenario-toggle {
             margin-top: 8px;
             margin-bottom: 12px;
           }
-          .scenario-seg {
+          .scenario-toggle [data-testid="stRadio"] > div {
+            display: flex;
+            gap: 4px;
+            width: 460px;
+            height: 40px;
+            padding: 4px;
+            border-radius: 8px;
+            background-color: #f3f4f6;
+          }
+          .scenario-toggle [data-testid="stRadio"] label {
             flex: 1;
             height: 32px;
             line-height: 32px;
@@ -2328,13 +2330,23 @@ def run_app():
             font-size: 14px;
             font-weight: 500;
             border-radius: 6px;
+            margin: 0;
             cursor: pointer;
-            text-decoration: none;
-            background-color: transparent;
             color: #6b7280;
+            background: transparent;
           }
-          .scenario-seg.active {
-            background-color: #ffffff;
+          .scenario-toggle [data-testid="stRadio"] label > div {
+            width: 100%;
+            text-align: center;
+            margin-left: 0 !important;
+          }
+          .scenario-toggle [data-testid="stRadio"] input,
+          .scenario-toggle [data-testid="stRadio"] svg,
+          .scenario-toggle [data-testid="stRadio"] label > div:first-child {
+            display: none;
+          }
+          .scenario-toggle [data-testid="stRadio"] input:checked + div {
+            background: #ffffff;
             color: #111827;
             box-shadow: 0 1px 2px rgba(0,0,0,0.06);
           }
@@ -2800,22 +2812,22 @@ def run_app():
     _apply_assumptions_state()
 
     def _render_scenario_selector():
+        labels = ["Worst", "Base", "Best"]
         current = st.session_state.get("scenario", "Base")
-        html = f"""
-        <div class="scenario-bar">
-          <a class="scenario-seg {'active' if current == 'Worst' else ''}" href="?scenario=Worst">Worst</a>
-          <a class="scenario-seg {'active' if current == 'Base' else ''}" href="?scenario=Base">Base</a>
-          <a class="scenario-seg {'active' if current == 'Best' else ''}" href="?scenario=Best">Best</a>
-        </div>
-        """
-        st.markdown(html, unsafe_allow_html=True)
+        st.markdown('<div class="scenario-toggle">', unsafe_allow_html=True)
+        selected = st.radio(
+            "",
+            labels,
+            index=labels.index(current),
+            horizontal=True,
+            key="scenario_selector",
+            label_visibility="collapsed",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.session_state["scenario"] = selected
 
     # Global scenario selector (active scenario for all pages).
     st.session_state.setdefault("scenario", "Base")
-    query_params = st.experimental_get_query_params()
-    query_scenario = query_params.get("scenario", [None])[0]
-    if query_scenario in {"Worst", "Base", "Best"}:
-        st.session_state["scenario"] = query_scenario
     active_scenario = st.session_state["scenario"]
     st.session_state["active_scenario"] = active_scenario
     st.session_state["assumptions.scenario"] = active_scenario
