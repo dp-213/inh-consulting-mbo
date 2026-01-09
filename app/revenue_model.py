@@ -495,17 +495,30 @@ def render_revenue_model_assumptions(input_model):
         ]
     bridge_df = pd.DataFrame(bridge_table)
     display_rows = [
+        "CAPACITY",
         "Capacity Revenue",
+        "ALLOCATION",
         "Modeled Group Revenue",
         "Modeled External Revenue",
         "Modeled Total (Group + External)",
+        "PROTECTION",
         "Guaranteed Floor",
         "Guaranteed Group Revenue",
+        "RESULT",
         "FINAL REVENUE",
         "Guaranteed %",
     ]
     display_table = []
     for row_label in display_rows:
+        if row_label in {"CAPACITY", "ALLOCATION", "PROTECTION", "RESULT"}:
+            display_table.append(
+                {
+                    "Parameter": row_label,
+                    "Unit": "",
+                    **{col: "" for col in year_columns},
+                }
+            )
+            continue
         if row_label == "Modeled Total (Group + External)":
             values = [
                 bridge_rows["Modeled Group Revenue"][idx]
@@ -539,6 +552,10 @@ def render_revenue_model_assumptions(input_model):
 
     bridge_df = pd.DataFrame(display_table)
     bold_rows = {
+        "CAPACITY",
+        "ALLOCATION",
+        "PROTECTION",
+        "RESULT",
         "Modeled Total (Group + External)",
         "Guaranteed Group Revenue",
         "FINAL REVENUE",
@@ -547,6 +564,8 @@ def render_revenue_model_assumptions(input_model):
     def _bridge_style(row):
         if row["Parameter"] in bold_rows:
             base = "font-weight: 700;"
+            if row["Parameter"] in {"CAPACITY", "ALLOCATION", "PROTECTION", "RESULT"}:
+                return ["background-color: #f7f7f7; " + base] * len(row)
             if row["Parameter"] == "FINAL REVENUE":
                 return ["background-color: #f3f4f6; " + base] * len(row)
             return [base] * len(row)
