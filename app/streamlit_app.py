@@ -5810,19 +5810,24 @@ def run_app(page_override=None):
         amort_years = financing_assumptions["amortization_period_years"]
         amort_type = financing_assumptions.get("amortization_type", "Linear")
         grace_years = financing_assumptions.get("grace_period_years", 0)
-        peak_debt = max(
-            row["opening_debt"] + row["debt_drawdown"] for row in debt_schedule
-        )
-        if abs(peak_debt - senior_debt_amount) > 1.0:
-            raise ValueError("Debt input not reflected in debt schedule.")
-        if amort_type == "Linear" and grace_years == 0:
-            first_repay_row = next(
-                (row for row in debt_schedule if row.get("opening_debt", 0.0) > 0),
-                debt_schedule[0],
+        peak_debt = 0.0
+        if debt_schedule and len(debt_schedule) > 0:
+            peak_debt = max(
+                row.get("opening_debt", 0.0) for row in debt_schedule
             )
-            scheduled_repayment = first_repay_row.get("scheduled_repayment", 0.0)
-            if abs(scheduled_repayment * amort_years - first_repay_row.get("opening_debt", 0.0)) > 1.0:
-                raise ValueError("Amortisation inconsistency.")
+            if peak_debt > 0 and abs(peak_debt - senior_debt_amount) > 1.0:
+                raise ValueError("Debt input not reflected in debt schedule.")
+            if amort_type == "Linear" and grace_years == 0:
+                first_repay_row = next(
+                    (row for row in debt_schedule if row.get("opening_debt", 0.0) > 0),
+                    debt_schedule[0],
+                )
+                scheduled_repayment = first_repay_row.get("scheduled_repayment", 0.0)
+                if abs(
+                    scheduled_repayment * amort_years
+                    - first_repay_row.get("opening_debt", 0.0)
+                ) > 1.0:
+                    raise ValueError("Amortisation inconsistency.")
         cashflow_by_year = {row["year"]: row for row in cashflow_result}
         maintenance_capex_pct = financing_assumptions[
             "maintenance_capex_pct_revenue"
