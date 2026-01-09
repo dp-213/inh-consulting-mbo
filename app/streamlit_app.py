@@ -5456,3 +5456,7 @@ def main():
     selection = _render_sidebar()
     st.session_state["page_key"] = selection
     run_app(st.session_state["page_key"])
+
+
+if __name__ == "__main__":
+    main()
