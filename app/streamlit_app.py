@@ -238,7 +238,7 @@ def _build_model_snapshot_zip(payload):
 
 
 def render_general_assumptions(input_model):
-    st.header("Assumptions")
+    st.title("Assumptions")
     st.write("Master input sheet – all model assumptions in one place")
 
 
@@ -254,7 +254,7 @@ def render_advanced_assumptions(input_model, show_header=True):
         return max(0.0, float(value))
 
     if show_header:
-        st.header("Assumptions")
+        st.title("Assumptions")
         st.write("Master input sheet – all model assumptions in one place")
 
     assumptions_state = st.session_state["assumptions"]
@@ -2305,50 +2305,30 @@ def run_app():
             background-color: #f9fafb !important;
             color: #111827 !important;
           }
-          .scenario-toggle {
-            margin-top: 8px;
-            margin-bottom: 12px;
-          }
-          .scenario-toggle {
-            margin-top: 8px;
-            margin-bottom: 12px;
-          }
-          .scenario-toggle [data-testid="stRadio"] > div {
-            display: flex;
-            gap: 4px;
-            width: 460px;
-            height: 40px;
-            padding: 4px;
-            border-radius: 8px;
-            background-color: #f3f4f6;
-          }
-          .scenario-toggle [data-testid="stRadio"] label {
-            flex: 1;
-            height: 32px;
-            line-height: 32px;
-            text-align: center;
-            font-size: 14px;
-            font-weight: 500;
-            border-radius: 6px;
-            margin: 0;
-            cursor: pointer;
-            color: #6b7280;
-            background: transparent;
-          }
-          .scenario-toggle [data-testid="stRadio"] label > div {
-            width: 100%;
-            text-align: center;
-            margin-left: 0 !important;
-          }
-          .scenario-toggle [data-testid="stRadio"] input,
-          .scenario-toggle [data-testid="stRadio"] svg,
-          .scenario-toggle [data-testid="stRadio"] label > div:first-child {
+          section.main div[data-testid="stRadio"] > label {
             display: none;
           }
-          .scenario-toggle [data-testid="stRadio"] input:checked + div {
-            background: #ffffff;
+          section.main div[data-testid="stRadio"] > div {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+          }
+          section.main div[data-testid="stRadio"] label {
+            padding: 6px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            background-color: transparent;
+            border: 1px solid #e5e7eb;
+            cursor: pointer;
+          }
+          section.main div[data-testid="stRadio"] input:checked + div {
+            background-color: #eef2ff;
+            border-color: #6366f1;
             color: #111827;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+          }
+          section.main div[data-testid="stRadio"] input {
+            display: none;
           }
         </style>
         """,
@@ -2814,16 +2794,13 @@ def run_app():
     def _render_scenario_selector():
         labels = ["Worst", "Base", "Best"]
         current = st.session_state.get("scenario", "Base")
-        st.markdown('<div class="scenario-toggle">', unsafe_allow_html=True)
         selected = st.radio(
-            "",
-            labels,
+            label="",
+            options=labels,
             index=labels.index(current),
             horizontal=True,
             key="scenario_selector",
-            label_visibility="collapsed",
         )
-        st.markdown("</div>", unsafe_allow_html=True)
         st.session_state["scenario"] = selected
 
     # Global scenario selector (active scenario for all pages).
@@ -3137,21 +3114,21 @@ def run_app():
             _apply_assumptions_state()
 
     if page == "Revenue Model":
-        st.header("Revenue Model")
+        st.title("Revenue Model")
         _render_scenario_selector()
         render_revenue_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
 
     if page == "Cost Model":
-        st.header("Cost Model")
+        st.title("Cost Model")
         _render_scenario_selector()
         render_cost_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
 
     if page == "Other Assumptions":
-        st.header("Other Assumptions")
+        st.title("Other Assumptions")
         _render_scenario_selector()
         st.write("Master input sheet – all remaining assumptions.")
         st.toggle(
@@ -3175,7 +3152,7 @@ def run_app():
         return
 
     if page == "Overview":
-        st.header("Overview – Management Deal Assessment")
+        st.title("Overview – Management Deal Assessment")
         st.write(
             "High-level assessment of attractiveness, affordability, and risk."
         )
@@ -3375,7 +3352,7 @@ def run_app():
         )
 
     if page == "Model Settings":
-        st.header("Model Settings")
+        st.title("Model Settings")
         _render_scenario_selector()
         st.caption("Model transparency, export, and technical controls")
 
@@ -3501,7 +3478,7 @@ def run_app():
                 st.rerun()
 
     if page == "Valuation & Purchase Price":
-        st.header("Valuation & Purchase Price")
+        st.title("Valuation & Purchase Price")
         st.write(
             "This page compares seller expectations with a conservative buyer view. "
             "The buyer view focuses on cash generation, financing constraints and downside risk."
@@ -3952,7 +3929,7 @@ def run_app():
             )
 
     if page == "Operating Model (P&L)":
-        st.header("P&L")
+        st.title("Operating Model (P&L)")
         _render_scenario_selector()
         selected_scenario = st.session_state.get(
             "scenario_selection.selected_scenario",
@@ -4609,7 +4586,7 @@ def run_app():
         )
 
     if page == "Cashflow & Liquidity":
-        st.header("Cashflow & Liquidity")
+        st.title("Cashflow & Liquidity")
         _render_scenario_selector()
         st.write("Consolidated cashflow statement (5-year plan)")
         cashflow_line_items = {}
@@ -4878,7 +4855,7 @@ def run_app():
             st.dataframe(liquidity_table, use_container_width=True)
 
     if page == "Balance Sheet":
-        st.header("Balance Sheet")
+        st.title("Balance Sheet")
         _render_scenario_selector()
         st.write("Simplified balance sheet (5-year plan)")
         balance_line_items = {}
@@ -5157,7 +5134,7 @@ def run_app():
             st.dataframe(check_table, use_container_width=True)
 
     if page == "Financing & Debt":
-        st.header("Financing & Debt")
+        st.title("Financing & Debt")
         _render_scenario_selector()
         st.write("Debt structure, service and bankability (5-year plan)")
         financing_assumptions = input_model.financing_assumptions
@@ -5317,7 +5294,7 @@ def run_app():
                 )
 
     if page == "Equity Case":
-        st.header("Equity Case")
+        st.title("Equity Case")
         st.write(
             "Management Buy-Out with an external minority investor. "
             "Holding period defined by the investor exit year. "
