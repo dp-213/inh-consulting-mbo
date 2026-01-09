@@ -346,10 +346,11 @@ def render_advanced_assumptions(input_model, show_header=True):
             default=str,
         )
 
+    editor_version = "v2"
     st.markdown("### Financing Assumptions")
     financing_df = pd.DataFrame(assumptions_state["financing"])
     financing_display = _apply_unit_display(financing_df)
-    financing_editor_key = "editor.assumptions.financing"
+    financing_editor_key = f"editor.assumptions.financing.{editor_version}"
     _maybe_seed_editor_state(financing_editor_key, financing_display)
     financing_edit = st.data_editor(
         st.session_state[financing_editor_key],
@@ -397,7 +398,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     st.markdown("### Equity & Investor Assumptions")
     equity_df = pd.DataFrame(assumptions_state["equity"])
     equity_display = _apply_unit_display(equity_df)
-    equity_editor_key = "editor.assumptions.equity"
+    equity_editor_key = f"editor.assumptions.equity.{editor_version}"
     _maybe_seed_editor_state(equity_editor_key, equity_display)
     equity_edit = st.data_editor(
         st.session_state[equity_editor_key],
@@ -445,7 +446,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     st.markdown("### Cashflow Assumptions")
     cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
     cashflow_display = _apply_unit_display(cashflow_df)
-    cashflow_editor_key = "editor.assumptions.cashflow"
+    cashflow_editor_key = f"editor.assumptions.cashflow.{editor_version}"
     _maybe_seed_editor_state(cashflow_editor_key, cashflow_display)
     cashflow_edit = st.data_editor(
         st.session_state[cashflow_editor_key],
@@ -492,7 +493,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     st.markdown("### Balance Sheet Assumptions")
     balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
     balance_display = _apply_unit_display(balance_df)
-    balance_editor_key = "editor.assumptions.balance_sheet"
+    balance_editor_key = f"editor.assumptions.balance_sheet.{editor_version}"
     _maybe_seed_editor_state(balance_editor_key, balance_display)
     balance_edit = st.data_editor(
         st.session_state[balance_editor_key],
@@ -531,7 +532,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     st.markdown("### Valuation Assumptions")
     valuation_df = pd.DataFrame(assumptions_state["valuation"])
     valuation_display = _apply_unit_display(valuation_df)
-    valuation_editor_key = "editor.assumptions.valuation"
+    valuation_editor_key = f"editor.assumptions.valuation.{editor_version}"
     _maybe_seed_editor_state(valuation_editor_key, valuation_display)
     valuation_edit = st.data_editor(
         st.session_state[valuation_editor_key],
@@ -3663,6 +3664,8 @@ def run_app(page_override=None):
 
     assumptions_state = st.session_state["assumptions"]
 
+    editor_version = "v2"
+
     def _sidebar_editor(title, key, df, column_config):
         st.markdown(f"### {title}")
         display_df = _apply_unit_display(df)
@@ -3670,7 +3673,7 @@ def run_app(page_override=None):
         for col in display_df.columns:
             if col not in config:
                 config[col] = st.column_config.TextColumn()
-        editor_key = f"editor.{key}"
+        editor_key = f"editor.{key}.{editor_version}"
         refresh_key = f"{editor_key}.refresh"
         if editor_key not in st.session_state or st.session_state.pop(refresh_key, False):
             st.session_state[editor_key] = display_df
