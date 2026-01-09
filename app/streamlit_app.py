@@ -10,6 +10,46 @@ from openpyxl.styles import Alignment, Font, PatternFill
 
 st.set_page_config(layout="wide")
 
+st.session_state.setdefault("page_key", "Operating Model (P&L)")
+
+pages = [
+    "Operating Model (P&L)",
+    "Cashflow & Liquidity",
+    "Balance Sheet",
+    "Financing & Debt",
+    "Valuation & Purchase Price",
+    "Equity Case",
+    "Assumptions",
+    "Settings",
+]
+
+with st.sidebar:
+    st.markdown(
+        """
+        <style>
+          [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
+            display: none;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label {
+            padding: 0.3rem 0.5rem;
+            border-radius: 6px;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+            background-color: #e5e7eb;
+            font-weight: 600;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.title("MBO Financial Model")
+    st.radio(
+        "Navigation",
+        pages,
+        key="page_key",
+        label_visibility="collapsed",
+    )
+
 from data_model import InputModel, create_demo_input_model
 from calculations.pnl import calculate_pnl
 from calculations.cashflow import calculate_cashflow
@@ -5395,7 +5435,6 @@ def run_app(page_override=None):
             )
 
 
-if __name__ == "__main__":
-    from main import main
+from app.main import main
 
-    main()
+main(st.session_state["page_key"])
