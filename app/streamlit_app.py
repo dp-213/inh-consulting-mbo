@@ -242,7 +242,7 @@ def render_general_assumptions(input_model):
     st.write("Master input sheet – all model assumptions in one place")
 
 
-def render_advanced_assumptions(input_model):
+def render_advanced_assumptions(input_model, show_header=True):
     def _local_clamp_pct(value):
         if value is None or pd.isna(value):
             return 0.0
@@ -253,8 +253,9 @@ def render_advanced_assumptions(input_model):
             return 0.0
         return max(0.0, float(value))
 
-    st.header("Assumptions")
-    st.write("Master input sheet – all model assumptions in one place")
+    if show_header:
+        st.header("Assumptions")
+        st.write("Master input sheet – all model assumptions in one place")
 
     assumptions_state = st.session_state["assumptions"]
 
@@ -3104,27 +3105,42 @@ def run_app():
     if page == "Revenue Model":
         st.header("Revenue Model")
         _render_scenario_selector()
-        st.write("Detailed revenue planning (5-year view).")
+        st.caption(f"Revenue Model — {selected_scenario} Case")
         render_revenue_model_assumptions(input_model, show_header=False)
-        st.caption(f"Values shown for {selected_scenario} Case.")
         _apply_assumptions_state()
         return
 
     if page == "Cost Model":
         st.header("Cost Model")
         _render_scenario_selector()
-        st.write("Detailed annual cost planning (5-year view).")
+        st.caption(f"Cost Model — {selected_scenario} Case")
         render_cost_model_assumptions(input_model, show_header=False)
-        st.caption(f"Values shown for {selected_scenario} Case.")
         _apply_assumptions_state()
         return
 
     if page == "Other Assumptions":
         st.header("Other Assumptions")
-        st.write("Master input sheet – all remaining assumptions.")
         _render_scenario_selector()
-        st.caption(f"Values shown for {selected_scenario} Case.")
-        render_advanced_assumptions(input_model)
+        st.caption(f"Other Assumptions — {selected_scenario} Case")
+        st.write("Master input sheet – all remaining assumptions.")
+        st.toggle(
+            "Auto-apply scenario values",
+            value=st.session_state.get("assumptions.auto_sync", True),
+            key="assumptions.auto_sync",
+        )
+        if st.session_state.get("assumptions.auto_sync", True):
+            defaults = st.session_state.setdefault(
+                "assumptions_defaults", _seed_assumptions_state()
+            )
+            scenario_key = selected_scenario
+            for section in ["revenue_model"]:
+                section_defaults = defaults.get(section, {})
+                section_current = st.session_state["assumptions"].get(section, {})
+                for key, value in section_defaults.items():
+                    if isinstance(value, dict) and scenario_key in value:
+                        section_current[key][scenario_key] = value[scenario_key]
+                st.session_state["assumptions"][section] = section_current
+        render_advanced_assumptions(input_model, show_header=False)
         return
 
     if page == "Overview":
