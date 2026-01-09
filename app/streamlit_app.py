@@ -469,9 +469,7 @@ def _default_cashflow_assumptions():
 
 
 def _default_balance_sheet_assumptions(input_model):
-    opening_equity = input_model.transaction_and_financing[
-        "equity_contribution_eur"
-    ].value
+    opening_equity = _default_cashflow_assumptions()["opening_cash_balance_eur"]
     minimum_cash = input_model.capex_and_working_capital[
         "minimum_cash_balance_eur"
     ].value
