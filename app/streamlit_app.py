@@ -1,6 +1,5 @@
 import io
 import json
-import urllib.parse
 import subprocess
 from datetime import datetime
 import zipfile
@@ -2902,22 +2901,32 @@ def run_app():
             color: #6b7280;
             margin: 0.8rem 0 0.35rem;
           }
-          .nav-item {
-            display: block;
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0.2rem 0 0.2rem 0.25rem;
+            border-radius: 4px;
+            margin: 0;
             color: #111827;
-            text-decoration: none;
-            padding: 0.15rem 0 0.15rem 0.25rem;
             white-space: nowrap;
           }
-          .nav-item:hover {
-            color: #111827;
-            text-decoration: none;
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div {
+            margin-left: 0 !important;
           }
-          .nav-item.active {
-            font-weight: 600;
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {
+            background: transparent;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] input,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] svg,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {
+            display: none;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] input:checked + div {
             background: #eef2f7;
             border-left: 3px solid #3b82f6;
             padding-left: 0.35rem;
+            font-weight: 600;
           }
         </style>
         """
@@ -2935,43 +2944,45 @@ def run_app():
             "Valuation & Purchase Price",
             "Model Settings",
         ]
-        query_page = st.query_params.get("page")
-        if isinstance(query_page, list):
-            query_page = query_page[0] if query_page else None
-        if query_page in nav_options:
-            st.session_state["page"] = query_page
-
-        page = st.session_state["page"]
-
-        def _nav_link(label):
-            target = urllib.parse.quote(label, safe="")
-            active_class = "active" if label == page else ""
-            st.markdown(
-                f'<a class="nav-item {active_class}" href="?page={target}">{label}</a>',
-                unsafe_allow_html=True,
-            )
 
         st.markdown("**MBO Financial Model**")
+        st.markdown("OPERATING MODEL")
+        page = st.sidebar.radio(
+            "",
+            nav_options[:3],
+            key="nav_operating",
+            label_visibility="collapsed",
+        )
+        st.markdown("PLANNING")
+        page = st.sidebar.radio(
+            "",
+            nav_options[3:6],
+            key="nav_planning",
+            label_visibility="collapsed",
+        )
+        st.markdown("FINANCING")
+        page = st.sidebar.radio(
+            "",
+            nav_options[6:8],
+            key="nav_financing",
+            label_visibility="collapsed",
+        )
+        st.markdown("VALUATION")
+        page = st.sidebar.radio(
+            "",
+            nav_options[8:9],
+            key="nav_valuation",
+            label_visibility="collapsed",
+        )
+        st.markdown("SETTINGS")
+        page = st.sidebar.radio(
+            "",
+            nav_options[9:],
+            key="nav_settings",
+            label_visibility="collapsed",
+        )
 
-        st.markdown('<div class="nav-section">OPERATING MODEL</div>', unsafe_allow_html=True)
-        _nav_link("Operating Model (P&L)")
-        _nav_link("Cashflow & Liquidity")
-        _nav_link("Balance Sheet")
-
-        st.markdown('<div class="nav-section">PLANNING</div>', unsafe_allow_html=True)
-        _nav_link("Revenue Model")
-        _nav_link("Cost Model")
-        _nav_link("Other Assumptions")
-
-        st.markdown('<div class="nav-section">FINANCING</div>', unsafe_allow_html=True)
-        _nav_link("Financing & Debt")
-        _nav_link("Equity Case")
-
-        st.markdown('<div class="nav-section">VALUATION</div>', unsafe_allow_html=True)
-        _nav_link("Valuation & Purchase Price")
-
-        st.markdown('<div class="nav-section">SETTINGS</div>', unsafe_allow_html=True)
-        _nav_link("Model Settings")
+        st.session_state["page"] = page
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
