@@ -10,35 +10,97 @@ def main():
     with st.sidebar:
         st.markdown("MBO Financial Model")
 
+        operating_options = [
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+        ]
+        planning_options = [
+            "Revenue Model",
+            "Cost Model",
+            "Other Assumptions",
+        ]
+        financing_options = [
+            "Financing & Debt",
+            "Equity Case",
+        ]
+        valuation_options = ["Valuation & Purchase Price"]
+        settings_options = ["Model Settings"]
+
         st.markdown("### OPERATING MODEL")
-        if st.sidebar.button("Operating Model (P&L)", use_container_width=True):
-            st.session_state["page_key"] = "Operating Model (P&L)"
-        if st.sidebar.button("Cashflow & Liquidity", use_container_width=True):
-            st.session_state["page_key"] = "Cashflow & Liquidity"
-        if st.sidebar.button("Balance Sheet", use_container_width=True):
-            st.session_state["page_key"] = "Balance Sheet"
+        operating_index = (
+            operating_options.index(st.session_state["page_key"])
+            if st.session_state["page_key"] in operating_options
+            else 0
+        )
+        selected_operating = st.sidebar.selectbox(
+            "",
+            operating_options,
+            index=operating_index,
+            key="nav_operating",
+        )
+        if selected_operating in operating_options:
+            st.session_state["page_key"] = selected_operating
 
         st.markdown("### PLANNING")
-        if st.sidebar.button("Revenue Model", use_container_width=True):
-            st.session_state["page_key"] = "Revenue Model"
-        if st.sidebar.button("Cost Model", use_container_width=True):
-            st.session_state["page_key"] = "Cost Model"
-        if st.sidebar.button("Other Assumptions", use_container_width=True):
-            st.session_state["page_key"] = "Other Assumptions"
+        planning_index = (
+            planning_options.index(st.session_state["page_key"])
+            if st.session_state["page_key"] in planning_options
+            else 0
+        )
+        selected_planning = st.sidebar.selectbox(
+            "",
+            planning_options,
+            index=planning_index,
+            key="nav_planning",
+        )
+        if selected_planning in planning_options:
+            st.session_state["page_key"] = selected_planning
 
         st.markdown("### FINANCING")
-        if st.sidebar.button("Financing & Debt", use_container_width=True):
-            st.session_state["page_key"] = "Financing & Debt"
-        if st.sidebar.button("Equity Case", use_container_width=True):
-            st.session_state["page_key"] = "Equity Case"
+        financing_index = (
+            financing_options.index(st.session_state["page_key"])
+            if st.session_state["page_key"] in financing_options
+            else 0
+        )
+        selected_financing = st.sidebar.selectbox(
+            "",
+            financing_options,
+            index=financing_index,
+            key="nav_financing",
+        )
+        if selected_financing in financing_options:
+            st.session_state["page_key"] = selected_financing
 
         st.markdown("### VALUATION")
-        if st.sidebar.button("Valuation & Purchase Price", use_container_width=True):
-            st.session_state["page_key"] = "Valuation & Purchase Price"
+        valuation_index = (
+            valuation_options.index(st.session_state["page_key"])
+            if st.session_state["page_key"] in valuation_options
+            else 0
+        )
+        selected_valuation = st.sidebar.selectbox(
+            "",
+            valuation_options,
+            index=valuation_index,
+            key="nav_valuation",
+        )
+        if selected_valuation in valuation_options:
+            st.session_state["page_key"] = selected_valuation
 
         st.markdown("### SETTINGS")
-        if st.sidebar.button("Model Settings", use_container_width=True):
-            st.session_state["page_key"] = "Model Settings"
+        settings_index = (
+            settings_options.index(st.session_state["page_key"])
+            if st.session_state["page_key"] in settings_options
+            else 0
+        )
+        selected_settings = st.sidebar.selectbox(
+            "",
+            settings_options,
+            index=settings_index,
+            key="nav_settings",
+        )
+        if selected_settings in settings_options:
+            st.session_state["page_key"] = selected_settings
 
     run_app(st.session_state["page_key"])
 
