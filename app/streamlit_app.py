@@ -509,83 +509,163 @@ def _apply_assumptions_state():
 
     cost_state = state.get("cost_model", {})
     if cost_state:
-        for year_index in range(5):
-            st.session_state[
-                f"cost_model.consultant_fte_year_{year_index}"
-            ] = _non_negative(
-                cost_state["consultant_fte"][scenario_col][year_index]
-            )
-            st.session_state[
-                f"cost_model.consultant_base_cost_eur_year_{year_index}"
-            ] = _non_negative(
-                cost_state["consultant_costs"][scenario_col][year_index]
-            )
-            st.session_state[
-                f"cost_model.backoffice_fte_year_{year_index}"
-            ] = _non_negative(
-                cost_state["backoffice_fte"][scenario_col][year_index]
-            )
-            st.session_state[
-                f"cost_model.backoffice_base_cost_eur_year_{year_index}"
-            ] = _non_negative(
-                cost_state["backoffice_costs"][scenario_col][year_index]
-            )
-            st.session_state[
-                f"cost_model.fixed_overhead_advisory_year_{year_index}"
-            ] = _non_negative(
-                cost_state["fixed_overhead"][scenario_col][year_index][
-                    "Advisory"
-                ]
-            )
-            st.session_state[
-                f"cost_model.fixed_overhead_legal_year_{year_index}"
-            ] = _non_negative(
-                cost_state["fixed_overhead"][scenario_col][year_index][
-                    "Legal"
-                ]
-            )
-            st.session_state[
-                f"cost_model.fixed_overhead_it_year_{year_index}"
-            ] = _non_negative(
-                cost_state["fixed_overhead"][scenario_col][year_index][
-                    "IT & Software"
-                ]
-            )
-            st.session_state[
-                f"cost_model.fixed_overhead_office_year_{year_index}"
-            ] = _non_negative(
-                cost_state["fixed_overhead"][scenario_col][year_index][
-                    "Office Rent"
-                ]
-            )
-            st.session_state[
-                f"cost_model.fixed_overhead_services_year_{year_index}"
-            ] = _non_negative(
-                cost_state["fixed_overhead"][scenario_col][year_index][
-                    "Services"
-                ]
-            )
-            st.session_state[
-                f"cost_model.variable_training_pct_year_{year_index}"
-            ] = _clamp_pct(
-                cost_state["variable_costs"][scenario_col][year_index][
-                    "Training"
-                ]
-            )
-            st.session_state[
-                f"cost_model.variable_travel_pct_year_{year_index}"
-            ] = _clamp_pct(
-                cost_state["variable_costs"][scenario_col][year_index][
-                    "Travel"
-                ]
-            )
-            st.session_state[
-                f"cost_model.variable_communication_pct_year_{year_index}"
-            ] = _clamp_pct(
-                cost_state["variable_costs"][scenario_col][year_index][
-                    "Communication"
-                ]
-            )
+        if "consultant_fte" in cost_state:
+            for year_index in range(5):
+                st.session_state[
+                    f"cost_model.consultant_fte_year_{year_index}"
+                ] = _non_negative(
+                    cost_state["consultant_fte"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"cost_model.consultant_base_cost_eur_year_{year_index}"
+                ] = _non_negative(
+                    cost_state["consultant_costs"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"cost_model.backoffice_fte_year_{year_index}"
+                ] = _non_negative(
+                    cost_state["backoffice_fte"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"cost_model.backoffice_base_cost_eur_year_{year_index}"
+                ] = _non_negative(
+                    cost_state["backoffice_costs"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"cost_model.fixed_overhead_advisory_year_{year_index}"
+                ] = _non_negative(
+                    cost_state["fixed_overhead"][scenario_col][year_index][
+                        "Advisory"
+                    ]
+                )
+                st.session_state[
+                    f"cost_model.fixed_overhead_legal_year_{year_index}"
+                ] = _non_negative(
+                    cost_state["fixed_overhead"][scenario_col][year_index][
+                        "Legal"
+                    ]
+                )
+                st.session_state[
+                    f"cost_model.fixed_overhead_it_year_{year_index}"
+                ] = _non_negative(
+                    cost_state["fixed_overhead"][scenario_col][year_index][
+                        "IT & Software"
+                    ]
+                )
+                st.session_state[
+                    f"cost_model.fixed_overhead_office_year_{year_index}"
+                ] = _non_negative(
+                    cost_state["fixed_overhead"][scenario_col][year_index][
+                        "Office Rent"
+                    ]
+                )
+                st.session_state[
+                    f"cost_model.fixed_overhead_services_year_{year_index}"
+                ] = _non_negative(
+                    cost_state["fixed_overhead"][scenario_col][year_index][
+                        "Services"
+                    ]
+                )
+                st.session_state[
+                    f"cost_model.variable_training_pct_year_{year_index}"
+                ] = _clamp_pct(
+                    cost_state["variable_costs"][scenario_col][year_index][
+                        "Training"
+                    ]
+                )
+                st.session_state[
+                    f"cost_model.variable_travel_pct_year_{year_index}"
+                ] = _clamp_pct(
+                    cost_state["variable_costs"][scenario_col][year_index][
+                        "Travel"
+                    ]
+                )
+                st.session_state[
+                    f"cost_model.variable_communication_pct_year_{year_index}"
+                ] = _clamp_pct(
+                    cost_state["variable_costs"][scenario_col][year_index][
+                        "Communication"
+                    ]
+                )
+        elif "personnel" in cost_state:
+            if "inflation" in cost_state:
+                st.session_state["cost_model.apply_inflation"] = bool(
+                    cost_state["inflation"].get("apply", False)
+                )
+                st.session_state["cost_model.inflation_rate_pct"] = _clamp_pct(
+                    cost_state["inflation"].get("rate_pct", 0.0)
+                )
+            for row in cost_state.get("personnel", []):
+                year_index = int(row["Year"].split()[-1])
+                st.session_state[
+                    f"cost_model.consultant_fte_year_{year_index}"
+                ] = _non_negative(row["Consultant FTE"])
+                st.session_state[
+                    f"cost_model.consultant_base_cost_eur_year_{year_index}"
+                ] = _non_negative(row["Consultant Loaded Cost (EUR)"])
+                st.session_state[
+                    f"cost_model.backoffice_fte_year_{year_index}"
+                ] = _non_negative(row["Backoffice FTE"])
+                st.session_state[
+                    f"cost_model.backoffice_base_cost_eur_year_{year_index}"
+                ] = _non_negative(row["Backoffice Loaded Cost (EUR)"])
+                st.session_state[
+                    f"cost_model.management_cost_eur_year_{year_index}"
+                ] = _non_negative(row["Management Cost (EUR)"])
+
+            for row in cost_state.get("fixed_overhead", []):
+                year_index = int(row["Year"].split()[-1])
+                st.session_state[
+                    f"cost_model.fixed_overhead_advisory_year_{year_index}"
+                ] = _non_negative(row["Advisory"])
+                st.session_state[
+                    f"cost_model.fixed_overhead_legal_year_{year_index}"
+                ] = _non_negative(row["Legal"])
+                st.session_state[
+                    f"cost_model.fixed_overhead_it_year_{year_index}"
+                ] = _non_negative(row["IT & Software"])
+                st.session_state[
+                    f"cost_model.fixed_overhead_office_year_{year_index}"
+                ] = _non_negative(row["Office Rent"])
+                st.session_state[
+                    f"cost_model.fixed_overhead_services_year_{year_index}"
+                ] = _non_negative(row["Services"])
+                st.session_state[
+                    f"cost_model.fixed_overhead_other_year_{year_index}"
+                ] = _non_negative(row["Other Services"])
+
+            for row in cost_state.get("variable_costs", []):
+                year_index = int(row["Year"].split()[-1])
+                training_value = _non_negative(row["Training Value"])
+                travel_value = _non_negative(row["Travel Value"])
+                communication_value = _non_negative(row["Communication Value"])
+
+                st.session_state[
+                    f"cost_model.variable_training_pct_year_{year_index}"
+                ] = training_value if row["Training Type"] == "%" else 0.0
+                st.session_state[
+                    f"cost_model.variable_training_eur_year_{year_index}"
+                ] = training_value if row["Training Type"] == "EUR" else 0.0
+                st.session_state[
+                    f"cost_model.variable_travel_pct_year_{year_index}"
+                ] = travel_value if row["Travel Type"] == "%" else 0.0
+                st.session_state[
+                    f"cost_model.variable_travel_eur_year_{year_index}"
+                ] = travel_value if row["Travel Type"] == "EUR" else 0.0
+                st.session_state[
+                    f"cost_model.variable_communication_pct_year_{year_index}"
+                ] = (
+                    communication_value
+                    if row["Communication Type"] == "%"
+                    else 0.0
+                )
+                st.session_state[
+                    f"cost_model.variable_communication_eur_year_{year_index}"
+                ] = (
+                    communication_value
+                    if row["Communication Type"] == "EUR"
+                    else 0.0
+                )
 
     for row in state.get("financing", []):
         param = row["Parameter"]
