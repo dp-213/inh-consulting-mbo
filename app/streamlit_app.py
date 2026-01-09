@@ -438,6 +438,260 @@ def _non_negative(value):
     return max(0.0, float(value))
 
 
+def _apply_assumptions_state():
+    state = st.session_state["assumptions"]
+    active_scenario = st.session_state.get("assumptions.scenario", "Base")
+    scenario_col = active_scenario
+
+    revenue_state = state.get("revenue_model", {})
+    if revenue_state:
+        st.session_state["revenue_model.reference_revenue_eur"] = _non_negative(
+            revenue_state["reference_revenue_eur"].get(scenario_col, 0.0)
+        )
+        for year_index in range(5):
+            st.session_state[
+                f"revenue_model.guarantee_pct_year_{year_index}"
+            ] = _clamp_pct(
+                revenue_state["guarantee_pct_by_year"][scenario_col][
+                    year_index
+                ]
+            )
+            st.session_state[
+                f"revenue_model.workdays_year_{year_index}"
+            ] = _non_negative(
+                revenue_state["workdays_per_year"][scenario_col][year_index]
+            )
+            st.session_state[
+                f"revenue_model.utilization_rate_year_{year_index}"
+            ] = _clamp_pct(
+                revenue_state["utilization_rate"][scenario_col][year_index]
+            )
+            st.session_state[
+                f"revenue_model.group_day_rate_eur_year_{year_index}"
+            ] = _non_negative(
+                revenue_state["group_day_rate_eur"][scenario_col][year_index]
+            )
+            st.session_state[
+                f"revenue_model.external_day_rate_eur_year_{year_index}"
+            ] = _non_negative(
+                revenue_state["external_day_rate_eur"][scenario_col][year_index]
+            )
+            st.session_state[
+                f"revenue_model.day_rate_growth_pct_year_{year_index}"
+            ] = _clamp_pct(
+                revenue_state["day_rate_growth_pct"][scenario_col][
+                    year_index
+                ]
+            )
+            st.session_state[
+                f"revenue_model.revenue_growth_pct_year_{year_index}"
+            ] = _clamp_pct(
+                revenue_state["revenue_growth_pct"][scenario_col][
+                    year_index
+                ]
+            )
+            st.session_state[
+                f"revenue_model.group_capacity_share_pct_year_{year_index}"
+            ] = _clamp_pct(
+                revenue_state["group_capacity_share_pct"][scenario_col][
+                    year_index
+                ]
+            )
+            st.session_state[
+                f"revenue_model.external_capacity_share_pct_year_{year_index}"
+            ] = _clamp_pct(
+                revenue_state["external_capacity_share_pct"][scenario_col][
+                    year_index
+                ]
+            )
+
+    cost_state = state.get("cost_model", {})
+    if cost_state:
+        for year_index in range(5):
+            st.session_state[
+                f"cost_model.consultant_fte_year_{year_index}"
+            ] = _non_negative(
+                cost_state["consultant_fte"][scenario_col][year_index]
+            )
+            st.session_state[
+                f"cost_model.consultant_base_cost_eur_year_{year_index}"
+            ] = _non_negative(
+                cost_state["consultant_costs"][scenario_col][year_index]
+            )
+            st.session_state[
+                f"cost_model.backoffice_fte_year_{year_index}"
+            ] = _non_negative(
+                cost_state["backoffice_fte"][scenario_col][year_index]
+            )
+            st.session_state[
+                f"cost_model.backoffice_base_cost_eur_year_{year_index}"
+            ] = _non_negative(
+                cost_state["backoffice_costs"][scenario_col][year_index]
+            )
+            st.session_state[
+                f"cost_model.fixed_overhead_advisory_year_{year_index}"
+            ] = _non_negative(
+                cost_state["fixed_overhead"][scenario_col][year_index][
+                    "Advisory"
+                ]
+            )
+            st.session_state[
+                f"cost_model.fixed_overhead_legal_year_{year_index}"
+            ] = _non_negative(
+                cost_state["fixed_overhead"][scenario_col][year_index][
+                    "Legal"
+                ]
+            )
+            st.session_state[
+                f"cost_model.fixed_overhead_it_year_{year_index}"
+            ] = _non_negative(
+                cost_state["fixed_overhead"][scenario_col][year_index][
+                    "IT & Software"
+                ]
+            )
+            st.session_state[
+                f"cost_model.fixed_overhead_office_year_{year_index}"
+            ] = _non_negative(
+                cost_state["fixed_overhead"][scenario_col][year_index][
+                    "Office Rent"
+                ]
+            )
+            st.session_state[
+                f"cost_model.fixed_overhead_services_year_{year_index}"
+            ] = _non_negative(
+                cost_state["fixed_overhead"][scenario_col][year_index][
+                    "Services"
+                ]
+            )
+            st.session_state[
+                f"cost_model.variable_training_pct_year_{year_index}"
+            ] = _clamp_pct(
+                cost_state["variable_costs"][scenario_col][year_index][
+                    "Training"
+                ]
+            )
+            st.session_state[
+                f"cost_model.variable_travel_pct_year_{year_index}"
+            ] = _clamp_pct(
+                cost_state["variable_costs"][scenario_col][year_index][
+                    "Travel"
+                ]
+            )
+            st.session_state[
+                f"cost_model.variable_communication_pct_year_{year_index}"
+            ] = _clamp_pct(
+                cost_state["variable_costs"][scenario_col][year_index][
+                    "Communication"
+                ]
+            )
+
+    for row in state.get("financing", []):
+        param = row["Parameter"]
+        if param == "Senior Debt Amount":
+            st.session_state[
+                "transaction_and_financing.senior_term_loan_start_eur"
+            ] = _non_negative(row["Value"])
+        elif param == "Interest Rate":
+            st.session_state[
+                "transaction_and_financing.senior_interest_rate_pct"
+            ] = _clamp_pct(row["Value"])
+        elif param == "Amortisation Years":
+            st.session_state["financing.amortization_period_years"] = int(
+                max(1, row["Value"])
+            )
+        elif param == "Transaction Fees (%)":
+            st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(
+                row["Value"]
+            )
+
+    for row in state.get("equity", []):
+        param = row["Parameter"]
+        if param == "Sponsor Equity Contribution":
+            st.session_state["equity.sponsor_equity_eur"] = _non_negative(
+                row["Value"]
+            )
+        elif param == "Investor Equity Contribution":
+            st.session_state["equity.investor_equity_eur"] = _non_negative(
+                row["Value"]
+            )
+        elif param == "Investor Exit Year":
+            try:
+                exit_year = int(float(row["Value"]))
+            except (TypeError, ValueError):
+                exit_year = _default_equity_assumptions(
+                    create_demo_input_model()
+                )["exit_year"]
+            st.session_state["equity.exit_year"] = int(
+                max(3, min(7, exit_year))
+            )
+        elif param == "Exit Multiple (x EBITDA)":
+            st.session_state["equity.exit_multiple"] = _non_negative(row["Value"])
+
+    for row in state.get("cashflow", []):
+        param = row["Parameter"]
+        if param == "Tax Cash Rate":
+            st.session_state["cashflow.tax_cash_rate_pct"] = _clamp_pct(
+                row["Value"]
+            )
+        elif param == "Tax Payment Lag":
+            st.session_state["cashflow.tax_payment_lag_years"] = int(
+                max(0, min(1, row["Value"]))
+            )
+        elif param == "Capex (% of Revenue)":
+            st.session_state["cashflow.capex_pct_revenue"] = _clamp_pct(
+                row["Value"]
+            )
+        elif param == "Working Capital (% of Revenue)":
+            st.session_state["cashflow.working_capital_pct_revenue"] = _clamp_pct(
+                row["Value"]
+            )
+        elif param == "Opening Cash Balance":
+            st.session_state["cashflow.opening_cash_balance_eur"] = _non_negative(
+                row["Value"]
+            )
+
+    for row in state.get("balance_sheet", []):
+        param = row["Parameter"]
+        if param == "Opening Equity":
+            st.session_state["balance_sheet.opening_equity_eur"] = _non_negative(
+                row["Value"]
+            )
+        elif param == "Depreciation Rate":
+            st.session_state["balance_sheet.depreciation_rate_pct"] = _clamp_pct(
+                row["Value"]
+            )
+        elif param == "Minimum Cash Balance":
+            st.session_state["balance_sheet.minimum_cash_balance_eur"] = _non_negative(
+                row["Value"]
+            )
+
+    for row in state.get("valuation", []):
+        param = row["Parameter"]
+        if param == "Seller EBIT Multiple":
+            st.session_state["valuation.seller_ebit_multiple"] = _non_negative(
+                row["Value"]
+            )
+        elif param == "Reference Year":
+            st.session_state["valuation.reference_year"] = int(
+                max(0, row["Value"])
+            )
+        elif param == "Discount Rate (WACC)":
+            st.session_state["valuation.buyer_discount_rate"] = _clamp_pct(
+                row["Value"]
+            )
+        elif param == "Valuation Start Year":
+            st.session_state["valuation.valuation_start_year"] = int(
+                max(0, row["Value"])
+            )
+        elif param == "Debt at Close":
+            st.session_state["valuation.debt_at_close_eur"] = _non_negative(
+                row["Value"]
+            )
+        elif param == "Transaction Costs (%)":
+            st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(
+                row["Value"]
+            )
+
 def _style_totals(df, columns_to_bold):
     def style_row(_):
         return [
