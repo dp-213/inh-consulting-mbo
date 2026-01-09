@@ -2896,22 +2896,22 @@ def run_app():
         st.markdown(editor_css, unsafe_allow_html=True)
 
         st.markdown("MBO Financial Model")
+        st.markdown("OPERATING MODEL")
+        st.markdown("PLANNING")
+        st.markdown("FINANCING")
+        st.markdown("VALUATION")
+        st.markdown("SETTINGS")
 
         nav_options = [
-            "— Operating Model —",
             "Operating Model (P&L)",
             "Cashflow & Liquidity",
             "Balance Sheet",
-            "— Planning —",
             "Revenue Model",
             "Cost Model",
             "Other Assumptions",
-            "— Financing —",
             "Financing & Debt",
             "Equity Case",
-            "— Valuation —",
             "Valuation & Purchase Price",
-            "— Settings —",
             "Model Settings",
         ]
         current_page = st.session_state["page"]
@@ -2924,8 +2924,6 @@ def run_app():
             index=nav_options.index(current_page),
             key="page_select",
         )
-        if selected_page.startswith("—"):
-            selected_page = current_page
         st.session_state["page"] = selected_page
         page = st.session_state["page"]
         assumptions_state = st.session_state["assumptions"]
