@@ -2918,55 +2918,6 @@ def run_app():
     # Navigation for question-driven layout.
     st.session_state.setdefault("page", "Operating Model (P&L)")
     with st.sidebar:
-        nav_css = """
-        <style>
-          div[data-testid="stSidebar"],
-          div[data-testid="stSidebarContent"] {
-            background: #f7f8fa;
-          }
-          div[data-testid="stSidebar"] > div {
-            padding: 1rem 0.85rem;
-          }
-          div[data-testid="stSidebar"] {
-            min-width: 280px;
-            max-width: 280px;
-          }
-          .nav-section {
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin: 0.85rem 0 0.35rem;
-          }
-          div[data-testid="stRadio"] label {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            padding: 0.35rem 0.6rem 0.35rem 0.8rem;
-            border-radius: 4px;
-            margin-bottom: 0.15rem;
-            color: #374151;
-          }
-          div[data-testid="stRadio"] label > div {
-            margin-left: 0 !important;
-          }
-          div[data-testid="stRadio"] label:hover {
-            background: #eef2f7;
-          }
-          div[data-testid="stRadio"] input,
-          div[data-testid="stRadio"] svg,
-          div[data-testid="stRadio"] label > div:first-child {
-            display: none;
-          }
-          div[data-testid="stRadio"] input:checked + div {
-            background: #e9eef7;
-            border-left: 3px solid #3b82f6;
-            color: #111827;
-            font-weight: 600;
-          }
-        </style>
-        """
-        st.markdown(nav_css, unsafe_allow_html=True)
         editor_css = """
         <style>
           .rdg-cell[aria-readonly="true"] {
