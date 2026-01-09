@@ -318,6 +318,14 @@ def render_advanced_assumptions(input_model, show_header=True):
             {"Block": label, "ms": round(elapsed_ms, 2)}
         )
 
+    def _record_timing(label, start_time):
+        if not debug_timings:
+            return
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        st.session_state["debug.timings"].append(
+            {"Block": label, "ms": round(elapsed_ms, 2)}
+        )
+
     def _local_clamp_pct(value):
         if value is None or pd.isna(value):
             return 0.0
