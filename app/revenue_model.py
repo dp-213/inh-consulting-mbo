@@ -494,15 +494,66 @@ def render_revenue_model_assumptions(input_model):
             for row_key in bridge_rows
         ]
     bridge_df = pd.DataFrame(bridge_table)
-    st.data_editor(
-        bridge_df,
+    display_rows = [
+        "Capacity Revenue",
+        "Modeled Group Revenue",
+        "Modeled External Revenue",
+        "Modeled Total (Group + External)",
+        "Guaranteed Floor",
+        "Guaranteed Group Revenue",
+        "FINAL REVENUE",
+        "Guaranteed %",
+    ]
+    display_table = []
+    for row_label in display_rows:
+        if row_label == "Modeled Total (Group + External)":
+            values = [
+                bridge_rows["Modeled Group Revenue"][idx]
+                + bridge_rows["Modeled External Revenue"][idx]
+                for idx in range(5)
+            ]
+            unit = "EUR"
+        elif row_label == "FINAL REVENUE":
+            values = bridge_rows["Final Revenue"]
+            unit = "EUR"
+        else:
+            key = (
+                "Final Revenue"
+                if row_label == "FINAL REVENUE"
+                else row_label
+            )
+            values = bridge_rows[key]
+            unit = "%" if row_label == "Guaranteed %" else "EUR"
+        display_table.append(
+            {
+                "Parameter": row_label,
+                "Unit": unit,
+                **{
+                    col: _format_number_display(
+                        values[idx], 1 if unit == "%" else 0
+                    )
+                    for idx, col in enumerate(year_columns)
+                },
+            }
+        )
+
+    bridge_df = pd.DataFrame(display_table)
+    bold_rows = {
+        "Modeled Total (Group + External)",
+        "Guaranteed Group Revenue",
+        "FINAL REVENUE",
+    }
+
+    def _bridge_style(row):
+        if row["Parameter"] in bold_rows:
+            base = "font-weight: 700;"
+            if row["Parameter"] == "FINAL REVENUE":
+                return ["background-color: #f3f4f6; " + base] * len(row)
+            return [base] * len(row)
+        return [""] * len(row)
+
+    st.dataframe(
+        bridge_df.style.apply(_bridge_style, axis=1),
         hide_index=True,
-        key="revenue_model.bridge",
-        disabled=True,
-        column_config={
-            "Parameter": st.column_config.TextColumn(disabled=True),
-            "Unit": st.column_config.TextColumn(disabled=True),
-            **{col: st.column_config.TextColumn() for col in year_columns},
-        },
         use_container_width=True,
     )

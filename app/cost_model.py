@@ -118,6 +118,45 @@ def render_cost_model_assumptions(input_model):
     cost_state = assumptions_state["cost_model"]
     year_columns = [f"Year {i}" for i in range(5)]
 
+    explain_cost = st.toggle("Explain cost logic & assumptions")
+    if explain_cost:
+        st.markdown(
+            """
+            <div style="background:#f3f4f6;padding:12px 14px;border-radius:6px;font-size:0.9rem;">
+              <strong>A. Consultant costs</strong>
+              <ul>
+                <li>Consultant FTEs are planned in the Cost Model.</li>
+                <li>Average base cost grows with inflation.</li>
+                <li>Loaded cost includes employer-side burdens.</li>
+                <li>No seniority mix is modeled (intentional simplification).</li>
+              </ul>
+              <strong>B. Backoffice costs</strong>
+              <ul>
+                <li>Planned independently of revenue.</li>
+                <li>Fully fixed and inflation-driven.</li>
+              </ul>
+              <strong>C. Fixed overhead</strong>
+              <ul>
+                <li>Sticky cost base.</li>
+                <li>Inflated annually.</li>
+                <li>No assumed operating leverage.</li>
+              </ul>
+              <strong>D. Variable costs</strong>
+              <ul>
+                <li>Conservative modeling via % of revenue or absolute values.</li>
+                <li>Zero in the base case is intentional.</li>
+              </ul>
+              <strong>E. Explicit exclusions</strong>
+              <ul>
+                <li>No cost synergies.</li>
+                <li>No restructuring effects.</li>
+                <li>No bonus pools tied to upside.</li>
+              </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     st.markdown("### Inflation")
     inflation_df = pd.DataFrame(
         {
