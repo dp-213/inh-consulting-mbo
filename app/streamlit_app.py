@@ -3098,8 +3098,14 @@ def run_app(page_override=None):
         "Equity Case",
         "Valuation & Purchase Price",
     }
+    output_selector_pages = {
+        "Operating Model (P&L)",
+        "Cashflow & Liquidity",
+        "Balance Sheet",
+    }
     if page in output_pages:
-        _render_output_scenario_selector()
+        if page in output_selector_pages:
+            _render_output_scenario_selector()
         output_scenario = st.session_state["output_scenario"]
         model_results = run_model(
             st.session_state["assumptions"],
