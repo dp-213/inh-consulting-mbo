@@ -8,6 +8,85 @@ import streamlit as st
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Font, PatternFill
 
+st.set_page_config(layout="wide")
+
+st.session_state.setdefault("page_key", "Operating Model (P&L)")
+nav_options = [
+    "Operating Model (P&L)",
+    "Cashflow & Liquidity",
+    "Balance Sheet",
+    "Revenue Model",
+    "Cost Model",
+    "Other Assumptions",
+    "Financing & Debt",
+    "Equity Case",
+    "Valuation & Purchase Price",
+    "Model Settings",
+]
+nav_index = (
+    nav_options.index(st.session_state["page_key"])
+    if st.session_state["page_key"] in nav_options
+    else 0
+)
+
+with st.sidebar:
+    st.markdown(
+        """
+        <style>
+          [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
+            display: none;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label {
+            padding: 0.3rem 0.5rem;
+            border-radius: 6px;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+            background-color: #e5e7eb;
+            font-weight: 600;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(1)::before,
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(4)::before,
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(7)::before,
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(9)::before,
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(10)::before {
+            display: block;
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin: 0.9rem 0 0.35rem;
+            width: 100%;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(1)::before {
+            content: "OPERATING MODEL";
+            margin-top: 0;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(4)::before {
+            content: "PLANNING";
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(7)::before {
+            content: "FINANCING";
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(9)::before {
+            content: "VALUATION";
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(10)::before {
+            content: "SETTINGS";
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.title("MBO Financial Model")
+    selection = st.radio(
+        "Navigation",
+        nav_options,
+        index=nav_index,
+        key="main_navigation",
+        label_visibility="collapsed",
+    )
+    st.session_state["page_key"] = selection
+
 from data_model import InputModel, create_demo_input_model
 from calculations.pnl import calculate_pnl
 from calculations.cashflow import calculate_cashflow
@@ -5339,14 +5418,4 @@ def run_app(page_override=None):
             )
 
 
-if __name__ == "__main__":
-    import sys
-    from pathlib import Path
-
-    root_dir = Path(__file__).resolve().parent.parent
-    if str(root_dir) not in sys.path:
-        sys.path.insert(0, str(root_dir))
-
-    from main import main
-
-    main()
+run_app(st.session_state["page_key"])
