@@ -2210,15 +2210,6 @@ def run_app():
                 ]
                 for scenario in scenario_labels
             },
-            "consulting_fte": {
-                scenario: [
-                    base_model.operating_assumptions[
-                        "consulting_fte_start"
-                    ].value
-                    for _ in range(5)
-                ]
-                for scenario in scenario_labels
-            },
             "workdays_per_year": {
                 scenario: [
                     base_model.operating_assumptions[
@@ -2237,7 +2228,16 @@ def run_app():
                 ]
                 for scenario in scenario_labels
             },
-            "day_rate_eur": {
+            "group_day_rate_eur": {
+                scenario: [
+                    base_model.scenario_parameters["day_rate_eur"][
+                        scenario.lower()
+                    ].value
+                    for _ in range(5)
+                ]
+                for scenario in scenario_labels
+            },
+            "external_day_rate_eur": {
                 scenario: [
                     base_model.scenario_parameters["day_rate_eur"][
                         scenario.lower()
@@ -2257,6 +2257,14 @@ def run_app():
             },
             "revenue_growth_pct": {
                 scenario: [0.0 for _ in range(5)]
+                for scenario in scenario_labels
+            },
+            "group_capacity_share_pct": {
+                scenario: [0.8 for _ in range(5)]
+                for scenario in scenario_labels
+            },
+            "external_capacity_share_pct": {
+                scenario: [0.2 for _ in range(5)]
                 for scenario in scenario_labels
             },
         }
@@ -2415,11 +2423,6 @@ def run_app():
                     ]
                 )
                 st.session_state[
-                    f"revenue_model.consulting_fte_year_{year_index}"
-                ] = _non_negative(
-                    revenue_state["consulting_fte"][scenario_col][year_index]
-                )
-                st.session_state[
                     f"revenue_model.workdays_year_{year_index}"
                 ] = _non_negative(
                     revenue_state["workdays_per_year"][scenario_col][year_index]
@@ -2430,9 +2433,14 @@ def run_app():
                     revenue_state["utilization_rate"][scenario_col][year_index]
                 )
                 st.session_state[
-                    f"revenue_model.day_rate_eur_year_{year_index}"
+                    f"revenue_model.group_day_rate_eur_year_{year_index}"
                 ] = _non_negative(
-                    revenue_state["day_rate_eur"][scenario_col][year_index]
+                    revenue_state["group_day_rate_eur"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"revenue_model.external_day_rate_eur_year_{year_index}"
+                ] = _non_negative(
+                    revenue_state["external_day_rate_eur"][scenario_col][year_index]
                 )
                 st.session_state[
                     f"revenue_model.day_rate_growth_pct_year_{year_index}"
@@ -2443,6 +2451,20 @@ def run_app():
                     f"revenue_model.revenue_growth_pct_year_{year_index}"
                 ] = _clamp_pct(
                     revenue_state["revenue_growth_pct"][scenario_col][year_index]
+                )
+                st.session_state[
+                    f"revenue_model.group_capacity_share_pct_year_{year_index}"
+                ] = _clamp_pct(
+                    revenue_state["group_capacity_share_pct"][scenario_col][
+                        year_index
+                    ]
+                )
+                st.session_state[
+                    f"revenue_model.external_capacity_share_pct_year_{year_index}"
+                ] = _clamp_pct(
+                    revenue_state["external_capacity_share_pct"][scenario_col][
+                        year_index
+                    ]
                 )
 
         cost_state = state.get("cost_model", {})
@@ -3891,7 +3913,7 @@ def run_app():
                     "guaranteed_floor"
                 ]
                 revenue_metrics["Modeled Revenue"][year_label] = components[
-                    "growth_adjusted_revenue"
+                    "modeled_total_revenue"
                 ]
                 revenue_metrics["Final Revenue"][year_label] = components[
                     "final_total"
