@@ -97,28 +97,11 @@ with st.sidebar:
           [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(10)::before {
             content: "SETTINGS";
           }
-          .nav-section {
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin: 0.9rem 0 0.35rem;
-          }
         </style>
         """,
         unsafe_allow_html=True,
     )
     st.markdown("**MBO Financial Model**")
-    st.markdown(
-        """
-        <div class="nav-section">OPERATING MODEL</div>
-        <div class="nav-section">PLANNING</div>
-        <div class="nav-section">FINANCING</div>
-        <div class="nav-section">VALUATION</div>
-        <div class="nav-section">SETTINGS</div>
-        """,
-        unsafe_allow_html=True,
-    )
     selection = st.radio(
         "Navigation",
         nav_options,
