@@ -115,7 +115,7 @@ def _build_model_snapshot_payload(
     debt_schedule,
     investment_result,
 ):
-    scenario = st.session_state.get("active_output_scenario", "Base")
+    scenario = st.session_state.get("output_scenario", "Base")
     try:
         commit = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -3023,14 +3023,14 @@ def run_app(page_override=None):
 
     def _render_output_scenario_selector():
         st.radio(
-            label="",
+            "Scenario (View Only)",
             options=["Worst", "Base", "Best"],
             horizontal=True,
-            key="active_output_scenario",
+            key="output_scenario",
         )
 
     st.session_state.setdefault("assumptions.scenario", "Base")
-    st.session_state.setdefault("active_output_scenario", "Base")
+    st.session_state.setdefault("output_scenario", "Base")
     input_scenario = st.session_state["assumptions.scenario"]
     st.session_state["scenario_selection.selected_scenario"] = input_scenario
 
@@ -3099,10 +3099,8 @@ def run_app(page_override=None):
         "Valuation & Purchase Price",
     }
     if page in output_pages:
-        with st.sidebar:
-            st.markdown("### Output Scenario")
-            _render_output_scenario_selector()
-        output_scenario = st.session_state["active_output_scenario"]
+        _render_output_scenario_selector()
+        output_scenario = st.session_state["output_scenario"]
         model_results = run_model(
             st.session_state["assumptions"],
             scenario=output_scenario,
@@ -3244,7 +3242,6 @@ def run_app(page_override=None):
 
     if page == "Other Assumptions":
         st.title("Other Assumptions")
-        _render_input_scenario_selector()
         st.write("Master input sheet – all remaining assumptions.")
         # Other Assumptions are intentionally scenario-agnostic.
         render_advanced_assumptions(input_model, show_header=False)
@@ -4016,7 +4013,7 @@ def run_app(page_override=None):
 
     if page == "Operating Model (P&L)":
         st.title("Operating Model (P&L)")
-        selected_scenario = st.session_state["active_output_scenario"]
+        selected_scenario = st.session_state["output_scenario"]
         scenario_key = selected_scenario.lower()
         utilization_by_year = getattr(input_model, "utilization_by_year", None)
         if not isinstance(utilization_by_year, list) or len(utilization_by_year) < 5:
