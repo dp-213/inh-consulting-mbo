@@ -5341,4 +5341,5 @@ def run_app(page_override=None):
 
 
 if __name__ == "__main__":
-    run_app()
+    st.set_page_config(page_title="MBO Financial Model", layout="wide")
+    run_app("Operating Model (P&L)")
