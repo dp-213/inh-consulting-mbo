@@ -3348,96 +3348,317 @@ def run_app(page_override=None):
         return
 
     if page == "Overview":
-        st.title("Overview – Management Deal Assessment")
-        st.write(
-            "High-level assessment of attractiveness, affordability, and risk."
+        st.title("Deal Summary (IC View)")
+        st.caption(
+            "Conservative decision view based on current inputs and selected output scenario."
         )
+        scenario_label = st.session_state.get("output_scenario", "Base")
+        st.caption(f"Scenario being viewed: {scenario_label}")
+        st.divider()
 
-        revenue_values = [pnl_result[f"Year {i}"]["revenue"] for i in range(5)]
-        ebitda_values = [pnl_result[f"Year {i}"]["ebitda"] for i in range(5)]
-        cash_balances = [cashflow_result[i]["cash_balance"] for i in range(5)]
-        min_cash_balance = min(cash_balances)
-        steady_revenue = revenue_values[-1]
-        steady_ebitda = ebitda_values[-1]
-        steady_margin = steady_ebitda / steady_revenue if steady_revenue else 0
+        def _safe_div(numerator, denominator):
+            return numerator / denominator if denominator else 0.0
+
+        def _min_with_year(values, years):
+            if not values:
+                return 0.0, None
+            min_value = min(values)
+            min_index = values.index(min_value)
+            return min_value, years[min_index]
+
+        def _max_value(values):
+            return max(values) if values else 0.0
+
+        def _format_multiple(value):
+            if value is None:
+                return "—"
+            return f"{value:.2f}x"
+
+        def _status_from_thresholds(value, warn_at, fail_at, higher_is_better=True):
+            if value is None:
+                return "OK"
+            if higher_is_better:
+                if value < fail_at:
+                    return "FAIL"
+                if value < warn_at:
+                    return "WATCH"
+                return "OK"
+            if value > fail_at:
+                return "FAIL"
+            if value > warn_at:
+                return "WATCH"
+            return "OK"
+
+        year_indices = [row.get("year", 0) for row in cashflow_result]
+        year_indices = year_indices or [0]
+        year1_index = 1 if 1 in year_indices else year_indices[0]
+        last_year_index = max(year_indices)
+        cashflow_by_year = {row["year"]: row for row in cashflow_result}
+        debt_by_year = {row["year"]: row for row in debt_schedule}
+        balance_by_year = {row["year"]: row for row in balance_sheet}
+
+        pnl_year1 = pnl_result.get(f"Year {year1_index}", {})
+        pnl_last = pnl_result.get(f"Year {last_year_index}", {})
+        revenue_y1 = pnl_year1.get("revenue", 0.0)
+        ebitda_y1 = pnl_year1.get("ebitda", 0.0)
+        margin_y1 = _safe_div(ebitda_y1, revenue_y1)
+
+        cashflow_year1 = cashflow_by_year.get(year1_index, {})
+        fcf_y1 = cashflow_year1.get("free_cashflow")
+        net_income_y1 = pnl_year1.get("net_income", 0.0)
+
+        cash_balances = [
+            row.get("cash_balance", 0.0) for row in cashflow_result
+        ]
+        cash_years = [row.get("year", 0) for row in cashflow_result]
+        min_cash_balance, min_cash_year = _min_with_year(
+            cash_balances, cash_years
+        )
 
         purchase_price = input_model.transaction_and_financing[
             "purchase_price_eur"
         ].value
         equity_assumptions = input_model.equity_assumptions
-        sponsor_equity = equity_assumptions["sponsor_equity_eur"]
-        investor_equity = equity_assumptions["investor_equity_eur"]
+        sponsor_equity = equity_assumptions.get("sponsor_equity_eur", 0.0)
+        investor_equity = equity_assumptions.get("investor_equity_eur", 0.0)
         required_equity = sponsor_equity + investor_equity
-        debt_at_close = debt_schedule[0]["debt_drawdown"]
-        peak_debt = max(
-            row["opening_debt"] + row["debt_drawdown"] for row in debt_schedule
-        )
-        entry_multiple = purchase_price / steady_ebitda if steady_ebitda else 0
+        if required_equity == 0:
+            required_equity = input_model.transaction_and_financing[
+                "equity_contribution_eur"
+            ].value
 
-        if entry_multiple < 7:
-            economics_verdict = "✅ Attractive"
-        elif entry_multiple <= 9:
-            economics_verdict = "⚠️ Borderline"
+        debt_at_close = debt_schedule[0]["debt_drawdown"] if debt_schedule else 0.0
+        peak_debt = _max_value(
+            [
+                row.get("opening_debt", 0.0) + row.get("debt_drawdown", 0.0)
+                for row in debt_schedule
+            ]
+        )
+        entry_multiple = _safe_div(debt_at_close, ebitda_y1)
+        entry_label = "Debt/EBITDA (Entry)"
+        exit_year = equity_assumptions.get("exit_year")
+        exit_multiple = equity_assumptions.get("exit_multiple")
+
+        debt_year1 = debt_by_year.get(year1_index, {})
+        closing_debt_y1 = debt_year1.get("closing_debt", 0.0)
+        debt_to_ebitda_y1 = _safe_div(closing_debt_y1, ebitda_y1)
+
+        dscr_values = []
+        for year, cf_row in cashflow_by_year.items():
+            debt_row = debt_by_year.get(year, {})
+            debt_service = debt_row.get("interest_expense", 0.0) + debt_row.get(
+                "total_repayment", 0.0
+            )
+            if debt_service <= 0:
+                continue
+            cfads = (
+                cf_row.get("ebitda", 0.0)
+                - cf_row.get("taxes_paid", 0.0)
+                - cf_row.get("capex", 0.0)
+                - cf_row.get("working_capital_change", 0.0)
+            )
+            dscr_values.append(_safe_div(cfads, debt_service))
+        min_dscr = min(dscr_values) if dscr_values else None
+
+        st.markdown(
+            "### A. Deal Snapshot (What are we buying and how is it funded?)"
+        )
+        snapshot_cols = st.columns(6)
+        snapshot_cols[0].metric(
+            "Purchase Price", format_currency(purchase_price)
+        )
+        snapshot_cols[1].metric(
+            "Debt at Close", format_currency(debt_at_close)
+        )
+        snapshot_cols[2].metric(
+            "Equity at Close", format_currency(required_equity)
+        )
+        snapshot_cols[3].metric(entry_label, _format_multiple(entry_multiple))
+        snapshot_cols[4].metric(
+            "Exit Year",
+            f"Year {exit_year}" if exit_year is not None else "—",
+        )
+        snapshot_cols[5].metric(
+            "Exit Multiple",
+            _format_multiple(exit_multiple)
+            if exit_multiple is not None
+            else "—",
+        )
+        st.markdown("**Interpretation**")
+        st.markdown(
+            "- Debt at Close shows the initial borrowing that must be serviced from operating cash."
+        )
+        st.markdown(
+            "- Equity at Close is the cash contributed by management and investors before debt service begins."
+        )
+        st.markdown(
+            "- Debt/EBITDA (Entry) indicates leverage at entry; higher leverage reduces flexibility in an MBO."
+        )
+        st.divider()
+
+        st.markdown(
+            "### B. Operating Strength (Does the business generate cash reliably?)"
+        )
+        operating_cols = st.columns(4)
+        operating_cols[0].metric(
+            f"Revenue (Year {year1_index})", format_currency(revenue_y1)
+        )
+        operating_cols[1].metric(
+            f"EBITDA (Year {year1_index})", format_currency(ebitda_y1)
+        )
+        operating_cols[2].metric(
+            f"EBITDA Margin (Year {year1_index})", format_pct(margin_y1)
+        )
+        if fcf_y1 is not None:
+            operating_cols[3].metric(
+                f"FCF (Year {year1_index})", format_currency(fcf_y1)
+            )
         else:
-            economics_verdict = "❌ Not attractive"
+            operating_cols[3].metric(
+                f"Net Income (Year {year1_index})",
+                format_currency(net_income_y1),
+            )
+        st.info(
+            "What this tells us:\n"
+            "- EBITDA margin drives debt capacity and headroom in downside cases.\n"
+            "- Cash conversion matters more than accounting profit for lenders.\n"
+            "- This view uses modeled five-year cash generation only; no additional upside is assumed."
+        )
+        st.divider()
 
-        leverage_ratio = peak_debt / steady_ebitda if steady_ebitda else 0
-        if min_cash_balance > 0 and leverage_ratio < 4:
-            affordability_verdict = "✅ Affordable"
-        elif min_cash_balance >= 0:
-            affordability_verdict = "⚠️ Tight"
+        st.markdown(
+            "### C. Bankability & Liquidity (Can we carry the deal without running out of cash?)"
+        )
+        bank_cols = st.columns(5)
+        bank_cols[0].metric(
+            "Minimum Cash", format_currency(min_cash_balance)
+        )
+        bank_cols[1].metric(
+            "Year of Min Cash",
+            f"Year {min_cash_year}" if min_cash_year is not None else "—",
+        )
+        bank_cols[2].metric("Peak Debt", format_currency(peak_debt))
+        bank_cols[3].metric(
+            "Min DSCR", _format_multiple(min_dscr) if min_dscr is not None else "—"
+        )
+        bank_cols[4].metric(
+            f"Debt/EBITDA (Year {year1_index})",
+            _format_multiple(debt_to_ebitda_y1),
+        )
+
+        st.markdown("**Bank view interpretation**")
+        st.markdown(
+            "- Minimum cash shows the lowest liquidity point; persistent negatives indicate funding risk."
+        )
+        st.markdown(
+            "- Peak debt reflects the highest balance the business must carry through the plan."
+        )
+        if min_dscr is not None:
+            st.markdown(
+                "- DSCR measures cash available for debt service versus debt payments in each year."
+            )
+        st.markdown(
+            "- Conservative guidelines: Min cash > 0; Debt/EBITDA < 3.0x"
+            + ("; DSCR > 1.3x." if min_dscr is not None else ".")
+        )
+
+        st.markdown("**Stress signals**")
+        st.markdown(
+            f"- Minimum cash: {format_currency(min_cash_balance)} (guideline > 0)"
+        )
+        st.markdown(
+            f"- Peak debt: {format_currency(peak_debt)} (track deleveraging pace)"
+        )
+        st.markdown(
+            f"- Debt/EBITDA: {_format_multiple(debt_to_ebitda_y1)} (guideline < 3.0x)"
+        )
+        if min_dscr is not None:
+            st.markdown(
+                f"- Min DSCR: {_format_multiple(min_dscr)} (guideline > 1.3x)"
+            )
+
+        if min_cash_balance < 0:
+            st.error(
+                "Minimum cash is below zero, indicating a funding shortfall in the plan."
+            )
+        elif min_cash_balance < 500_000:
+            st.warning(
+                "Minimum cash remains positive but thin; liquidity headroom is limited."
+            )
         else:
-            affordability_verdict = "❌ Not financeable"
+            st.success(
+                "Minimum cash remains positive with a basic liquidity buffer."
+            )
 
-        st.markdown("### A. Deal Economics (Does it pay?)")
-        econ_cols = st.columns(5)
-        econ_cols[0].metric(
-            "Target Revenue", format_currency(steady_revenue)
-        )
-        econ_cols[1].metric("EBITDA", format_currency(steady_ebitda))
-        econ_cols[2].metric("EBITDA Margin", format_pct(steady_margin))
-        econ_cols[3].metric("Purchase Price", format_currency(purchase_price))
-        econ_cols[4].metric(
-            "Entry Multiple", f"{entry_multiple:.2f}x"
-        )
-        st.caption(f"Verdict: {economics_verdict}")
+        if debt_to_ebitda_y1 >= 3.0:
+            st.error(
+                "Debt/EBITDA exceeds 3.0x, indicating aggressive leverage at entry."
+            )
+        elif debt_to_ebitda_y1 >= 2.5:
+            st.warning(
+                "Debt/EBITDA is approaching 3.0x; leverage is tight for this plan."
+            )
+        else:
+            st.success(
+                "Debt/EBITDA is within a conservative leverage range."
+            )
 
-        st.markdown("### B. Affordability (Can we carry it?)")
-        afford_cols = st.columns(4)
-        afford_cols[0].metric(
-            "Required Equity", format_currency(required_equity)
-        )
-        afford_cols[1].metric("Debt at Close", format_currency(debt_at_close))
-        afford_cols[2].metric("Peak Debt", format_currency(peak_debt))
-        afford_cols[3].metric(
-            "Minimum Cash Balance", format_currency(min_cash_balance)
-        )
-        st.caption(
-            f"Verdict: {affordability_verdict} "
-            "(Rule of thumb: Min cash > 0, Peak debt / EBITDA < 4.0x)"
-        )
+        if min_dscr is not None:
+            if min_dscr < 1.3:
+                st.error(
+                    "Minimum DSCR is below 1.3x, indicating limited debt service headroom."
+                )
+            elif min_dscr < 1.5:
+                st.warning(
+                    "Minimum DSCR is above 1.3x but remains tight."
+                )
+            else:
+                st.success(
+                    "Minimum DSCR is above 1.5x, indicating comfortable coverage."
+                )
 
-        st.markdown("### C. Business Robustness (Is the business stable?)")
-        revenue_std = pd.Series(revenue_values).std()
-        revenue_cv = revenue_std / steady_revenue if steady_revenue else 0
-        margin_values = [
-            ebitda_values[i] / revenue_values[i]
-            if revenue_values[i]
-            else 0
-            for i in range(5)
+        with st.expander("Show details"):
+            st.dataframe(
+                pd.DataFrame(pnl_list), use_container_width=True
+            )
+            st.dataframe(
+                pd.DataFrame(cashflow_result), use_container_width=True
+            )
+            st.dataframe(
+                pd.DataFrame(debt_schedule), use_container_width=True
+            )
+        st.divider()
+
+        st.markdown("### D. Deal Breakers (What kills the deal first?)")
+        negative_cash_years = [
+            row["year"]
+            for row in cashflow_result
+            if row.get("cash_balance", 0.0) < 0
         ]
-        margin_std = pd.Series(margin_values).std()
-        margin_signal = (
-            "High" if margin_std < 0.03 else "Medium" if margin_std < 0.06 else "Low"
+        exit_year_index = (
+            exit_year
+            if exit_year in debt_by_year
+            else last_year_index
         )
-        revenue_signal = (
-            "High"
-            if revenue_cv < 0.05
-            else "Medium"
-            if revenue_cv < 0.1
-            else "Low"
+        closing_debt_exit = debt_by_year.get(exit_year_index, {}).get(
+            "closing_debt", 0.0
         )
-        guarantees = [
+        taxes_payable = [
+            row.get("tax_payable", 0.0) for row in balance_sheet
+        ]
+        taxes_payable_rising = False
+        if len(taxes_payable) >= 3:
+            increases = sum(
+                1
+                for i in range(1, len(taxes_payable))
+                if taxes_payable[i] > taxes_payable[i - 1]
+            )
+            taxes_payable_rising = (
+                taxes_payable[-1] - taxes_payable[0] > 100_000
+                and increases >= len(taxes_payable) - 1
+            )
+
+        floor_coverage_years = [
             input_model.operating_assumptions[
                 "revenue_guarantee_pct_year_1"
             ].value,
@@ -3448,113 +3669,109 @@ def run_app(page_override=None):
                 "revenue_guarantee_pct_year_3"
             ].value,
         ]
-        guarantee_coverage = sum(guarantees) / len(guarantees) if guarantees else 0
-        utilization_by_year = st.session_state.get("utilization_by_year")
-        if utilization_by_year:
-            util_std = pd.Series(utilization_by_year).std()
-        else:
-            util_std = 0.0
-        utilization_signal = (
-            "Low" if util_std < 0.02 else "Medium" if util_std < 0.05 else "High"
-        )
-        robustness_table = pd.DataFrame(
-            [
-                {"Metric": "Revenue Stability", "Signal": revenue_signal},
-                {"Metric": "Margin Stability", "Signal": margin_signal},
-                {
-                    "Metric": "Guarantee Coverage (Y1–Y3)",
-                    "Signal": format_pct(guarantee_coverage),
-                },
-                {
-                    "Metric": "Utilization Sensitivity",
-                    "Signal": utilization_signal,
-                },
-            ]
-        )
-        st.dataframe(robustness_table, use_container_width=True)
+        floor_years_active = [
+            i + 1 for i, value in enumerate(floor_coverage_years) if value > 0
+        ]
+        last_floor_year = max(floor_years_active) if floor_years_active else None
+        debt_after_floor = False
+        if last_floor_year is not None:
+            debt_after_floor = any(
+                row["year"] > last_floor_year
+                and row.get("closing_debt", 0.0) > 0
+                for row in debt_schedule
+            )
 
-        st.markdown("### D. Risk Flags (What can kill the deal?)")
-        dscr_values = [
-            row["dscr"]
-            for row in debt_schedule
-            if isinstance(row.get("dscr"), (int, float))
-        ]
-        min_dscr_value = min(dscr_values) if dscr_values else 0
-        dscr_threshold = input_model.financing_assumptions["minimum_dscr"]
-        early_years = {0, 1}
-        covenant_early = [
-            row
-            for row in debt_schedule
-            if row["year"] in early_years
-            and isinstance(row.get("dscr"), (int, float))
-            and row["dscr"] < dscr_threshold
-        ]
-        debt_after_guarantee = any(
-            row["year"] >= 3 and row["opening_debt"] > 0
-            for row in debt_schedule
+        margin_last = _safe_div(
+            pnl_last.get("ebitda", 0.0), pnl_last.get("revenue", 0.0)
         )
-        negative_cash_years = [
-            row["year"]
-            for row in cashflow_result
-            if row["cash_balance"] < 0
-        ]
+        margin_drop = margin_y1 - margin_last
+
         flags = [
             {
-                "Item": "Covenant pressure in early years",
-                "Status": "YES" if covenant_early else "NO",
-                "Note": "DSCR below covenant in years 0–1."
-                if covenant_early
-                else "No early DSCR breach.",
+                "title": "Negative cash in any year",
+                "status": "FAIL" if negative_cash_years else "OK",
+                "impact": "Impact: Cash balance falls below zero, creating an immediate funding gap.",
+                "fix": "Typical fix: reduce purchase price, add equity, or slow capex.",
             },
             {
-                "Item": "Revenue guarantee expires before deleveraging",
-                "Status": "YES" if debt_after_guarantee else "NO",
-                "Note": "Debt remains after guarantee period."
-                if debt_after_guarantee
-                else "Deleveraging within guarantee window.",
+                "title": "Minimum cash below zero",
+                "status": "FAIL" if min_cash_balance < 0 else "OK",
+                "impact": f"Impact: Minimum cash reaches {format_currency(min_cash_balance)}.",
+                "fix": "Typical fix: increase liquidity buffer or reduce leverage at close.",
             },
             {
-                "Item": "High utilization dependency",
-                "Status": "YES" if utilization_signal == "High" else "NO",
-                "Note": "Utilization swings drive revenue sensitivity."
-                if utilization_signal == "High"
-                else "Utilization sensitivity manageable.",
+                "title": "Debt not fully repaid by exit",
+                "status": "FAIL" if closing_debt_exit > 0 else "OK",
+                "impact": "Impact: Residual debt reduces equity value at exit.",
+                "fix": "Typical fix: lower initial debt or extend the repayment period assumptions.",
             },
             {
-                "Item": "Negative cash years",
-                "Status": "YES" if negative_cash_years else "NO",
-                "Note": "Cash dips below zero in "
-                f"{', '.join(f'Year {y}' for y in negative_cash_years)}."
-                if negative_cash_years
-                else "No negative cash years.",
+                "title": "Taxes payable growing structurally",
+                "status": "WATCH" if taxes_payable_rising else "OK",
+                "impact": "Impact: Tax payable build-up can strain near-term liquidity.",
+                "fix": "Typical fix: validate tax timing and working capital assumptions.",
+            },
+            {
+                "title": "EBITDA margin deterioration",
+                "status": "FAIL" if margin_drop > 0.05 else "WATCH" if margin_drop > 0.02 else "OK",
+                "impact": "Impact: Margin erosion reduces cash available for debt service.",
+                "fix": "Typical fix: validate pricing, utilization, and cost controls.",
             },
         ]
-        flag_table = pd.DataFrame(flags)
-        st.dataframe(flag_table, use_container_width=True)
+        if last_floor_year is not None:
+            flags.append(
+                {
+                    "title": "Floor coverage ends before deleveraging",
+                    "status": "WATCH" if debt_after_floor else "OK",
+                    "impact": "Impact: Debt remains after floor coverage ends, increasing downside exposure.",
+                    "fix": "Typical fix: stress test without floor coverage and add equity headroom.",
+                }
+            )
+        if min_dscr is not None:
+            flags.append(
+                {
+                    "title": "Minimum DSCR below guideline",
+                    "status": _status_from_thresholds(
+                        min_dscr, 1.5, 1.3, higher_is_better=True
+                    ),
+                    "impact": "Impact: Lower coverage raises covenant and refinancing risk.",
+                    "fix": "Typical fix: reduce leverage or increase cash generation assumptions.",
+                }
+            )
 
-        st.markdown("### E. Management Takeaway")
-        risk_list = [
-            flag["Item"] for flag in flags if flag["Status"] == "YES"
-        ]
-        risk_text = ", ".join(risk_list) if risk_list else "no major red flags"
-        next_steps = (
-            "validate covenant headroom and stress utilization"
-            if risk_list
-            else "continue with diligence and confirm pricing"
-        )
-        attractiveness = (
-            "attractive"
-            if economics_verdict.startswith("✅")
-            else "borderline"
-            if economics_verdict.startswith("⚠️")
-            else "unattractive"
-        )
-        st.write(
-            "This case appears "
-            f"{attractiveness} based on entry valuation, cash generation, "
-            f"and financing capacity. The key risks are {risk_text}. "
-            f"Next steps should focus on {next_steps}."
-        )
+        for flag in flags:
+            left_col, right_col = st.columns([1, 2])
+            with left_col:
+                st.markdown(f"**{flag['status']}** — {flag['title']}")
+            with right_col:
+                st.write(f"{flag['impact']} {flag['fix']}")
+        st.divider()
+
+        st.markdown("### E. Management Takeaway (So what?)")
+        negative_cash = bool(negative_cash_years) or min_cash_balance < 0
+        deleveraging_slow = closing_debt_exit > 0
+        if negative_cash:
+            verdict = "NO-GO"
+        elif min_cash_balance < 500_000 or deleveraging_slow:
+            verdict = "GO WITH CONDITIONS"
+        else:
+            verdict = "GO"
+        st.markdown(f"**Verdict:** {verdict}")
+
+        st.markdown("**What to negotiate**")
+        st.markdown("- Purchase price adjustment to protect entry leverage.")
+        st.markdown("- Higher equity contribution to improve liquidity headroom.")
+        st.markdown("- Debt amount reduction to lower leverage at entry.")
+
+        st.markdown("**What to validate operationally**")
+        st.markdown("- Utilization stability versus plan.")
+        st.markdown("- Day rate resilience under client pressure.")
+        st.markdown("- Client retention and pipeline visibility.")
+
+        st.markdown("**Next model checks**")
+        st.markdown("- Run the worst case output scenario.")
+        st.markdown("- Remove floor coverage to test downside cash.")
+        st.markdown("- Reduce utilization and confirm debt service headroom.")
 
     if page == "Model Settings":
         st.title("Model Settings")
