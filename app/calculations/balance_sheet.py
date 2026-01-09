@@ -16,15 +16,19 @@ def calculate_balance_sheet(
         "purchase_price_eur"
     ].value
 
-    # Build a net income and tax lookup from P&L results.
+    # Build net income, tax, and depreciation lookups from P&L results.
     net_income_by_year = {}
     taxes_by_year = {}
+    depreciation_by_year = {}
     if pnl_result is not None:
         for year_data in pnl_result:
             net_income_by_year[year_data.get("year")] = year_data.get(
                 "net_income", 0
             )
             taxes_by_year[year_data.get("year")] = year_data.get("taxes", 0.0)
+            depreciation_by_year[year_data.get("year")] = year_data.get(
+                "depreciation", 0.0
+            )
 
     debt_by_year = {
         debt_data["year"]: debt_data["closing_debt"]
@@ -41,7 +45,9 @@ def calculate_balance_sheet(
         year = year_data["year"]
         cash_balance = year_data["cash_balance"]
         capex = year_data.get("capex", 0.0)
-        depreciation = year_data.get("depreciation", 0.0)
+        depreciation = depreciation_by_year.get(
+            year, year_data.get("depreciation", 0.0)
+        )
         working_capital_balance = year_data.get(
             "working_capital_balance", working_capital_balance
         )
