@@ -3191,6 +3191,7 @@ def run_app(page_override=None):
         "Financing & Debt",
         "Equity Case",
         "Valuation & Purchase Price",
+        "Model Settings",
     }
     output_selector_pages = {
         "Operating Model (P&L)",
