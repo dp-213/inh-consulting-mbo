@@ -90,6 +90,19 @@ def calculate_cashflow(input_model, pnl_result, debt_schedule):
 
         equity_injection = equity_injection_amount if year == 0 else 0.0
         acquisition_outflow = -purchase_price if year == 0 else 0.0
+        if year == 0:
+            if equity_injection != equity_injection_amount:
+                raise ValueError(
+                    "Year 0 equity injection does not match equity contribution."
+                )
+            if acquisition_outflow != -purchase_price:
+                raise ValueError(
+                    "Year 0 acquisition outflow does not match purchase price."
+                )
+            if debt_drawdown != debt_amount:
+                raise ValueError(
+                    "Year 0 debt drawdown does not match initial debt amount."
+                )
 
         # Investing cash flow includes capital expenditures and acquisition outflow.
         investing_cf = -capex + acquisition_outflow
