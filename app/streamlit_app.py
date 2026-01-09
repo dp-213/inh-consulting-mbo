@@ -2973,14 +2973,14 @@ def run_app():
         ]
 
         st.markdown("**MBO Financial Model**")
-        page = st.sidebar.radio(
+        selected_page = st.sidebar.radio(
             "",
             nav_options,
             index=nav_options.index(st.session_state["page"]),
-            key="page",
+            key="nav_page",
             label_visibility="collapsed",
         )
-        st.session_state["page"] = page
+        st.session_state["page"] = selected_page
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
