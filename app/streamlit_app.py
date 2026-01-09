@@ -1,5 +1,6 @@
 import io
 import json
+import urllib.parse
 import subprocess
 from datetime import datetime
 import zipfile
@@ -2891,52 +2892,73 @@ def run_app():
             background: #eff6ff;
             border: 1px solid #93c5fd;
           }
+          .nav-section {
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin: 0.8rem 0 0.35rem;
+          }
+          .nav-item {
+            display: block;
+            color: #6b7280;
+            text-decoration: none;
+            padding: 0.15rem 0 0.15rem 0.25rem;
+          }
+          .nav-item:hover {
+            color: #111827;
+            text-decoration: none;
+          }
+          .nav-item.active {
+            font-weight: 600;
+            color: #111827;
+            border-left: 3px solid #3b82f6;
+            padding-left: 0.35rem;
+            background: #eef2f7;
+          }
         </style>
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        nav_options = [
-            "Operating Model (P&L)",
-            "Cashflow & Liquidity",
-            "Balance Sheet",
-            "Revenue Model",
-            "Cost Model",
-            "Other Assumptions",
-            "Financing & Debt",
-            "Equity Case",
-            "Valuation & Purchase Price",
-            "Model Settings",
-        ]
+        nav_items = {
+            "OPERATING MODEL": [
+                "Operating Model (P&L)",
+                "Cashflow & Liquidity",
+                "Balance Sheet",
+            ],
+            "PLANNING": ["Revenue Model", "Cost Model", "Other Assumptions"],
+            "FINANCING": ["Financing & Debt", "Equity Case"],
+            "VALUATION": ["Valuation & Purchase Price"],
+            "SETTINGS": ["Model Settings"],
+        }
+        nav_pages = [item for items in nav_items.values() for item in items]
+
+        clicked_page = st.query_params.get("page")
+        if isinstance(clicked_page, list):
+            clicked_page = clicked_page[0] if clicked_page else None
+        if clicked_page in nav_pages and clicked_page != st.session_state["page"]:
+            st.session_state["page"] = clicked_page
+            st.rerun()
+
+        current_page = st.session_state["page"]
+
+        def _nav_item(label):
+            active_class = "active" if label == current_page else ""
+            target = urllib.parse.quote(label, safe="")
+            st.markdown(
+                f'<a class="nav-item {active_class}" href="?page={target}">{label}</a>',
+                unsafe_allow_html=True,
+            )
 
         st.markdown("**MBO Financial Model**")
-        nav_css = """
-        <style>
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] input,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] svg {
-            display: none;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div {
-            margin-left: 0 !important;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] input:checked + div {
-            font-weight: 600;
-          }
-        </style>
-        """
-        st.markdown(nav_css, unsafe_allow_html=True)
-        st.markdown("OPERATING MODEL")
-        st.markdown("PLANNING")
-        st.markdown("FINANCING")
-        st.markdown("VALUATION")
-        st.markdown("SETTINGS")
-        selected_page = st.sidebar.radio(
-            "",
-            nav_options,
-            index=nav_options.index(st.session_state["page"]),
-            key="nav_page",
-            label_visibility="collapsed",
-        )
-        st.session_state["page"] = selected_page
+        for section, items in nav_items.items():
+            st.markdown(
+                f'<div class="nav-section">{section}</div>',
+                unsafe_allow_html=True,
+            )
+            for item in items:
+                _nav_item(item)
+
         page = st.session_state["page"]
         assumptions_state = st.session_state["assumptions"]
 
