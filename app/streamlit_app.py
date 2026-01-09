@@ -56,13 +56,12 @@ with st.sidebar:
           [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
             background: #eef2f7;
           }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label > div,
           [data-testid="stSidebar"] div[role="radiogroup"] input,
           [data-testid="stSidebar"] div[role="radiogroup"] svg,
           [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
             display: none;
           }
-          [data-testid="stSidebar"] div[role="radiogroup"] input:checked + div {
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
             background: #e9eef7;
             border-left: 3px solid #3b82f6;
             color: #111827;
