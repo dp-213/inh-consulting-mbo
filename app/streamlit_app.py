@@ -2988,36 +2988,61 @@ def run_app():
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        nav_groups = [
-            (
-                "OPERATING MODEL",
-                ["Operating Model (P&L)", "Cashflow & Liquidity", "Balance Sheet"],
-                "nav_operating",
-            ),
-            ("PLANNING", ["Revenue Model", "Cost Model", "Other Assumptions"], "nav_planning"),
-            ("FINANCING", ["Financing & Debt", "Equity Case"], "nav_financing"),
-            ("VALUATION", ["Valuation & Purchase Price"], "nav_valuation"),
-            ("SETTINGS", ["Model Settings"], "nav_settings"),
+        nav_css = """
+        <style>
+          div[data-testid="stRadio"] label:nth-child(1)::before,
+          div[data-testid="stRadio"] label:nth-child(4)::before,
+          div[data-testid="stRadio"] label:nth-child(7)::before,
+          div[data-testid="stRadio"] label:nth-child(9)::before,
+          div[data-testid="stRadio"] label:nth-child(10)::before {
+            display: block;
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin: 0.9rem 0 0.35rem;
+            width: 100%;
+          }
+          div[data-testid="stRadio"] label:nth-child(1)::before {
+            content: "OPERATING MODEL";
+            margin-top: 0;
+          }
+          div[data-testid="stRadio"] label:nth-child(4)::before {
+            content: "PLANNING";
+          }
+          div[data-testid="stRadio"] label:nth-child(7)::before {
+            content: "FINANCING";
+          }
+          div[data-testid="stRadio"] label:nth-child(9)::before {
+            content: "VALUATION";
+          }
+          div[data-testid="stRadio"] label:nth-child(10)::before {
+            content: "SETTINGS";
+          }
+        </style>
+        """
+        st.markdown(nav_css, unsafe_allow_html=True)
+
+        nav_options = [
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "Revenue Model",
+            "Cost Model",
+            "Other Assumptions",
+            "Financing & Debt",
+            "Equity Case",
+            "Valuation & Purchase Price",
+            "Model Settings",
         ]
 
         st.markdown("**MBO Financial Model**")
-        current_page = st.session_state.get("page", "Operating Model (P&L)")
-        page = current_page
-        for header, options, key in nav_groups:
-            if current_page not in options and key in st.session_state:
-                del st.session_state[key]
-            st.markdown(f"<div class=\"nav-section\">{header}</div>", unsafe_allow_html=True)
-            index = options.index(current_page) if current_page in options else None
-            selection = st.radio(
-                "",
-                options,
-                index=index,
-                key=key,
-                label_visibility="collapsed",
-            )
-            if selection and selection != page:
-                page = selection
-                st.session_state["page"] = selection
+        page = st.sidebar.radio(
+            "",
+            nav_options,
+            key="page",
+            label_visibility="collapsed",
+        )
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
@@ -5293,8 +5318,11 @@ def run_app():
 
     if page == "Equity Case":
         st.header("Equity Case")
-        _render_scenario_selector()
-        st.write("Management Buy-Out with external minority investor.")
+        st.write(
+            "Management Buy-Out with an external minority investor. "
+            "Holding period defined by the investor exit year. "
+            "Exit mechanism: management buys out the investor."
+        )
 
         equity_defaults = _default_equity_assumptions(input_model)
         sponsor_equity = st.session_state.get(
@@ -5326,13 +5354,7 @@ def run_app():
         enterprise_value_exit = ebitda_exit * exit_multiple
         equity_value_exit = enterprise_value_exit - net_debt_exit
 
-        st.markdown("### 1. Deal Structure")
-        st.write(
-            "Management Buy-Out with external minority investor. "
-            f"Holding period: Year {exit_year}. Exit mechanism: Management buy-out of investor."
-        )
-
-        st.markdown("### 2. Entry Equity & Ownership")
+        st.markdown("### Capital at Risk (Entry View)")
         entry_table = pd.DataFrame(
             [
                 {
@@ -5359,10 +5381,6 @@ def run_app():
             {},
             year_labels=["Equity (EUR)", "Ownership (%)"],
         )
-        st.write(
-            "Management owns 100% after investor exit. "
-            "Ownership at entry is split based on equity contributed."
-        )
 
         sponsor_cashflows = []
         investor_cashflows = []
@@ -5386,79 +5404,48 @@ def run_app():
         st.session_state["equity.sponsor_irr"] = sponsor_irr
         st.session_state["equity.investor_irr"] = investor_irr
 
-        st.markdown("### 3. Headline Returns (Separated)")
+        st.markdown("### Headline Outcomes")
         investor_cols = st.columns(4)
-        sponsor_cols = st.columns(3)
-        investor_cols[0].metric(
-            "External Investor – Invested Equity", format_currency(investor_equity)
-        )
-        investor_cols[1].metric(
-            "External Investor – Exit Proceeds", format_currency(investor_exit_proceeds)
-        )
+        investor_cols[0].metric("External Investor – Invested Equity", format_currency(investor_equity))
+        investor_cols[1].metric("External Investor – Exit Proceeds", format_currency(investor_exit_proceeds))
         investor_cols[2].metric(
             "External Investor – MOIC",
             f"{(investor_exit_proceeds / investor_equity) if investor_equity else 0:.2f}x",
         )
-        investor_cols[3].metric(
-            "External Investor – IRR", format_pct(investor_irr)
-        )
-        sponsor_cols[0].metric(
-            "Management – Invested Equity", format_currency(sponsor_equity)
-        )
-        sponsor_cols[1].metric(
-            "Management – Residual Equity Value", format_currency(sponsor_residual_value)
-        )
-        sponsor_cols[2].metric("Management – IRR", format_pct(sponsor_irr))
+        investor_cols[3].metric("External Investor – IRR", format_pct(investor_irr))
 
-        st.markdown("### 4. Exit Equity Bridge")
+        sponsor_cols = st.columns(4)
+        sponsor_cols[0].metric("Management – Invested Equity", format_currency(sponsor_equity))
+        sponsor_cols[1].metric("Management – Cash Proceeds at Exit", format_currency(sponsor_residual_value))
+        sponsor_cols[2].metric("Management – IRR", format_pct(sponsor_irr))
+        sponsor_cols[3].metric("Management – Ownership After Exit", "100%")
+
+        st.markdown("### Exit Equity Bridge (Exit Year)")
+        exit_year_label = f"Year {exit_year_index}"
         exit_bridge_rows = [
             {
                 "Line Item": "Enterprise Value at Exit (EBIT × Multiple)",
-                "Year 0": enterprise_value_exit,
-                "Year 1": "",
-                "Year 2": "",
-                "Year 3": "",
-                "Year 4": "",
+                exit_year_label: enterprise_value_exit,
             },
             {
                 "Line Item": "Net Debt at Exit",
-                "Year 0": net_debt_exit,
-                "Year 1": "",
-                "Year 2": "",
-                "Year 3": "",
-                "Year 4": "",
+                exit_year_label: net_debt_exit,
             },
             {
                 "Line Item": "Excess Cash at Exit",
-                "Year 0": 0,
-                "Year 1": "",
-                "Year 2": "",
-                "Year 3": "",
-                "Year 4": "",
+                exit_year_label: 0,
             },
             {
                 "Line Item": "Total Equity Value at Exit",
-                "Year 0": equity_value_exit,
-                "Year 1": "",
-                "Year 2": "",
-                "Year 3": "",
-                "Year 4": "",
+                exit_year_label: equity_value_exit,
             },
             {
                 "Line Item": "Investor Exit Proceeds",
-                "Year 0": investor_exit_proceeds,
-                "Year 1": "",
-                "Year 2": "",
-                "Year 3": "",
-                "Year 4": "",
+                exit_year_label: investor_exit_proceeds,
             },
             {
                 "Line Item": "Management Residual Equity Value",
-                "Year 0": sponsor_residual_value,
-                "Year 1": "",
-                "Year 2": "",
-                "Year 3": "",
-                "Year 4": "",
+                exit_year_label: sponsor_residual_value,
             },
         ]
         exit_bridge = pd.DataFrame(exit_bridge_rows)
@@ -5467,210 +5454,45 @@ def run_app():
             set(),
             {"Total Equity Value at Exit", "Management Residual Equity Value"},
             {},
+            year_labels=[exit_year_label],
         )
 
-        st.markdown("### 5. Sources & Uses")
-        purchase_price = input_model.transaction_and_financing[
-            "purchase_price_eur"
-        ].value
-        transaction_cost_pct = st.session_state.get(
-            "valuation.transaction_cost_pct",
-            _default_valuation_assumptions(input_model)["transaction_cost_pct"],
-        )
-        transaction_fees = purchase_price * transaction_cost_pct
-        opening_cash = cashflow_result[0]["cash_balance"]
-        debt_at_close = debt_schedule[0]["opening_debt"]
-        uses_total = purchase_price + transaction_fees + opening_cash
-        sources_total = debt_at_close + sponsor_equity + investor_equity
-
-        sources_uses = pd.DataFrame(
-            [
+        with st.expander("Equity Cashflows", expanded=False):
+            investor_cashflow_rows = [
                 {
-                    "Line Item": "SOURCES",
-                    "Year 0": "",
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
-                },
-                {
-                    "Line Item": "Senior Debt",
-                    "Year 0": debt_at_close,
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
-                },
-                {
-                    "Line Item": "Sponsor Equity",
-                    "Year 0": sponsor_equity,
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
-                },
-                {
-                    "Line Item": "Investor Equity",
-                    "Year 0": investor_equity,
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
-                },
-                {
-                    "Line Item": "Total Sources",
-                    "Year 0": sources_total,
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
-                },
-                {
-                    "Line Item": "USES",
-                    "Year 0": "",
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
-                },
-                {
-                    "Line Item": "Purchase Price",
-                    "Year 0": purchase_price,
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
-                },
-                {
-                    "Line Item": "Transaction Fees",
-                    "Year 0": transaction_fees,
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
-                },
-                {
-                    "Line Item": "Cash to Balance Sheet",
-                    "Year 0": opening_cash,
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
-                },
-                {
-                    "Line Item": "Total Uses",
-                    "Year 0": uses_total,
-                    "Year 1": "",
-                    "Year 2": "",
-                    "Year 3": "",
-                    "Year 4": "",
+                    "Line Item": "Investor Cashflow",
+                    **{f"Year {i}": investor_cashflows[i] for i in range(8)},
                 },
             ]
-        )
-        _render_custom_table_html(
-            sources_uses,
-            {"SOURCES", "USES"},
-            {"Total Sources", "Total Uses"},
-            {},
-        )
+            investor_cashflow_table = pd.DataFrame(investor_cashflow_rows)
+            year_labels = [f"Year {i}" for i in range(8)]
+            investor_cashflow_table = investor_cashflow_table[
+                ["Line Item"] + year_labels
+            ]
+            _render_custom_table_html(
+                investor_cashflow_table,
+                set(),
+                set(),
+                {},
+                year_labels=year_labels,
+            )
 
-        st.markdown("### 6. Equity Cashflows – External Investor")
-        investor_cashflow_rows = [
-            {
-                "Line Item": "Investor Cashflow",
-                **{f"Year {i}": investor_cashflows[i] for i in range(8)},
-            },
-        ]
-        investor_cashflow_table = pd.DataFrame(investor_cashflow_rows)
-        year_labels = [f"Year {i}" for i in range(8)]
-        investor_cashflow_table = investor_cashflow_table[
-            ["Line Item"] + year_labels
-        ]
-        _render_custom_table_html(
-            investor_cashflow_table,
-            set(),
-            set(),
-            {},
-            year_labels=year_labels,
-        )
-
-        st.markdown("### 7. Equity Cashflows – Management (Sponsor)")
-        sponsor_cashflow_rows = [
-            {
-                "Line Item": "Management Cashflow",
-                **{f"Year {i}": sponsor_cashflows[i] for i in range(8)},
-            },
-            {
-                "Line Item": "Residual Equity Value at Exit",
-                **{
-                    f"Year {i}": sponsor_residual_value if i == exit_year else 0
-                    for i in range(8)
-                },
-            },
-        ]
-        sponsor_cashflow_table = pd.DataFrame(sponsor_cashflow_rows)
-        sponsor_cashflow_table = sponsor_cashflow_table[
-            ["Line Item"] + year_labels
-        ]
-        _render_custom_table_html(
-            sponsor_cashflow_table,
-            set(),
-            set(),
-            {},
-            year_labels=year_labels,
-        )
-
-        sponsor_residual = sponsor_residual_value
-        investor_moic = (
-            (investor_exit_proceeds / abs(investor_equity))
-            if investor_equity
-            else 0
-        )
-
-        st.markdown("### 8. Equity KPIs")
-        kpi_table = pd.DataFrame(
-            [
+            sponsor_cashflow_rows = [
                 {
-                    "Investor": "Management (Sponsor)",
-                    "Invested Equity": format_currency(sponsor_equity),
-                    "Exit Proceeds": format_currency(sponsor_residual),
-                    "MOIC": "—",
-                    "IRR": format_pct(sponsor_irr),
-                },
-                {
-                    "Investor": "External Investor",
-                    "Invested Equity": format_currency(investor_equity),
-                    "Exit Proceeds": format_currency(investor_exit_proceeds),
-                    "MOIC": f"{investor_moic:.2f}x",
-                    "IRR": format_pct(investor_irr),
+                    "Line Item": "Management Cashflow",
+                    **{f"Year {i}": sponsor_cashflows[i] for i in range(8)},
                 },
             ]
-        )
-        st.dataframe(kpi_table, use_container_width=True)
-
-        explain_equity = st.toggle("Explain equity logic")
-        if explain_equity:
-            st.markdown("### Explanation")
-            st.write(
-                "Entry: Management and the external investor both invest equity at closing. "
-                "Ownership is split according to invested equity."
-            )
-            st.write(
-                "Holding period: No dividends are assumed. Cash is retained in the business. "
-                "Value creation comes from operating performance and deleveraging."
-            )
-            st.write(
-                "Exit: Equity value is determined via the EBIT multiple. Net debt is deducted "
-                "and excess cash added to arrive at total equity value. The external investor "
-                "exits fully in the exit year."
-            )
-            st.write(
-                "Management outcome: Management buys out the investor and ends up with 100% "
-                "ownership. The residual equity value represents long-term ownership value."
-            )
-            st.write(
-                "Not modeled: No dividends, preferred equity, waterfalls, leverage recap, or "
-                "upside structuring."
+            sponsor_cashflow_table = pd.DataFrame(sponsor_cashflow_rows)
+            sponsor_cashflow_table = sponsor_cashflow_table[
+                ["Line Item"] + year_labels
+            ]
+            _render_custom_table_html(
+                sponsor_cashflow_table,
+                set(),
+                set(),
+                {},
+                year_labels=year_labels,
             )
 
 
