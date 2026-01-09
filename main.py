@@ -62,11 +62,14 @@ def main():
         st.markdown("MBO Financial Model")
         def _on_nav_change(key_name):
             st.session_state["page_key"] = st.session_state.get(key_name)
+            for _, other_key, _ in sections:
+                if other_key != key_name:
+                    st.session_state.pop(other_key, None)
 
         for section_title, key, options in sections:
             st.markdown(f"### {section_title}")
             index = options.index(current_page) if current_page in options else None
-            selection = st.radio(
+            st.radio(
                 section_title,
                 options,
                 index=index,
@@ -75,8 +78,6 @@ def main():
                 on_change=_on_nav_change,
                 args=(key,),
             )
-            if selection is not None and selection != current_page:
-                current_page = selection
 
     run_app(st.session_state["page_key"])
 
