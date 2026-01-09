@@ -5,18 +5,12 @@ def calculate_debt_schedule(input_model, cashflow_result=None):
     """
     # Map legacy financing fields to Excel-equivalent transaction inputs.
     financing_assumptions = getattr(input_model, "financing_assumptions", {})
-    initial_debt = financing_assumptions.get(
-        "initial_debt_eur",
-        input_model.transaction_and_financing[
-            "senior_term_loan_start_eur"
-        ].value,
-    )
-    interest_rate = financing_assumptions.get(
-        "interest_rate_pct",
-        input_model.transaction_and_financing[
-            "senior_interest_rate_pct"
-        ].value,
-    )
+    if "senior_debt_amount" not in financing_assumptions:
+        raise ValueError("Senior debt amount missing from financing assumptions.")
+    initial_debt = financing_assumptions["senior_debt_amount"]
+    interest_rate = financing_assumptions.get("interest_rate_pct")
+    if interest_rate is None:
+        raise ValueError("Interest rate missing from financing assumptions.")
     amort_type = financing_assumptions.get("amortization_type", "Linear")
     amort_period = financing_assumptions.get("amortization_period_years", 5)
     grace_period = financing_assumptions.get("grace_period_years", 0)
@@ -44,11 +38,22 @@ def calculate_debt_schedule(input_model, cashflow_result=None):
                 0.0
                 if i < grace_period
                 else (
-                    initial_debt / amort_period
+                    opening_debt / amort_period
                     if i < amort_period
                     else 0.0
                 )
             )
+        if (
+            amort_type != "Bullet"
+            and i >= grace_period
+            and opening_debt > 0
+            and amort_period
+        ):
+            expected_repayment = opening_debt / amort_period
+            if abs(scheduled_repayment - expected_repayment) > 1e-6:
+                raise ValueError(
+                    "Scheduled repayment does not scale with senior debt amount."
+                )
         special_repayment = (
             special_amount if special_year == i else 0.0
         )

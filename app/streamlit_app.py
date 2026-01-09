@@ -298,6 +298,7 @@ def render_advanced_assumptions(input_model, show_header=True):
         parameter = row["Parameter"]
         if parameter == "Senior Debt Amount":
             senior_debt_amount = _local_non_negative(row["Value"])
+            st.session_state["financing.senior_debt_amount"] = senior_debt_amount
             st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = senior_debt_amount
         elif parameter == "Interest Rate":
             st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _local_clamp_pct(row["Value"])
@@ -693,6 +694,7 @@ def _apply_assumptions_state():
         param = row["Parameter"]
         if param == "Senior Debt Amount":
             senior_debt_amount = _non_negative(row["Value"])
+            st.session_state["financing.senior_debt_amount"] = senior_debt_amount
             st.session_state[
                 "transaction_and_financing.senior_term_loan_start_eur"
             ] = senior_debt_amount
@@ -828,6 +830,9 @@ def _default_balance_sheet_assumptions(input_model):
 def _default_financing_assumptions(input_model):
     cashflow_defaults = _default_cashflow_assumptions()
     return {
+        "senior_debt_amount": input_model.transaction_and_financing[
+            "senior_term_loan_start_eur"
+        ].value,
         "initial_debt_eur": input_model.transaction_and_financing[
             "senior_term_loan_start_eur"
         ].value,
@@ -3183,9 +3188,14 @@ def run_app(page_override=None):
         input_model.financing_assumptions[key] = st.session_state.get(
             f"financing.{key}", default_value
         )
-    input_model.financing_assumptions["initial_debt_eur"] = (
-        input_model.transaction_and_financing["senior_term_loan_start_eur"].value
-    )
+    senior_debt_amount = st.session_state.get("financing.senior_debt_amount")
+    if senior_debt_amount is None:
+        raise ValueError("Senior Debt Amount missing from financing assumptions.")
+    input_model.financing_assumptions["senior_debt_amount"] = senior_debt_amount
+    input_model.financing_assumptions["initial_debt_eur"] = senior_debt_amount
+    input_model.transaction_and_financing[
+        "senior_term_loan_start_eur"
+    ].value = senior_debt_amount
     input_model.valuation_runtime = _default_valuation_assumptions(input_model)
     for key, default_value in input_model.valuation_runtime.items():
         input_model.valuation_runtime[key] = st.session_state.get(
@@ -3961,9 +3971,7 @@ def run_app(page_override=None):
         drawdown_y0 = debt_year0.get("debt_drawdown", 0.0)
         repayment_y0 = debt_year0.get("total_repayment", 0.0)
 
-        senior_debt_amount = input_model.transaction_and_financing[
-            "senior_term_loan_start_eur"
-        ].value
+        senior_debt_amount = input_model.financing_assumptions["senior_debt_amount"]
         amort_years = input_model.financing_assumptions.get(
             "amortization_period_years", 5
         )
@@ -3973,11 +3981,18 @@ def run_app(page_override=None):
         grace_years = input_model.financing_assumptions.get(
             "grace_period_years", 0
         )
-        expected_repayment = (
-            senior_debt_amount / amort_years
-            if amort_type == "Linear" and 0 >= grace_years
-            else repayment_y0
-        )
+        expected_repayment = None
+        first_repay_row = debt_year0
+        if amort_type == "Linear" and grace_years == 0:
+            first_repay_row = next(
+                (row for row in debt_schedule if row.get("opening_debt", 0.0) > 0),
+                debt_year0,
+            )
+            expected_repayment = (
+                first_repay_row.get("opening_debt", 0.0) / amort_years
+                if amort_years
+                else 0.0
+            )
         debt_errors = []
         if abs(opening_debt_y0) > 1e-6:
             debt_errors.append("Opening Debt in Year 0 must be 0.")
@@ -3985,7 +4000,15 @@ def run_app(page_override=None):
             debt_errors.append(
                 "Debt drawdown in Year 0 must equal the Senior Debt Amount."
             )
-        if amort_type == "Linear" and abs(repayment_y0 - expected_repayment) > 1e-6:
+        actual_repayment = (
+            first_repay_row.get("scheduled_repayment", 0.0)
+            if expected_repayment is not None
+            else repayment_y0
+        )
+        if (
+            expected_repayment is not None
+            and abs(actual_repayment - expected_repayment) > 1e-6
+        ):
             debt_errors.append(
                 "Linear amortisation repayment does not match Senior Debt / Amortisation Years."
             )
@@ -4099,6 +4122,8 @@ def run_app(page_override=None):
             ]
         )
         st.dataframe(net_debt_table, use_container_width=True)
+        if net_debt_close < 0:
+            st.caption("Net Debt at Close is negative (Net Cash Position).")
 
         with st.expander("Seller Valuation (Multiple-Based)", expanded=False):
             st.write("Seller expectation based on EBITDA multiple.")
@@ -5618,9 +5643,7 @@ def run_app(page_override=None):
         st.title("Financing & Debt")
         st.write("Debt structure, service and bankability (5-year plan)")
         financing_assumptions = input_model.financing_assumptions
-        senior_debt_amount = input_model.transaction_and_financing[
-            "senior_term_loan_start_eur"
-        ].value
+        senior_debt_amount = financing_assumptions["senior_debt_amount"]
         amort_years = financing_assumptions["amortization_period_years"]
         amort_type = financing_assumptions.get("amortization_type", "Linear")
         grace_years = financing_assumptions.get("grace_period_years", 0)
@@ -5630,8 +5653,12 @@ def run_app(page_override=None):
         if abs(peak_debt - senior_debt_amount) > 1.0:
             raise ValueError("Debt input not reflected in debt schedule.")
         if amort_type == "Linear" and grace_years == 0:
-            scheduled_repayment = debt_schedule[0]["scheduled_repayment"]
-            if abs(scheduled_repayment * amort_years - senior_debt_amount) > 1.0:
+            first_repay_row = next(
+                (row for row in debt_schedule if row.get("opening_debt", 0.0) > 0),
+                debt_schedule[0],
+            )
+            scheduled_repayment = first_repay_row.get("scheduled_repayment", 0.0)
+            if abs(scheduled_repayment * amort_years - first_repay_row.get("opening_debt", 0.0)) > 1.0:
                 raise ValueError("Amortisation inconsistency.")
         cashflow_by_year = {row["year"]: row for row in cashflow_result}
         maintenance_capex_pct = financing_assumptions[
