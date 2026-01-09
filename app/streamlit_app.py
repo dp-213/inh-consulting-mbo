@@ -6,6 +6,7 @@ import zipfile
 import pandas as pd
 import streamlit as st
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment, Font, PatternFill
 
 st.set_page_config(layout="wide")
 
@@ -2106,6 +2107,133 @@ def _build_pnl_excel(input_model):
             column=5,
             value=f"=IRR(B{cashflow_start + 3}:I{cashflow_start + 3})",
         )
+
+        header_fill = PatternFill("solid", fgColor="E5E7EB")
+        total_fill = PatternFill("solid", fgColor="F3F4F6")
+        title_font = Font(bold=True, size=12)
+        header_font = Font(bold=True)
+        total_font = Font(bold=True)
+        center = Alignment(horizontal="center")
+        left = Alignment(horizontal="left")
+
+        def _apply_header(ws, row=1):
+            for col in range(1, ws.max_column + 1):
+                cell = ws.cell(row=row, column=col)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center if col > 1 else left
+
+        def _set_col_widths(ws, widths):
+            for col, width in widths.items():
+                ws.column_dimensions[col].width = width
+
+        def _format_currency_range(ws, row_start, row_end, col_start=2, col_end=6):
+            for row in range(row_start, row_end + 1):
+                for col in range(col_start, col_end + 1):
+                    ws.cell(row=row, column=col).number_format = "#,##0"
+
+        def _format_ratio_cells(ws, cells):
+            for cell in cells:
+                ws[cell].number_format = "0.00"
+
+        def _bold_rows(ws, row_indexes):
+            for row in row_indexes:
+                for col in range(1, ws.max_column + 1):
+                    cell = ws.cell(row=row, column=col)
+                    cell.font = total_font
+                    cell.fill = total_fill
+
+        # Assumptions sheet formatting.
+        ws_assumptions = wb["Assumptions"]
+        _apply_header(ws_assumptions, row=1)
+        _set_col_widths(ws_assumptions, {"A": 46, "B": 20})
+        for row in range(2, ws_assumptions.max_row + 1):
+            label = ws_assumptions.cell(row=row, column=1).value or ""
+            cell = ws_assumptions.cell(row=row, column=2)
+            if "%" in str(label):
+                cell.number_format = "0.0%"
+            else:
+                cell.number_format = "#,##0"
+
+        # P&L formatting.
+        _apply_header(ws_pnl, row=1)
+        _set_col_widths(ws_pnl, {"A": 40, "B": 16, "C": 16, "D": 16, "E": 16, "F": 16})
+        _format_currency_range(ws_pnl, 2, 21)
+        total_rows = {
+            "Total Revenue",
+            "Total Personnel Costs",
+            "Total Operating Expenses",
+            "EBITDA",
+            "EBIT",
+            "Net Income (Jahresüberschuss)",
+        }
+        total_row_indexes = [
+            idx + 1
+            for idx, item in enumerate(line_items, start=1)
+            if item in total_rows
+        ]
+        _bold_rows(ws_pnl, total_row_indexes)
+
+        # KPI formatting.
+        _apply_header(ws_kpi, row=1)
+        _set_col_widths(ws_kpi, {"A": 28, "B": 16, "C": 16, "D": 16, "E": 16, "F": 16})
+        for row in range(2, 8):
+            for col in range(2, 7):
+                ws_kpi.cell(row=row, column=col).number_format = "0.0%"
+        for col in range(2, 7):
+            ws_kpi.cell(row=2, column=col).number_format = "#,##0"
+
+        # Cashflow formatting.
+        _apply_header(ws_cashflow, row=cashflow_table_start)
+        _set_col_widths(ws_cashflow, {"A": 36, "B": 16, "C": 16, "D": 16, "E": 16, "F": 16})
+        _format_currency_range(ws_cashflow, cashflow_table_start + 1, cashflow_table_start + 17)
+        _bold_rows(
+            ws_cashflow,
+            [
+                cashflow_table_start + 5,
+                cashflow_table_start + 8,
+                cashflow_table_start + 13,
+                cashflow_table_start + 17,
+            ],
+        )
+
+        # Balance sheet formatting.
+        _apply_header(ws_balance, row=balance_table_start)
+        _set_col_widths(ws_balance, {"A": 36, "B": 16, "C": 16, "D": 16, "E": 16, "F": 16})
+        _format_currency_range(ws_balance, balance_table_start + 1, balance_table_start + 17)
+        _bold_rows(
+            ws_balance,
+            [
+                balance_table_start + 4,
+                balance_table_start + 7,
+                balance_table_start + 14,
+                balance_table_start + 17,
+            ],
+        )
+
+        # Valuation formatting.
+        _apply_header(ws_valuation, row=seller_table_start + 1)
+        _apply_header(ws_valuation, row=buyer_table_start + 1)
+        _apply_header(ws_valuation, row=bridge_start + 1)
+        _set_col_widths(ws_valuation, {"A": 40, "B": 16, "C": 16, "D": 16, "E": 16, "F": 16})
+        _format_currency_range(ws_valuation, seller_table_start + 2, seller_table_start + 6)
+        _format_currency_range(ws_valuation, buyer_table_start + 2, buyer_table_start + 10)
+        _format_currency_range(ws_valuation, bridge_start + 2, bridge_start + 5, col_start=2, col_end=2)
+        ws_valuation[f"B{bridge_start + 5}"].number_format = "0.0%"
+
+        # Financing formatting.
+        _apply_header(ws_financing, row=debt_table_start + 1)
+        _apply_header(ws_financing, row=bank_table_start + 1)
+        _set_col_widths(ws_financing, {"A": 36, "B": 16, "C": 16, "D": 16, "E": 16, "F": 16})
+        _format_currency_range(ws_financing, debt_table_start + 2, debt_table_start + 8)
+        _format_currency_range(ws_financing, bank_table_start + 2, bank_table_start + 8)
+        _format_ratio_cells(ws_financing, [f"{year_col(2+i)}{bank_row_map['DSCR']}" for i in range(5)])
+
+        # Equity formatting.
+        _apply_header(ws_equity, row=cashflow_start + 1)
+        _apply_header(ws_equity, row=kpi_start + 1)
+        _set_col_widths(ws_equity, {"A": 34, "B": 16, "C": 16, "D": 16, "E": 16, "F": 16, "G": 16, "H": 16, "I": 16})
+        _format_currency_range(ws_equity, cashflow_start + 2, cashflow_start + 4, col_start=2, col_end=9)
 
         writer.close()
 
