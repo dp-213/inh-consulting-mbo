@@ -2305,49 +2305,6 @@ def run_app():
             background-color: #f9fafb !important;
             color: #111827 !important;
           }
-          /* === REMOVE RADIO LABEL SPACE COMPLETELY === */
-          div[data-testid="stRadio"] > label {
-            display: none !important;
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-
-          /* === FORCE CLEAN HORIZONTAL ROW === */
-          div[data-testid="stRadio"] > div {
-            display: flex !important;
-            flex-direction: row !important;
-            gap: 8px !important;
-            align-items: center !important;
-          }
-
-          /* === TURN EACH RADIO OPTION INTO A PILL === */
-          div[data-testid="stRadio"] label {
-            padding: 6px 16px !important;
-            border-radius: 6px !important;
-            font-size: 14px !important;
-            font-weight: 500 !important;
-            border: 1px solid #e5e7eb !important;
-            background-color: transparent !important;
-            cursor: pointer !important;
-          }
-
-          /* === HIDE THE ACTUAL RADIO CIRCLE === */
-          div[data-testid="stRadio"] input {
-            display: none !important;
-          }
-
-          /* === ACTIVE (SELECTED) STATE === */
-          div[data-testid="stRadio"] input:checked + div {
-            background-color: #e0e7ff !important;
-            border-color: #6366f1 !important;
-            color: #111827 !important;
-          }
-
-          /* === PREVENT LAYOUT JUMPING === */
-          div[data-testid="stRadio"] * {
-            box-sizing: border-box !important;
-          }
         </style>
         """,
         unsafe_allow_html=True,
@@ -2809,17 +2766,6 @@ def run_app():
 
     _apply_assumptions_state()
 
-    def _render_scenario_selector():
-        labels = ["Worst", "Base", "Best"]
-        current = st.session_state.get("scenario", "Base")
-        st.radio(
-            label="",
-            options=labels,
-            index=labels.index(current),
-            horizontal=True,
-            key="scenario",
-        )
-
     # Global scenario selector (active scenario for all pages).
     st.session_state.setdefault("scenario", "Base")
     active_scenario = st.session_state["scenario"]
@@ -2964,6 +2910,31 @@ def run_app():
           div[data-testid="stRadio"] label:nth-child(10)::before {
             content: "SETTINGS";
           }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label {
+            padding: 0;
+            margin: 0 0 0.35rem;
+            background: transparent;
+            border: none;
+            font-weight: 400;
+            color: #111827;
+            white-space: nowrap;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div {
+            margin-left: 0 !important;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {
+            background: transparent;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] input,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] svg,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {
+            display: none;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] input:checked + div {
+            background: transparent !important;
+            color: #111827 !important;
+            font-weight: 400 !important;
+          }
         </style>
         """
         st.markdown(nav_css, unsafe_allow_html=True)
@@ -3083,39 +3054,30 @@ def run_app():
 
     if page == "Revenue Model":
         st.title("Revenue Model")
-        _render_scenario_selector()
         render_revenue_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
 
     if page == "Cost Model":
         st.title("Cost Model")
-        _render_scenario_selector()
         render_cost_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
 
     if page == "Other Assumptions":
         st.title("Other Assumptions")
-        _render_scenario_selector()
         st.write("Master input sheet – all remaining assumptions.")
-        st.toggle(
-            "Auto-apply scenario values",
-            value=st.session_state.get("assumptions.auto_sync", True),
-            key="assumptions.auto_sync",
+        defaults = st.session_state.setdefault(
+            "assumptions_defaults", _seed_assumptions_state()
         )
-        if st.session_state.get("assumptions.auto_sync", True):
-            defaults = st.session_state.setdefault(
-                "assumptions_defaults", _seed_assumptions_state()
-            )
-            scenario_key = selected_scenario
-            for section in ["revenue_model"]:
-                section_defaults = defaults.get(section, {})
-                section_current = st.session_state["assumptions"].get(section, {})
-                for key, value in section_defaults.items():
-                    if isinstance(value, dict) and scenario_key in value:
-                        section_current[key][scenario_key] = value[scenario_key]
-                st.session_state["assumptions"][section] = section_current
+        scenario_key = selected_scenario
+        for section in ["revenue_model"]:
+            section_defaults = defaults.get(section, {})
+            section_current = st.session_state["assumptions"].get(section, {})
+            for key, value in section_defaults.items():
+                if isinstance(value, dict) and scenario_key in value:
+                    section_current[key][scenario_key] = value[scenario_key]
+            st.session_state["assumptions"][section] = section_current
         render_advanced_assumptions(input_model, show_header=False)
         return
 
@@ -3321,7 +3283,6 @@ def run_app():
 
     if page == "Model Settings":
         st.title("Model Settings")
-        _render_scenario_selector()
         st.caption("Model transparency, export, and technical controls")
 
         st.markdown("### Model Snapshot / Export")
@@ -3898,7 +3859,6 @@ def run_app():
 
     if page == "Operating Model (P&L)":
         st.title("Operating Model (P&L)")
-        _render_scenario_selector()
         selected_scenario = st.session_state.get(
             "scenario_selection.selected_scenario",
             input_model.scenario_selection["selected_scenario"].value,
@@ -4555,7 +4515,6 @@ def run_app():
 
     if page == "Cashflow & Liquidity":
         st.title("Cashflow & Liquidity")
-        _render_scenario_selector()
         st.write("Consolidated cashflow statement (5-year plan)")
         cashflow_line_items = {}
 
@@ -4824,7 +4783,6 @@ def run_app():
 
     if page == "Balance Sheet":
         st.title("Balance Sheet")
-        _render_scenario_selector()
         st.write("Simplified balance sheet (5-year plan)")
         balance_line_items = {}
 
@@ -5103,7 +5061,6 @@ def run_app():
 
     if page == "Financing & Debt":
         st.title("Financing & Debt")
-        _render_scenario_selector()
         st.write("Debt structure, service and bankability (5-year plan)")
         financing_assumptions = input_model.financing_assumptions
         cashflow_by_year = {row["year"]: row for row in cashflow_result}
