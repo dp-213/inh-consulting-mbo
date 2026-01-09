@@ -39,9 +39,6 @@ def main():
     ]
 
     current_page = st.session_state["page_key"]
-    for _, key, options in sections:
-        if current_page not in options:
-            st.session_state.pop(key, None)
 
     with st.sidebar:
         st.markdown(
@@ -63,7 +60,9 @@ def main():
             unsafe_allow_html=True,
         )
         st.markdown("MBO Financial Model")
-        selected_group_key = None
+        def _on_nav_change(key_name):
+            st.session_state["page_key"] = st.session_state.get(key_name)
+
         for section_title, key, options in sections:
             st.markdown(f"### {section_title}")
             index = options.index(current_page) if current_page in options else None
@@ -73,15 +72,11 @@ def main():
                 index=index,
                 key=key,
                 label_visibility="collapsed",
+                on_change=_on_nav_change,
+                args=(key,),
             )
             if selection is not None and selection != current_page:
-                st.session_state["page_key"] = selection
                 current_page = selection
-                selected_group_key = key
-        if selected_group_key:
-            for _, key, _ in sections:
-                if key != selected_group_key:
-                    st.session_state.pop(key, None)
 
     run_app(st.session_state["page_key"])
 
