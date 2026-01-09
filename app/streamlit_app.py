@@ -2895,33 +2895,66 @@ def run_app():
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        st.markdown("**MBO Financial Model**")
-        st.markdown("OPERATING MODEL")
-        st.markdown("PLANNING")
-        st.markdown("FINANCING")
-        st.markdown("VALUATION")
-        st.markdown("SETTINGS")
+        nav_css = """
+        <style>
+          div[data-testid="stSidebar"] button {
+            background: transparent;
+            border: none;
+            padding: 0.15rem 0 0.15rem 0.25rem;
+            text-align: left;
+            width: 100%;
+            color: #6b7280;
+            box-shadow: none;
+          }
+          div[data-testid="stSidebar"] button:hover {
+            color: #111827;
+            background: transparent;
+          }
+          div[data-testid="stSidebar"] button:disabled {
+            color: #111827;
+            font-weight: 600;
+            border-left: 3px solid #3b82f6;
+            padding-left: 0.35rem;
+            background: #eef2f7;
+          }
+        </style>
+        """
+        st.markdown(nav_css, unsafe_allow_html=True)
 
-        nav_options = [
-            "Operating Model (P&L)",
-            "Cashflow & Liquidity",
-            "Balance Sheet",
-            "Revenue Model",
-            "Cost Model",
-            "Other Assumptions",
-            "Financing & Debt",
-            "Equity Case",
-            "Valuation & Purchase Price",
-            "Model Settings",
-        ]
+        st.markdown("**MBO Financial Model**")
         current_page = st.session_state["page"]
-        page = st.sidebar.selectbox(
-            "",
-            nav_options,
-            index=nav_options.index(current_page),
-            key="page",
-        )
-        st.session_state["page"] = page
+
+        st.markdown("OPERATING MODEL")
+        if st.sidebar.button("Operating Model (P&L)", key="nav_operating", disabled=current_page=="Operating Model (P&L)"):
+            st.session_state["page"] = "Operating Model (P&L)"
+        if st.sidebar.button("Cashflow & Liquidity", key="nav_cashflow", disabled=current_page=="Cashflow & Liquidity"):
+            st.session_state["page"] = "Cashflow & Liquidity"
+        if st.sidebar.button("Balance Sheet", key="nav_balance", disabled=current_page=="Balance Sheet"):
+            st.session_state["page"] = "Balance Sheet"
+
+        st.markdown("PLANNING")
+        if st.sidebar.button("Revenue Model", key="nav_revenue", disabled=current_page=="Revenue Model"):
+            st.session_state["page"] = "Revenue Model"
+        if st.sidebar.button("Cost Model", key="nav_cost", disabled=current_page=="Cost Model"):
+            st.session_state["page"] = "Cost Model"
+        if st.sidebar.button("Other Assumptions", key="nav_other", disabled=current_page=="Other Assumptions"):
+            st.session_state["page"] = "Other Assumptions"
+
+        st.markdown("FINANCING")
+        if st.sidebar.button("Financing & Debt", key="nav_financing", disabled=current_page=="Financing & Debt"):
+            st.session_state["page"] = "Financing & Debt"
+        if st.sidebar.button("Equity Case", key="nav_equity", disabled=current_page=="Equity Case"):
+            st.session_state["page"] = "Equity Case"
+
+        st.markdown("VALUATION")
+        if st.sidebar.button("Valuation & Purchase Price", key="nav_valuation", disabled=current_page=="Valuation & Purchase Price"):
+            st.session_state["page"] = "Valuation & Purchase Price"
+
+        st.markdown("SETTINGS")
+        if st.sidebar.button("Model Settings", key="nav_settings", disabled=current_page=="Model Settings"):
+            st.session_state["page"] = "Model Settings"
+
+        page = st.session_state["page"]
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
