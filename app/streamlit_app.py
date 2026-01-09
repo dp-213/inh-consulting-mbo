@@ -5396,6 +5396,6 @@ def run_app(page_override=None):
 
 
 if __name__ == "__main__":
-    from app.main import main
+    from main import main
 
     main()
