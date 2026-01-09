@@ -5051,25 +5051,57 @@ def run_app():
         sponsor_cols[2].metric("Management – IRR", format_pct(sponsor_irr))
 
         st.markdown("### 4. Exit Equity Bridge")
-        exit_bridge = pd.DataFrame(
-            [
-                {
-                    "Line Item": "Enterprise Value at Exit (EBIT × Multiple)",
-                    "Year 0": enterprise_value_exit,
-                },
-                {"Line Item": "Net Debt at Exit", "Year 0": net_debt_exit},
-                {"Line Item": "Excess Cash at Exit", "Year 0": 0},
-                {"Line Item": "Total Equity Value at Exit", "Year 0": equity_value_exit},
-                {
-                    "Line Item": "Investor Exit Proceeds",
-                    "Year 0": investor_exit_proceeds,
-                },
-                {
-                    "Line Item": "Management Residual Equity Value",
-                    "Year 0": sponsor_residual_value,
-                },
-            ]
-        )
+        exit_bridge_rows = [
+            {
+                "Line Item": "Enterprise Value at Exit (EBIT × Multiple)",
+                "Year 0": enterprise_value_exit,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Net Debt at Exit",
+                "Year 0": net_debt_exit,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Excess Cash at Exit",
+                "Year 0": 0,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Total Equity Value at Exit",
+                "Year 0": equity_value_exit,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Investor Exit Proceeds",
+                "Year 0": investor_exit_proceeds,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+            {
+                "Line Item": "Management Residual Equity Value",
+                "Year 0": sponsor_residual_value,
+                "Year 1": "",
+                "Year 2": "",
+                "Year 3": "",
+                "Year 4": "",
+            },
+        ]
+        exit_bridge = pd.DataFrame(exit_bridge_rows)
         _render_custom_table_html(
             exit_bridge,
             set(),
