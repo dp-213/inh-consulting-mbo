@@ -8,48 +8,6 @@ import streamlit as st
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Font, PatternFill
 
-st.set_page_config(layout="wide")
-
-st.session_state.setdefault("page_key", "Operating Model (P&L)")
-
-pages = [
-    "Operating Model (P&L)",
-    "Cashflow & Liquidity",
-    "Balance Sheet",
-    "Financing & Debt",
-    "Valuation & Purchase Price",
-    "Equity Case",
-    "Assumptions",
-    "Settings",
-]
-
-with st.sidebar:
-    st.markdown(
-        """
-        <style>
-          [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
-            display: none;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label {
-            padding: 0.3rem 0.5rem;
-            border-radius: 6px;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
-            background-color: #e5e7eb;
-            font-weight: 600;
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.title("MBO Financial Model")
-    st.radio(
-        "Navigation",
-        pages,
-        key="page_key",
-        label_visibility="collapsed",
-    )
-
 from data_model import InputModel, create_demo_input_model
 from calculations.pnl import calculate_pnl
 from calculations.cashflow import calculate_cashflow
@@ -2917,115 +2875,116 @@ def run_app(page_override=None):
         input_model, cashflow_result, pnl_list, balance_sheet
     )
 
-    page = page_override or "Operating Model (P&L)"
-    with st.sidebar:
-        editor_css = """
-        <style>
-          .rdg-cell[aria-readonly="true"] {
-            background: #f3f4f6;
-            color: #6b7280;
-            font-style: italic;
-          }
-          .rdg-cell[aria-readonly="false"] {
-            background: #eff6ff;
-            border: 1px solid #93c5fd;
-          }
-        </style>
-        """
-        st.markdown(editor_css, unsafe_allow_html=True)
+    page = page_override or st.session_state.get(
+        "page_key", "Operating Model (P&L)"
+    )
+    editor_css = """
+    <style>
+      .rdg-cell[aria-readonly="true"] {
+        background: #f3f4f6;
+        color: #6b7280;
+        font-style: italic;
+      }
+      .rdg-cell[aria-readonly="false"] {
+        background: #eff6ff;
+        border: 1px solid #93c5fd;
+      }
+    </style>
+    """
+    st.markdown(editor_css, unsafe_allow_html=True)
 
-        assumptions_state = st.session_state["assumptions"]
+    assumptions_state = st.session_state["assumptions"]
 
-        def _sidebar_editor(title, key, df, column_config):
-            st.markdown(f"### {title}")
-            display_df = _apply_unit_display(df)
-            config = dict(column_config)
-            for col in display_df.columns:
-                if col not in config:
-                    config[col] = st.column_config.TextColumn()
-            edited = st.data_editor(
-                display_df,
-                hide_index=True,
-                key=key,
-                column_config=config,
-                use_container_width=True,
-            )
-            return _restore_unit_values(edited)
+    def _sidebar_editor(title, key, df, column_config):
+        st.markdown(f"### {title}")
+        display_df = _apply_unit_display(df)
+        config = dict(column_config)
+        for col in display_df.columns:
+            if col not in config:
+                config[col] = st.column_config.TextColumn()
+        edited = st.data_editor(
+            display_df,
+            hide_index=True,
+            key=key,
+            column_config=config,
+            use_container_width=True,
+        )
+        return _restore_unit_values(edited)
 
-        if page == "Cashflow & Liquidity":
-            cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
-            edited_cashflow = _sidebar_editor(
-                "Cashflow Assumptions",
-                "sidebar.cashflow",
-                cashflow_df,
-                {
-                    "Parameter": st.column_config.TextColumn(disabled=True),
-                    "Unit": st.column_config.TextColumn(disabled=True),
-                    "Notes": st.column_config.TextColumn(disabled=True),
-                },
-            )
-            assumptions_state["cashflow"] = edited_cashflow.to_dict("records")
-            _apply_assumptions_state()
+    if page == "Cashflow & Liquidity":
+        cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
+        edited_cashflow = _sidebar_editor(
+            "Cashflow Assumptions",
+            "sidebar.cashflow",
+            cashflow_df,
+            {
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+        )
+        assumptions_state["cashflow"] = edited_cashflow.to_dict("records")
+        _apply_assumptions_state()
 
-        if page == "Balance Sheet":
-            balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
-            edited_balance = _sidebar_editor(
-                "Balance Sheet Assumptions",
-                "sidebar.balance_sheet",
-                balance_df,
-                {
-                    "Parameter": st.column_config.TextColumn(disabled=True),
-                    "Unit": st.column_config.TextColumn(disabled=True),
-                    "Notes": st.column_config.TextColumn(disabled=True),
-                },
-            )
-            assumptions_state["balance_sheet"] = edited_balance.to_dict("records")
-            _apply_assumptions_state()
+    if page == "Balance Sheet":
+        balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
+        edited_balance = _sidebar_editor(
+            "Balance Sheet Assumptions",
+            "sidebar.balance_sheet",
+            balance_df,
+            {
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+        )
+        assumptions_state["balance_sheet"] = edited_balance.to_dict("records")
+        _apply_assumptions_state()
 
-        if page == "Financing & Debt":
-            financing_df = pd.DataFrame(assumptions_state["financing"])
-            edited_financing = _sidebar_editor(
-                "Financing Assumptions",
-                "sidebar.financing",
-                financing_df,
-                {
-                    "Parameter": st.column_config.TextColumn(disabled=True),
-                    "Unit": st.column_config.TextColumn(disabled=True),
-                    "Notes": st.column_config.TextColumn(disabled=True),
-                },
-            )
-            assumptions_state["financing"] = edited_financing.to_dict("records")
-            _apply_assumptions_state()
+    if page == "Financing & Debt":
+        financing_df = pd.DataFrame(assumptions_state["financing"])
+        edited_financing = _sidebar_editor(
+            "Financing Assumptions",
+            "sidebar.financing",
+            financing_df,
+            {
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+        )
+        assumptions_state["financing"] = edited_financing.to_dict("records")
+        _apply_assumptions_state()
 
-        if page == "Valuation & Purchase Price":
-            valuation_df = pd.DataFrame(assumptions_state["valuation"])
-            edited_valuation = _sidebar_editor(
-                "Valuation Assumptions",
-                "sidebar.valuation",
-                valuation_df,
-                {
-                    "Parameter": st.column_config.TextColumn(disabled=True),
-                    "Unit": st.column_config.TextColumn(disabled=True),
-                    "Notes": st.column_config.TextColumn(disabled=True),
-                },
-            )
-            assumptions_state["valuation"] = edited_valuation.to_dict("records")
-            _apply_assumptions_state()
+    if page == "Valuation & Purchase Price":
+        valuation_df = pd.DataFrame(assumptions_state["valuation"])
+        edited_valuation = _sidebar_editor(
+            "Valuation Assumptions",
+            "sidebar.valuation",
+            valuation_df,
+            {
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+        )
+        assumptions_state["valuation"] = edited_valuation.to_dict("records")
+        _apply_assumptions_state()
 
-        if page == "Equity Case":
-            equity_df = pd.DataFrame(assumptions_state["equity"])
-            edited_equity = _sidebar_editor(
-                "Equity Assumptions",
-                "sidebar.equity",
-                equity_df,
-                {
-                    "Parameter": st.column_config.TextColumn(disabled=True),
-                    "Unit": st.column_config.TextColumn(disabled=True),
-                    "Notes": st.column_config.TextColumn(disabled=True),
-                },
-            )
-            assumptions_state["equity"] = edited_equity.to_dict("records")
-            _apply_assumptions_state()
+    if page == "Equity Case":
+        equity_df = pd.DataFrame(assumptions_state["equity"])
+        edited_equity = _sidebar_editor(
+            "Equity Assumptions",
+            "sidebar.equity",
+            equity_df,
+            {
+                "Parameter": st.column_config.TextColumn(disabled=True),
+                "Unit": st.column_config.TextColumn(disabled=True),
+                "Notes": st.column_config.TextColumn(disabled=True),
+            },
+        )
+        assumptions_state["equity"] = edited_equity.to_dict("records")
+        _apply_assumptions_state()
 
     if page == "Revenue Model":
         st.title("Revenue Model")
@@ -5380,6 +5339,7 @@ def run_app(page_override=None):
             )
 
 
-from main import main
+if __name__ == "__main__":
+    from main import main
 
-main(st.session_state["page_key"])
+    main()
