@@ -8,10 +8,8 @@ import streamlit as st
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Font, PatternFill
 
-st.set_page_config(layout="wide")
-
-st.session_state.setdefault("page_key", "Operating Model (P&L)")
-nav_options = [
+NAV_OPTIONS = [
+    "Overview",
     "Operating Model (P&L)",
     "Cashflow & Liquidity",
     "Balance Sheet",
@@ -23,92 +21,6 @@ nav_options = [
     "Valuation & Purchase Price",
     "Model Settings",
 ]
-nav_index = (
-    nav_options.index(st.session_state["page_key"])
-    if st.session_state["page_key"] in nav_options
-    else 0
-)
-
-with st.sidebar:
-    st.markdown(
-        """
-        <style>
-          [data-testid="stSidebar"],
-          [data-testid="stSidebarContent"] {
-            background: #f7f8fa;
-          }
-          [data-testid="stSidebar"] > div {
-            padding: 1rem 0.85rem;
-          }
-          [data-testid="stSidebar"] {
-            min-width: 280px;
-            max-width: 280px;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            padding: 0.35rem 0.6rem 0.35rem 0.8rem;
-            border-radius: 4px;
-            margin-bottom: 0.15rem;
-            color: #374151;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
-            background: #eef2f7;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] input,
-          [data-testid="stSidebar"] div[role="radiogroup"] svg,
-          [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
-            display: none;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
-            background: #e9eef7;
-            border-left: 3px solid #3b82f6;
-            color: #111827;
-            font-weight: 600;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(1)::before,
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(4)::before,
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(7)::before,
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(9)::before,
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(10)::before {
-            display: block;
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin: 0.9rem 0 0.35rem;
-            width: 100%;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(1)::before {
-            content: "OPERATING MODEL";
-            margin-top: 0;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(4)::before {
-            content: "PLANNING";
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(7)::before {
-            content: "FINANCING";
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(9)::before {
-            content: "VALUATION";
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(10)::before {
-            content: "SETTINGS";
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("**MBO Financial Model**")
-    selection = st.radio(
-        "Navigation",
-        nav_options,
-        index=nav_index,
-        key="main_navigation",
-        label_visibility="collapsed",
-    )
-    st.session_state["page_key"] = selection
 
 from data_model import InputModel, create_demo_input_model
 from calculations.pnl import calculate_pnl
@@ -116,7 +28,6 @@ from calculations.cashflow import calculate_cashflow
 from calculations.debt import calculate_debt_schedule
 from calculations.balance_sheet import calculate_balance_sheet
 from calculations.investment import calculate_investment
-import run_model as run_model
 from calculations.investment import _calculate_irr
 from revenue_model import (
     render_revenue_model_assumptions,
@@ -334,12 +245,6 @@ def _build_model_snapshot_zip(payload):
         )
     buffer.seek(0)
     return buffer
-
-
-
-def render_general_assumptions(input_model):
-    st.title("Assumptions")
-    st.write("Master input sheet – all model assumptions in one place")
 
 
 def render_advanced_assumptions(input_model, show_header=True):
@@ -2353,7 +2258,7 @@ def run_app(page_override=None):
             color-scheme: light !important;
           }
           [data-testid="stSidebar"] {
-            background-color: #f7f8fa !important;
+            background-color: #f0f2f6 !important;
           }
           [data-testid="stSidebar"] * {
             color: #111827 !important;
@@ -2951,12 +2856,13 @@ def run_app(page_override=None):
     input_model.revenue_components_by_year = revenue_components_by_year
     input_model.cost_model_totals_by_year = cost_model_totals
 
+    debt_schedule = calculate_debt_schedule(input_model)
     pnl_base = calculate_pnl(
         input_model,
         revenue_final_by_year=revenue_final_by_year,
         cost_totals_by_year=cost_model_totals,
+        debt_schedule=debt_schedule,
     )
-    debt_schedule = calculate_debt_schedule(input_model)
     cashflow_result = calculate_cashflow(input_model, pnl_base, debt_schedule)
     depreciation_by_year = {
         row["year"]: row.get("depreciation", 0.0)
@@ -2967,6 +2873,7 @@ def run_app(page_override=None):
         depreciation_by_year,
         revenue_final_by_year=revenue_final_by_year,
         cost_totals_by_year=cost_model_totals,
+        debt_schedule=debt_schedule,
     )
     pnl_result = {f"Year {row['year']}": row for row in pnl_list}
     debt_schedule = calculate_debt_schedule(input_model, cashflow_result)
@@ -3044,49 +2951,52 @@ def run_app(page_override=None):
         _apply_assumptions_state()
 
     if page == "Financing & Debt":
-        financing_df = pd.DataFrame(assumptions_state["financing"])
-        edited_financing = _sidebar_editor(
-            "Financing Assumptions",
-            "sidebar.financing",
-            financing_df,
-            {
-                "Parameter": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-        )
-        assumptions_state["financing"] = edited_financing.to_dict("records")
-        _apply_assumptions_state()
+        with st.expander("Financing Assumptions", expanded=False):
+            financing_df = pd.DataFrame(assumptions_state["financing"])
+            edited_financing = _sidebar_editor(
+                "Financing Assumptions",
+                "sidebar.financing",
+                financing_df,
+                {
+                    "Parameter": st.column_config.TextColumn(disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Notes": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            assumptions_state["financing"] = edited_financing.to_dict("records")
+            _apply_assumptions_state()
 
     if page == "Valuation & Purchase Price":
-        valuation_df = pd.DataFrame(assumptions_state["valuation"])
-        edited_valuation = _sidebar_editor(
-            "Valuation Assumptions",
-            "sidebar.valuation",
-            valuation_df,
-            {
-                "Parameter": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-        )
-        assumptions_state["valuation"] = edited_valuation.to_dict("records")
-        _apply_assumptions_state()
+        with st.expander("Valuation Assumptions", expanded=False):
+            valuation_df = pd.DataFrame(assumptions_state["valuation"])
+            edited_valuation = _sidebar_editor(
+                "Valuation Assumptions",
+                "sidebar.valuation",
+                valuation_df,
+                {
+                    "Parameter": st.column_config.TextColumn(disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Notes": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            assumptions_state["valuation"] = edited_valuation.to_dict("records")
+            _apply_assumptions_state()
 
     if page == "Equity Case":
-        equity_df = pd.DataFrame(assumptions_state["equity"])
-        edited_equity = _sidebar_editor(
-            "Equity Assumptions",
-            "sidebar.equity",
-            equity_df,
-            {
-                "Parameter": st.column_config.TextColumn(disabled=True),
-                "Unit": st.column_config.TextColumn(disabled=True),
-                "Notes": st.column_config.TextColumn(disabled=True),
-            },
-        )
-        assumptions_state["equity"] = edited_equity.to_dict("records")
-        _apply_assumptions_state()
+        with st.expander("Equity Assumptions", expanded=False):
+            equity_df = pd.DataFrame(assumptions_state["equity"])
+            edited_equity = _sidebar_editor(
+                "Equity Assumptions",
+                "sidebar.equity",
+                equity_df,
+                {
+                    "Parameter": st.column_config.TextColumn(disabled=True),
+                    "Unit": st.column_config.TextColumn(disabled=True),
+                    "Notes": st.column_config.TextColumn(disabled=True),
+                },
+            )
+            assumptions_state["equity"] = edited_equity.to_dict("records")
+            _apply_assumptions_state()
 
     if page == "Revenue Model":
         st.title("Revenue Model")
@@ -3141,8 +3051,10 @@ def run_app(page_override=None):
         sponsor_equity = equity_assumptions["sponsor_equity_eur"]
         investor_equity = equity_assumptions["investor_equity_eur"]
         required_equity = sponsor_equity + investor_equity
-        debt_at_close = debt_schedule[0]["opening_debt"]
-        peak_debt = max(row["opening_debt"] for row in debt_schedule)
+        debt_at_close = debt_schedule[0]["debt_drawdown"]
+        peak_debt = max(
+            row["opening_debt"] + row["debt_drawdown"] for row in debt_schedule
+        )
         entry_multiple = purchase_price / steady_ebitda if steady_ebitda else 0
 
         if entry_multiple < 7:
@@ -3713,12 +3625,13 @@ def run_app(page_override=None):
             cost_totals = build_cost_model_outputs(
                 st.session_state["assumptions"], revenue_final
             )
+            debt_schedule_local = calculate_debt_schedule(input_model)
             pnl_list_local = calculate_pnl(
                 input_model,
                 revenue_final_by_year=revenue_final,
                 cost_totals_by_year=cost_totals,
+                debt_schedule=debt_schedule_local,
             )
-            debt_schedule_local = calculate_debt_schedule(input_model)
             cashflow_local = calculate_cashflow(
                 input_model, pnl_list_local, debt_schedule_local
             )
@@ -5199,8 +5112,10 @@ def run_app(page_override=None):
         ]
         avg_dscr = sum(dscr_values) / len(dscr_values) if dscr_values else 0
         min_dscr_value = min(dscr_values) if dscr_values else 0
-        peak_debt = max(row["opening_debt"] for row in debt_schedule)
-        debt_at_close = debt_schedule[0]["opening_debt"]
+        peak_debt = max(
+            row["opening_debt"] + row["debt_drawdown"] for row in debt_schedule
+        )
+        debt_at_close = debt_schedule[0]["debt_drawdown"]
         ebitda_year0 = pnl_result["Year 0"]["ebitda"]
         debt_to_ebitda = debt_at_close / ebitda_year0 if ebitda_year0 else 0
 
@@ -5441,4 +5356,103 @@ def run_app(page_override=None):
             )
 
 
-run_app(st.session_state["page_key"])
+def _render_sidebar():
+    nav_index = (
+        NAV_OPTIONS.index(st.session_state["page_key"])
+        if st.session_state["page_key"] in NAV_OPTIONS
+        else 0
+    )
+    with st.sidebar:
+        st.markdown(
+            """
+            <style>
+              [data-testid="stSidebar"],
+              [data-testid="stSidebarContent"] {
+                background: #f0f2f6;
+              }
+              [data-testid="stSidebar"] > div {
+                padding: 1rem 0.85rem;
+              }
+              [data-testid="stSidebar"] {
+                min-width: 280px;
+                max-width: 280px;
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 0.35rem 0.6rem 0.35rem 0.8rem;
+                border-radius: 6px;
+                margin-bottom: 0.15rem;
+                color: #111827;
+                font-weight: 400;
+                position: relative;
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+                background: #f1f3f5;
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] input,
+              [data-testid="stSidebar"] div[role="radiogroup"] svg,
+              [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
+                display: none;
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+                background: #eef2f5;
+                border-left: 3px solid #2563eb;
+                color: #111827;
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(1)::before,
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(2)::before,
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(5)::before,
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(8)::before,
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(10)::before,
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(11)::before {
+                display: block;
+                font-size: 0.7rem;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: #6b7280;
+                margin: 0.9rem 0 0.35rem;
+                width: 100%;
+                pointer-events: none;
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(1)::before {
+                content: "OVERVIEW";
+                margin-top: 0;
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(2)::before {
+                content: "OPERATING MODEL";
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(5)::before {
+                content: "PLANNING";
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(8)::before {
+                content: "FINANCING";
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(10)::before {
+                content: "VALUATION";
+              }
+              [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(11)::before {
+                content: "SETTINGS";
+              }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown("**MBO Financial Model**")
+        selection = st.radio(
+            "Navigation",
+            NAV_OPTIONS,
+            index=nav_index,
+            key="main_navigation",
+            label_visibility="collapsed",
+        )
+    return selection
+
+
+def main():
+    st.set_page_config(layout="wide")
+    st.session_state.setdefault("page_key", "Overview")
+    selection = _render_sidebar()
+    st.session_state["page_key"] = selection
+    run_app(st.session_state["page_key"])

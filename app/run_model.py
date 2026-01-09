@@ -4,107 +4,36 @@ from calculations.cashflow import calculate_cashflow
 from calculations.debt import calculate_debt_schedule
 from calculations.balance_sheet import calculate_balance_sheet
 from calculations.investment import calculate_investment
+from revenue_model import build_revenue_model_outputs
+from cost_model import build_cost_model_outputs
 
 
-def run_model():
+def run_model(assumptions_state=None, scenario="Base", input_model=None):
     # Create the central input model.
-    input_model = InputModel()
+    if input_model is None:
+        input_model = InputModel()
+    if assumptions_state is None:
+        raise ValueError("assumptions_state is required for revenue and cost models.")
 
-    # Build revenue by year from the revenue model inputs.
-    revenue_model = getattr(input_model, "revenue_model", {})
-    reference_revenue = revenue_model.get("reference_revenue_eur").value
-    revenue_final_by_year = []
-    revenue_components_by_year = []
-    for year_index in range(5):
-        guarantee_pct = revenue_model.get(f"guarantee_pct_year_{year_index}").value
-        in_group = revenue_model.get(f"in_group_revenue_year_{year_index}").value
-        external = revenue_model.get(f"external_revenue_year_{year_index}").value
-        modeled_revenue = in_group + external
-        guaranteed_floor = guarantee_pct * reference_revenue
-        final_revenue = max(guaranteed_floor, modeled_revenue)
-        share_guaranteed = (
-            guaranteed_floor / final_revenue if final_revenue else 0.0
-        )
-        revenue_final_by_year.append(final_revenue)
-        revenue_components_by_year.append(
-            {
-                "guaranteed_floor": guaranteed_floor,
-                "modeled_in_group": in_group,
-                "modeled_external": external,
-                "modeled_total": modeled_revenue,
-                "final_total": final_revenue,
-                "share_guaranteed": share_guaranteed,
-            }
-        )
+    # Revenue and cost models are calculated once in their dedicated modules.
+    revenue_final_by_year, revenue_components_by_year = build_revenue_model_outputs(
+        assumptions_state, scenario
+    )
+    cost_model_totals = build_cost_model_outputs(
+        assumptions_state, revenue_final_by_year
+    )
     input_model.revenue_final_by_year = revenue_final_by_year
     input_model.revenue_components_by_year = revenue_components_by_year
-
-    # Build cost model totals (authoritative cost inputs).
-    cost_model = getattr(input_model, "cost_model", {})
-    management_cost = getattr(
-        input_model, "management_md_cost_eur_per_year", 0.0
-    )
-    management_growth = getattr(
-        input_model, "management_md_cost_growth_pct", 0.0
-    )
-    cost_model_totals = []
-    for year_index in range(5):
-        revenue = revenue_final_by_year[year_index]
-        consultant_fte = cost_model.get(f"consultant_fte_year_{year_index}").value
-        consultant_loaded = cost_model.get(
-            f"consultant_base_cost_eur_year_{year_index}"
-        ).value
-        consultant_total = consultant_fte * consultant_loaded
-
-        backoffice_fte = cost_model.get(f"backoffice_fte_year_{year_index}").value
-        backoffice_loaded = cost_model.get(
-            f"backoffice_base_cost_eur_year_{year_index}"
-        ).value
-        backoffice_total = backoffice_fte * backoffice_loaded
-
-        managing_directors_cost = management_cost * (
-            (1 + management_growth) ** year_index
-        )
-
-        fixed_overhead = (
-            cost_model.get(f"fixed_overhead_advisory_year_{year_index}").value
-            + cost_model.get(f"fixed_overhead_legal_year_{year_index}").value
-            + cost_model.get(f"fixed_overhead_it_year_{year_index}").value
-            + cost_model.get(f"fixed_overhead_office_year_{year_index}").value
-            + cost_model.get(f"fixed_overhead_services_year_{year_index}").value
-        )
-
-        def _variable_cost(prefix):
-            pct = cost_model.get(f"variable_{prefix}_pct_year_{year_index}").value
-            eur = cost_model.get(f"variable_{prefix}_eur_year_{year_index}").value
-            return eur if eur > 0 else revenue * pct
-
-        variable_total = (
-            _variable_cost("training")
-            + _variable_cost("travel")
-            + _variable_cost("communication")
-        )
-        personnel_total = consultant_total + backoffice_total + managing_directors_cost
-        overhead_total = fixed_overhead + variable_total
-        cost_model_totals.append(
-            {
-                "consultant_costs": consultant_total,
-                "backoffice_costs": backoffice_total,
-                "management_costs": managing_directors_cost,
-                "personnel_costs": personnel_total,
-                "overhead_and_variable_costs": overhead_total,
-                "total_operating_costs": personnel_total + overhead_total,
-            }
-        )
     input_model.cost_model_totals_by_year = cost_model_totals
 
     # Run the integrated model in the required order.
+    debt_schedule = calculate_debt_schedule(input_model)
     pnl_base = calculate_pnl(
         input_model,
         revenue_final_by_year=revenue_final_by_year,
         cost_totals_by_year=cost_model_totals,
+        debt_schedule=debt_schedule,
     )
-    debt_schedule = calculate_debt_schedule(input_model)
     cashflow_result = calculate_cashflow(input_model, pnl_base, debt_schedule)
     depreciation_by_year = {
         row["year"]: row.get("depreciation", 0.0) for row in cashflow_result
@@ -114,6 +43,7 @@ def run_model():
         depreciation_by_year,
         revenue_final_by_year=revenue_final_by_year,
         cost_totals_by_year=cost_model_totals,
+        debt_schedule=debt_schedule,
     )
     debt_schedule = calculate_debt_schedule(input_model, cashflow_result)
     balance_sheet = calculate_balance_sheet(

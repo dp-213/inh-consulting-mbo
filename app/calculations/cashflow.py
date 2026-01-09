@@ -31,6 +31,13 @@ def calculate_cashflow(input_model, pnl_result, debt_schedule):
         "opening_cash_balance_eur", 0.0
     )
 
+    equity_injection_amount = input_model.transaction_and_financing[
+        "equity_contribution_eur"
+    ].value
+    purchase_price = input_model.transaction_and_financing[
+        "purchase_price_eur"
+    ].value
+
     cashflow = []
     cash_balance = opening_cash_balance
     taxes_due_by_year = []
@@ -81,20 +88,32 @@ def calculate_cashflow(input_model, pnl_result, debt_schedule):
         # Operating cash flow starts from EBITDA and adjusts for taxes and working capital.
         operating_cf = ebitda - taxes_paid - working_capital_change
 
-        # Investing cash flow is primarily capital expenditures.
-        investing_cf = -capex
+        equity_injection = equity_injection_amount if year == 0 else 0.0
+        acquisition_outflow = -purchase_price if year == 0 else 0.0
+
+        # Investing cash flow includes capital expenditures and acquisition outflow.
+        investing_cf = -capex + acquisition_outflow
         free_cashflow = operating_cf + investing_cf
 
-        # Financing cash flow includes only debt drawdown and debt service.
-        financing_cf = (
-            debt_drawdown - interest - principal_repayment
-            if i == 0
-            else -(interest + principal_repayment)
-        )
+        # Financing cash flow includes debt drawdown, equity injection, and debt service.
+        if i == 0:
+            financing_cf = (
+                debt_drawdown
+                + equity_injection
+                - interest
+                - principal_repayment
+            )
+        else:
+            financing_cf = -(interest + principal_repayment)
 
         net_cashflow = free_cashflow + financing_cf
         opening_cash = cash_balance
         cash_balance += net_cashflow
+        reconciliation_gap = opening_cash + net_cashflow - cash_balance
+        if abs(reconciliation_gap) > 1e-6:
+            raise ValueError(
+                f"Cash reconciliation failed in year {year}: {reconciliation_gap}"
+            )
 
         cashflow.append(
             {
@@ -106,8 +125,10 @@ def calculate_cashflow(input_model, pnl_result, debt_schedule):
                 "working_capital_balance": working_capital_balance,
                 "operating_cf": operating_cf,
                 "capex": capex,
+                "acquisition_outflow": acquisition_outflow,
                 "free_cashflow": free_cashflow,
                 "debt_drawdown": debt_drawdown,
+                "equity_injection": equity_injection,
                 "interest_paid": interest,
                 "debt_repayment": principal_repayment,
                 "investing_cf": investing_cf,

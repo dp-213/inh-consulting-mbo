@@ -25,12 +25,13 @@ def calculate_debt_schedule(input_model, cashflow_result=None):
     min_dscr = financing_assumptions.get("minimum_dscr", 1.3)
 
     schedule = []
-    outstanding_principal = initial_debt
+    outstanding_principal = 0.0
 
     # Calculate yearly interest and amortization.
     for i in range(5):
         year = i
         opening_debt = outstanding_principal
+        debt_drawdown = initial_debt if i == 0 else 0.0
 
         # Interest is based on opening principal.
         interest_expense = opening_debt * interest_rate
@@ -51,8 +52,9 @@ def calculate_debt_schedule(input_model, cashflow_result=None):
         special_repayment = (
             special_amount if special_year == i else 0.0
         )
+        pre_repayment_balance = opening_debt + debt_drawdown
         total_repayment = min(
-            opening_debt, scheduled_repayment + special_repayment
+            pre_repayment_balance, scheduled_repayment + special_repayment
         )
         debt_service = interest_expense + total_repayment
 
@@ -62,13 +64,23 @@ def calculate_debt_schedule(input_model, cashflow_result=None):
         covenant_breach = None
 
         # Reduce principal after payment.
-        outstanding_principal = max(opening_debt - total_repayment, 0.0)
+        outstanding_principal = max(
+            pre_repayment_balance - total_repayment, 0.0
+        )
+
+        reconciliation_gap = (
+            opening_debt + debt_drawdown - total_repayment - outstanding_principal
+        )
+        if abs(reconciliation_gap) > 1e-6:
+            raise ValueError(
+                f"Debt reconciliation failed in year {year}: {reconciliation_gap}"
+            )
 
         schedule.append(
             {
                 "year": year,
                 "opening_debt": opening_debt,
-                "debt_drawdown": initial_debt if i == 0 else 0.0,
+                "debt_drawdown": debt_drawdown,
                 "scheduled_repayment": scheduled_repayment,
                 "special_repayment": special_repayment,
                 "total_repayment": total_repayment,

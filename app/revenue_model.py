@@ -106,6 +106,13 @@ def build_revenue_model_outputs(assumptions_state, scenario):
             modeled_group_revenue, guaranteed_floor
         )
         final_total = guaranteed_group_revenue + modeled_external_revenue
+        reconciliation_gap = final_total - (
+            guaranteed_group_revenue + modeled_external_revenue
+        )
+        if abs(reconciliation_gap) > 1e-6:
+            raise ValueError(
+                f"Revenue reconciliation failed in year {year_index}: {reconciliation_gap}"
+            )
         share_guaranteed = (
             guaranteed_group_revenue / final_total if final_total else 0.0
         )

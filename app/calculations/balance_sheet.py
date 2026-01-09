@@ -12,6 +12,9 @@ def calculate_balance_sheet(
     equity_contribution = input_model.transaction_and_financing[
         "equity_contribution_eur"
     ].value
+    purchase_price = input_model.transaction_and_financing[
+        "purchase_price_eur"
+    ].value
 
     # Build a net income lookup from P&L results.
     net_income_by_year = {}
@@ -28,6 +31,7 @@ def calculate_balance_sheet(
 
     equity_start = opening_equity
     fixed_assets = 0.0
+    acquisition_intangible = purchase_price
     working_capital_balance = 0.0
 
     for year_data in cashflow_result:
@@ -56,16 +60,26 @@ def calculate_balance_sheet(
             - equity_buyback
         )
 
-        total_assets = cash_balance + fixed_assets + working_capital_balance
+        total_assets = (
+            cash_balance
+            + fixed_assets
+            + working_capital_balance
+            + acquisition_intangible
+        )
         total_liabilities = financial_debt
         total_liabilities_equity = total_liabilities + equity_end
         balance_check = total_assets - total_liabilities_equity
+        if abs(balance_check) > 1.0:
+            raise ValueError(
+                f"Balance sheet out of balance in year {year}: {balance_check}"
+            )
 
         balance_sheet.append(
             {
                 "year": year,
                 "cash": cash_balance,
                 "fixed_assets": fixed_assets,
+                "acquisition_intangible": acquisition_intangible,
                 "working_capital": working_capital_balance,
                 "total_assets": total_assets,
                 "financial_debt": financial_debt,

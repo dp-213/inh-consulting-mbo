@@ -1,3 +1,6 @@
-from app.streamlit_app import run_app
+from app.streamlit_app import main
 
-__all__ = ["run_app"]
+__all__ = ["main"]
+
+if __name__ == "__main__":
+    main()
