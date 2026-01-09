@@ -2910,13 +2910,17 @@ def run_app():
           div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div {
             margin-left: 0 !important;
           }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label {
+            padding-left: 0.35rem;
+          }
           div[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {
             color: #111827;
             background: transparent;
           }
           div[data-testid="stSidebar"] div[data-testid="stRadio"] input,
           div[data-testid="stSidebar"] div[data-testid="stRadio"] svg,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > span:first-child {
             display: none;
           }
           div[data-testid="stSidebar"] div[data-testid="stRadio"] input:checked + div {
