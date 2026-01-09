@@ -3698,10 +3698,6 @@ def run_app(page_override=None):
             "valuation.valuation_start_year",
             valuation_assumptions["valuation_start_year"],
         )
-        debt_at_close = st.session_state.get(
-            "valuation.debt_at_close_eur",
-            valuation_assumptions["debt_at_close_eur"],
-        )
         transaction_cost_pct = st.session_state.get(
             "valuation.transaction_cost_pct",
             valuation_assumptions["transaction_cost_pct"],
@@ -3720,6 +3716,56 @@ def run_app(page_override=None):
             - balance_table.loc[0, "cash"]
         )
         seller_equity_value = seller_ev - net_debt_close
+
+        cashflow_table = pd.DataFrame(cashflow_result)
+        free_cashflows = cashflow_table["free_cashflow"].tolist()
+        cumulative_pv = 0.0
+        for year_index, fcf in enumerate(free_cashflows):
+            if year_index >= valuation_start_year:
+                exponent = year_index - valuation_start_year + 1
+                discount_factor = (
+                    1 / ((1 + buyer_discount_rate) ** exponent)
+                    if buyer_discount_rate
+                    else 1.0
+                )
+            else:
+                discount_factor = 0.0
+            cumulative_pv += fcf * discount_factor
+
+        terminal_value = 0.0
+        terminal_pv = 0.0
+        if include_terminal_value and buyer_discount_rate:
+            terminal_value = free_cashflows[-1] / buyer_discount_rate
+            last_exponent = max(1, len(free_cashflows) - valuation_start_year)
+            terminal_pv = terminal_value / (
+                (1 + buyer_discount_rate) ** last_exponent
+            )
+
+        enterprise_value_dcf = cumulative_pv + terminal_pv
+        transaction_costs = enterprise_value_dcf * transaction_cost_pct
+        buyer_equity_value = (
+            enterprise_value_dcf - net_debt_close - transaction_costs
+        )
+
+        valuation_gap = buyer_equity_value - seller_equity_value
+        valuation_gap_pct = (
+            valuation_gap / seller_equity_value
+            if seller_equity_value
+            else 0
+        )
+
+        metric_cols = st.columns(3)
+        metric_cols[0].metric(
+            "Seller Equity Value", format_currency(seller_equity_value)
+        )
+        metric_cols[1].metric(
+            "Buyer Affordability (Equity Value after financing)",
+            format_currency(buyer_equity_value),
+        )
+        metric_cols[2].metric(
+            "Gap (EUR / %)",
+            f"{format_currency(valuation_gap)} | {format_pct(valuation_gap_pct)}",
+        )
 
         seller_rows = {
             "Reference Year EBIT": {},
@@ -3746,8 +3792,8 @@ def run_app(page_override=None):
                 seller_equity_value if year_index == reference_year else ""
             )
 
-        st.markdown("### Seller Valuation (Multiple-Based)")
-        st.write("Seller expectation range based on EBIT multiple.")
+        with st.expander("Seller Valuation (Multiple-Based)", expanded=False):
+            st.write("Seller expectation range based on EBIT multiple.")
         seller_multiple_low = seller_multiple
         seller_multiple_mid = seller_multiple
         seller_multiple_high = seller_multiple
@@ -3791,29 +3837,28 @@ def run_app(page_override=None):
                 },
             ]
         )
-        st.dataframe(seller_range_table, use_container_width=True)
-        seller_table = pd.DataFrame.from_dict(seller_rows, orient="index")
-        seller_table = seller_table[
-            [f"Year {i}" for i in range(5)]
-        ].reset_index()
-        seller_table.rename(columns={"index": "Line Item"}, inplace=True)
-        seller_total_rows = {"Enterprise Value (EV)", "Equity Value (Seller View)"}
-        seller_formatters = {
-            "Applied EBIT Multiple": lambda value: f"{value:.2f}x"
-            if value not in ("", None)
-            else "",
-        }
-        _render_custom_table_html(
-            seller_table, set(), seller_total_rows, seller_formatters
-        )
+            st.dataframe(seller_range_table, use_container_width=True)
+            seller_table = pd.DataFrame.from_dict(seller_rows, orient="index")
+            seller_table = seller_table[
+                [f"Year {i}" for i in range(5)]
+            ].reset_index()
+            seller_table.rename(columns={"index": "Line Item"}, inplace=True)
+            seller_total_rows = {"Enterprise Value (EV)", "Equity Value (Seller View)"}
+            seller_formatters = {
+                "Applied EBIT Multiple": lambda value: f"{value:.2f}x"
+                if value not in ("", None)
+                else "",
+            }
+            _render_custom_table_html(
+                seller_table, set(), seller_total_rows, seller_formatters
+            )
 
-        st.markdown("### Buyer Valuation (Cash-Based)")
-        st.write(
-            "Buyer view is based on discounted free cashflow and explicitly "
-            "allows for negative equity values if pricing is too high."
-        )
-        cashflow_table = pd.DataFrame(cashflow_result)
-        free_cashflows = cashflow_table["free_cashflow"].tolist()
+        with st.expander("Buyer Valuation (Cash-Based)", expanded=False):
+            st.write(
+                "Buyer view is based on discounted free cashflow and explicitly "
+                "allows for negative equity values if pricing is too high."
+            )
+            st.caption("Note: No terminal value included (conservative downside view).")
 
         dcf_rows = {
             "Free Cashflow": {},
@@ -3821,101 +3866,86 @@ def run_app(page_override=None):
             "Present Value of FCF": {},
             "Cumulative PV of FCF": {},
             "Terminal Value": {},
-            "Enterprise Value (DCF)": {},
+            "PV of 5Y FCF (no terminal)": {},
             "Net Debt at Close": {},
             "Transaction Costs": {},
             "Equity Value (Buyer View)": {},
         }
-        cumulative_pv = 0.0
-        for year_index, fcf in enumerate(free_cashflows):
-            year_label = f"Year {year_index}"
-            if year_index >= valuation_start_year:
-                exponent = year_index - valuation_start_year + 1
-                discount_factor = (
-                    1 / ((1 + buyer_discount_rate) ** exponent)
-                    if buyer_discount_rate
-                    else 1.0
+            cumulative_pv = 0.0
+            for year_index, fcf in enumerate(free_cashflows):
+                year_label = f"Year {year_index}"
+                if year_index >= valuation_start_year:
+                    exponent = year_index - valuation_start_year + 1
+                    discount_factor = (
+                        1 / ((1 + buyer_discount_rate) ** exponent)
+                        if buyer_discount_rate
+                        else 1.0
+                    )
+                else:
+                    discount_factor = 0.0
+                pv_fcf = fcf * discount_factor
+                cumulative_pv += pv_fcf
+
+                dcf_rows["Free Cashflow"][year_label] = fcf
+                dcf_rows["Discount Factor"][year_label] = discount_factor
+                dcf_rows["Present Value of FCF"][year_label] = pv_fcf
+                dcf_rows["Cumulative PV of FCF"][year_label] = cumulative_pv
+
+            if include_terminal_value and buyer_discount_rate:
+                dcf_rows["Terminal Value"]["Year 4"] = terminal_value
+
+            for year_index in range(5):
+                year_label = f"Year {year_index}"
+                dcf_rows["PV of 5Y FCF (no terminal)"][year_label] = (
+                    enterprise_value_dcf if year_index == 4 else ""
                 )
-            else:
-                discount_factor = 0.0
-            pv_fcf = fcf * discount_factor
-            cumulative_pv += pv_fcf
+                dcf_rows["Net Debt at Close"][year_label] = (
+                    net_debt_close if year_index == 4 else ""
+                )
+                dcf_rows["Transaction Costs"][year_label] = (
+                    transaction_costs if year_index == 4 else ""
+                )
+                dcf_rows["Equity Value (Buyer View)"][year_label] = (
+                    buyer_equity_value if year_index == 4 else ""
+                )
 
-            dcf_rows["Free Cashflow"][year_label] = fcf
-            dcf_rows["Discount Factor"][year_label] = discount_factor
-            dcf_rows["Present Value of FCF"][year_label] = pv_fcf
-            dcf_rows["Cumulative PV of FCF"][year_label] = cumulative_pv
-
-        terminal_value = 0.0
-        terminal_pv = 0.0
-        if include_terminal_value and buyer_discount_rate:
-            terminal_value = free_cashflows[-1] / buyer_discount_rate
-            last_exponent = max(1, len(free_cashflows) - valuation_start_year)
-            terminal_pv = terminal_value / (
-                (1 + buyer_discount_rate) ** last_exponent
+            dcf_table = pd.DataFrame.from_dict(dcf_rows, orient="index")
+            dcf_table = dcf_table[[f"Year {i}" for i in range(5)]].reset_index()
+            dcf_table.rename(columns={"index": "Line Item"}, inplace=True)
+            dcf_total_rows = {
+                "PV of 5Y FCF (no terminal)",
+                "Equity Value (Buyer View)",
+            }
+            dcf_formatters = {
+                "Discount Factor": lambda value: f"{value:.2f}"
+                if value not in ("", None)
+                else "",
+            }
+            _render_custom_table_html(
+                dcf_table, set(), dcf_total_rows, dcf_formatters
             )
-            dcf_rows["Terminal Value"]["Year 4"] = terminal_value
-
-        enterprise_value_dcf = cumulative_pv + terminal_pv
-        transaction_costs = enterprise_value_dcf * transaction_cost_pct
-        buyer_equity_value = (
-            enterprise_value_dcf - debt_at_close - transaction_costs
-        )
-
-        for year_index in range(5):
-            year_label = f"Year {year_index}"
-            dcf_rows["Enterprise Value (DCF)"][year_label] = (
-                enterprise_value_dcf if year_index == 4 else ""
-            )
-            dcf_rows["Net Debt at Close"][year_label] = (
-                debt_at_close if year_index == 4 else ""
-            )
-            dcf_rows["Transaction Costs"][year_label] = (
-                transaction_costs if year_index == 4 else ""
-            )
-            dcf_rows["Equity Value (Buyer View)"][year_label] = (
-                buyer_equity_value if year_index == 4 else ""
-            )
-
-        dcf_table = pd.DataFrame.from_dict(dcf_rows, orient="index")
-        dcf_table = dcf_table[[f"Year {i}" for i in range(5)]].reset_index()
-        dcf_table.rename(columns={"index": "Line Item"}, inplace=True)
-        dcf_total_rows = {"Enterprise Value (DCF)", "Equity Value (Buyer View)"}
-        dcf_formatters = {
-            "Discount Factor": lambda value: f"{value:.2f}"
-            if value not in ("", None)
-            else "",
-        }
-        _render_custom_table_html(
-            dcf_table, set(), dcf_total_rows, dcf_formatters
-        )
 
         st.markdown("### Purchase Price Logic")
-        max_affordable_price = buyer_equity_value
         st.write(
-            "Max affordable purchase price (Buyer) is the equity value that does not "
+            "Affordability (Equity Value after financing) is the equity value that does not "
             "break liquidity or financing constraints."
         )
+        st.caption("If < 0: price must be reduced to 0 and/or seller support required.")
         max_price_table = pd.DataFrame(
             [
                 {
-                    "Metric": "Max Affordable Purchase Price (Buyer)",
-                    "Value": format_currency(max_affordable_price),
+                    "Metric": "Affordability (Equity Value after financing)",
+                    "Value": format_currency(buyer_equity_value),
                 }
             ]
         )
         st.dataframe(max_price_table, use_container_width=True)
 
         st.markdown("### Purchase Price Bridge")
-        valuation_gap = buyer_equity_value - seller_equity_value
-        valuation_gap_pct = (
-            valuation_gap / seller_equity_value
-            if seller_equity_value
-            else 0
-        )
         bridge_rows = {
             "Seller Equity Value": {"Year 0": seller_equity_value},
             "Buyer Equity Value": {"Year 0": buyer_equity_value},
+            "Net Debt at Close": {"Year 0": net_debt_close},
             "Valuation Gap (EUR)": {"Year 0": valuation_gap},
             "Valuation Gap (%)": {"Year 0": valuation_gap_pct},
         }
@@ -3961,7 +3991,7 @@ def run_app(page_override=None):
                 )
             enterprise_value_dcf = cumulative_pv + terminal_pv
             transaction_costs = enterprise_value_dcf * transaction_cost_pct
-            return enterprise_value_dcf - debt_at_close - transaction_costs
+            return enterprise_value_dcf - net_debt_close - transaction_costs
 
         buyer_value_active = _buyer_value_for_active_scenario()
         buyer_value_worst = buyer_value_active
@@ -4038,8 +4068,8 @@ def run_app(page_override=None):
                     "Value": format_pct(investment_result["irr"]),
                 },
                 {
-                    "KPI": "Max Affordable Purchase Price",
-                    "Value": format_currency(buyer_equity_value),
+                "KPI": "Affordability (Equity Value after financing)",
+                "Value": format_currency(buyer_equity_value),
                 },
                 {
                     "KPI": "Headroom vs Seller Ask",
@@ -4091,7 +4121,7 @@ def run_app(page_override=None):
             )
             st.caption(
                 "Present Value of FCF = FCF × Discount Factor; "
-                "Enterprise Value is the sum of PVs."
+                "PV of 5Y FCF (no terminal) is the sum of PVs."
             )
             if include_terminal_value:
                 st.caption(
@@ -4102,7 +4132,7 @@ def run_app(page_override=None):
             st.caption(
                 f"Equity Value (Buyer) = EV - Debt at Close - Transaction Costs "
                 f"= {format_currency(enterprise_value_dcf)} - "
-                f"{format_currency(debt_at_close)} - "
+                f"{format_currency(net_debt_close)} - "
                 f"{format_currency(transaction_costs)}."
             )
             st.markdown("### Buyer vs. Seller Gap")
