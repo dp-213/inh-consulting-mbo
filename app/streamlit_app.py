@@ -2897,91 +2897,90 @@ def run_app():
 
         nav_css = """
         <style>
-          div[data-testid="stSidebar"] button {
-            background: transparent;
-            border: none;
-            padding: 0.15rem 0 0.15rem 0.25rem;
-            text-align: left;
-            width: 100%;
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0.2rem 0 0.2rem 0.35rem;
+            border-radius: 4px;
+            margin: 0;
             color: #6b7280;
-            box-shadow: none;
-            font-weight: 400;
-            cursor: pointer;
+            white-space: nowrap;
           }
-          div[data-testid="stSidebar"] button:hover {
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div {
+            margin-left: 0 !important;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {
             color: #111827;
             background: transparent;
           }
-          div[data-testid="stSidebar"] .nav-item {
-            display: block;
-            color: #6b7280;
-            padding: 0.15rem 0 0.15rem 0.25rem;
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] input,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] svg,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {
+            display: none;
           }
-          div[data-testid="stSidebar"] .nav-item.active {
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] input:checked + div {
             color: #111827;
             font-weight: 600;
             border-left: 3px solid #3b82f6;
-            padding-left: 0.35rem;
+            padding-left: 0.5rem;
             background: #eef2f7;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(1)::before,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(4)::before,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(7)::before,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(9)::before,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(10)::before {
+            display: block;
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin: 0.85rem 0 0.35rem;
+            width: 100%;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(1)::before {
+            content: "OPERATING MODEL";
+            margin-top: 0;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(4)::before {
+            content: "PLANNING";
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(7)::before {
+            content: "FINANCING";
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(9)::before {
+            content: "VALUATION";
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(10)::before {
+            content: "SETTINGS";
           }
         </style>
         """
         st.markdown(nav_css, unsafe_allow_html=True)
 
+        nav_options = [
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "Revenue Model",
+            "Cost Model",
+            "Other Assumptions",
+            "Financing & Debt",
+            "Equity Case",
+            "Valuation & Purchase Price",
+            "Model Settings",
+        ]
+
         st.markdown("**MBO Financial Model**")
-        current_page = st.session_state["page"]
-
-        st.markdown("OPERATING MODEL")
-        if current_page == "Operating Model (P&L)":
-            st.markdown('<div class="nav-item active">Operating Model (P&L)</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Operating Model (P&L)", key="nav_operating"):
-            st.session_state["page"] = "Operating Model (P&L)"
-        if current_page == "Cashflow & Liquidity":
-            st.markdown('<div class="nav-item active">Cashflow & Liquidity</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Cashflow & Liquidity", key="nav_cashflow"):
-            st.session_state["page"] = "Cashflow & Liquidity"
-        if current_page == "Balance Sheet":
-            st.markdown('<div class="nav-item active">Balance Sheet</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Balance Sheet", key="nav_balance"):
-            st.session_state["page"] = "Balance Sheet"
-
-        st.markdown("PLANNING")
-        if current_page == "Revenue Model":
-            st.markdown('<div class="nav-item active">Revenue Model</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Revenue Model", key="nav_revenue"):
-            st.session_state["page"] = "Revenue Model"
-        if current_page == "Cost Model":
-            st.markdown('<div class="nav-item active">Cost Model</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Cost Model", key="nav_cost"):
-            st.session_state["page"] = "Cost Model"
-        if current_page == "Other Assumptions":
-            st.markdown('<div class="nav-item active">Other Assumptions</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Other Assumptions", key="nav_other"):
-            st.session_state["page"] = "Other Assumptions"
-
-        st.markdown("FINANCING")
-        if current_page == "Financing & Debt":
-            st.markdown('<div class="nav-item active">Financing & Debt</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Financing & Debt", key="nav_financing"):
-            st.session_state["page"] = "Financing & Debt"
-        if current_page == "Equity Case":
-            st.markdown('<div class="nav-item active">Equity Case</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Equity Case", key="nav_equity"):
-            st.session_state["page"] = "Equity Case"
-
-        st.markdown("VALUATION")
-        if current_page == "Valuation & Purchase Price":
-            st.markdown('<div class="nav-item active">Valuation & Purchase Price</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Valuation & Purchase Price", key="nav_valuation"):
-            st.session_state["page"] = "Valuation & Purchase Price"
-
-        st.markdown("SETTINGS")
-        if current_page == "Model Settings":
-            st.markdown('<div class="nav-item active">Model Settings</div>', unsafe_allow_html=True)
-        elif st.sidebar.button("Model Settings", key="nav_settings"):
-            st.session_state["page"] = "Model Settings"
-
-        page = st.session_state["page"]
+        page = st.sidebar.radio(
+            "",
+            nav_options,
+            index=nav_options.index(st.session_state["page"]),
+            key="page",
+            label_visibility="collapsed",
+        )
+        st.session_state["page"] = page
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
