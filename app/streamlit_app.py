@@ -2985,6 +2985,7 @@ def run_app():
             label_visibility="collapsed",
         )
         st.session_state["page"] = selected_page
+        page = st.session_state["page"]
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
