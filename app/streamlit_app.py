@@ -342,10 +342,10 @@ def render_advanced_assumptions(input_model, show_header=True):
 
     assumptions_state = st.session_state["assumptions"]
 
-    def _maybe_seed_editor_state(editor_key, display_df):
-        refresh_key = f"{editor_key}.refresh"
-        if editor_key not in st.session_state or st.session_state.pop(refresh_key, False):
-            st.session_state[editor_key] = display_df
+    def _maybe_seed_editor_state(state_key, display_df):
+        refresh_key = f"{state_key}.refresh"
+        if state_key not in st.session_state or st.session_state.pop(refresh_key, False):
+            st.session_state[state_key] = display_df
 
     def _compute_editor_hash(editor_df):
         return json.dumps(
@@ -354,16 +354,17 @@ def render_advanced_assumptions(input_model, show_header=True):
             default=str,
         )
 
-    editor_version = "v2"
+    editor_version = "v3"
     st.markdown("### Financing Assumptions")
     financing_df = pd.DataFrame(assumptions_state["financing"])
     financing_display = _apply_unit_display(financing_df)
-    financing_editor_key = f"editor.assumptions.financing.{editor_version}"
-    _maybe_seed_editor_state(financing_editor_key, financing_display)
+    financing_state_key = f"state.assumptions.financing.{editor_version}"
+    financing_widget_key = f"widget.assumptions.financing.{editor_version}"
+    _maybe_seed_editor_state(financing_state_key, financing_display)
     financing_edit = st.data_editor(
-        st.session_state[financing_editor_key],
+        st.session_state[financing_state_key],
         hide_index=True,
-        key=financing_editor_key,
+        key=financing_widget_key,
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
@@ -375,6 +376,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     financing_hash = _compute_editor_hash(financing_edit)
     if st.session_state.get("hash.assumptions.financing") != financing_hash:
         st.session_state["hash.assumptions.financing"] = financing_hash
+        st.session_state[financing_state_key] = financing_edit
         with _timed("Assumptions: Financing sync"):
             financing_edit = _restore_unit_values(financing_edit)
             assumptions_state["financing"] = financing_edit.to_dict("records")
@@ -406,12 +408,13 @@ def render_advanced_assumptions(input_model, show_header=True):
     st.markdown("### Equity & Investor Assumptions")
     equity_df = pd.DataFrame(assumptions_state["equity"])
     equity_display = _apply_unit_display(equity_df)
-    equity_editor_key = f"editor.assumptions.equity.{editor_version}"
-    _maybe_seed_editor_state(equity_editor_key, equity_display)
+    equity_state_key = f"state.assumptions.equity.{editor_version}"
+    equity_widget_key = f"widget.assumptions.equity.{editor_version}"
+    _maybe_seed_editor_state(equity_state_key, equity_display)
     equity_edit = st.data_editor(
-        st.session_state[equity_editor_key],
+        st.session_state[equity_state_key],
         hide_index=True,
-        key=equity_editor_key,
+        key=equity_widget_key,
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
@@ -423,6 +426,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     equity_hash = _compute_editor_hash(equity_edit)
     if st.session_state.get("hash.assumptions.equity") != equity_hash:
         st.session_state["hash.assumptions.equity"] = equity_hash
+        st.session_state[equity_state_key] = equity_edit
         with _timed("Assumptions: Equity sync"):
             equity_edit = _restore_unit_values(equity_edit)
             assumptions_state["equity"] = equity_edit.to_dict("records")
@@ -454,12 +458,13 @@ def render_advanced_assumptions(input_model, show_header=True):
     st.markdown("### Cashflow Assumptions")
     cashflow_df = pd.DataFrame(assumptions_state["cashflow"])
     cashflow_display = _apply_unit_display(cashflow_df)
-    cashflow_editor_key = f"editor.assumptions.cashflow.{editor_version}"
-    _maybe_seed_editor_state(cashflow_editor_key, cashflow_display)
+    cashflow_state_key = f"state.assumptions.cashflow.{editor_version}"
+    cashflow_widget_key = f"widget.assumptions.cashflow.{editor_version}"
+    _maybe_seed_editor_state(cashflow_state_key, cashflow_display)
     cashflow_edit = st.data_editor(
-        st.session_state[cashflow_editor_key],
+        st.session_state[cashflow_state_key],
         hide_index=True,
-        key=cashflow_editor_key,
+        key=cashflow_widget_key,
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
@@ -471,6 +476,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     cashflow_hash = _compute_editor_hash(cashflow_edit)
     if st.session_state.get("hash.assumptions.cashflow") != cashflow_hash:
         st.session_state["hash.assumptions.cashflow"] = cashflow_hash
+        st.session_state[cashflow_state_key] = cashflow_edit
         cashflow_edit = _restore_unit_values(cashflow_edit)
         assumptions_state["cashflow"] = cashflow_edit.to_dict("records")
         param_map = {
@@ -501,12 +507,13 @@ def render_advanced_assumptions(input_model, show_header=True):
     st.markdown("### Balance Sheet Assumptions")
     balance_df = pd.DataFrame(assumptions_state["balance_sheet"])
     balance_display = _apply_unit_display(balance_df)
-    balance_editor_key = f"editor.assumptions.balance_sheet.{editor_version}"
-    _maybe_seed_editor_state(balance_editor_key, balance_display)
+    balance_state_key = f"state.assumptions.balance_sheet.{editor_version}"
+    balance_widget_key = f"widget.assumptions.balance_sheet.{editor_version}"
+    _maybe_seed_editor_state(balance_state_key, balance_display)
     balance_edit = st.data_editor(
-        st.session_state[balance_editor_key],
+        st.session_state[balance_state_key],
         hide_index=True,
-        key=balance_editor_key,
+        key=balance_widget_key,
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
@@ -518,6 +525,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     balance_hash = _compute_editor_hash(balance_edit)
     if st.session_state.get("hash.assumptions.balance_sheet") != balance_hash:
         st.session_state["hash.assumptions.balance_sheet"] = balance_hash
+        st.session_state[balance_state_key] = balance_edit
         balance_edit = _restore_unit_values(balance_edit)
         assumptions_state["balance_sheet"] = balance_edit.to_dict("records")
         param_map = {
@@ -540,12 +548,13 @@ def render_advanced_assumptions(input_model, show_header=True):
     st.markdown("### Valuation Assumptions")
     valuation_df = pd.DataFrame(assumptions_state["valuation"])
     valuation_display = _apply_unit_display(valuation_df)
-    valuation_editor_key = f"editor.assumptions.valuation.{editor_version}"
-    _maybe_seed_editor_state(valuation_editor_key, valuation_display)
+    valuation_state_key = f"state.assumptions.valuation.{editor_version}"
+    valuation_widget_key = f"widget.assumptions.valuation.{editor_version}"
+    _maybe_seed_editor_state(valuation_state_key, valuation_display)
     valuation_edit = st.data_editor(
-        st.session_state[valuation_editor_key],
+        st.session_state[valuation_state_key],
         hide_index=True,
-        key=valuation_editor_key,
+        key=valuation_widget_key,
         column_config={
             "Parameter": st.column_config.TextColumn(disabled=True),
             "Unit": st.column_config.TextColumn(disabled=True),
@@ -557,6 +566,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     valuation_hash = _compute_editor_hash(valuation_edit)
     if st.session_state.get("hash.assumptions.valuation") != valuation_hash:
         st.session_state["hash.assumptions.valuation"] = valuation_hash
+        st.session_state[valuation_state_key] = valuation_edit
         valuation_edit = _restore_unit_values(valuation_edit)
         assumptions_state["valuation"] = valuation_edit.to_dict("records")
         param_map = {
@@ -3672,7 +3682,7 @@ def run_app(page_override=None):
 
     assumptions_state = st.session_state["assumptions"]
 
-    editor_version = "v2"
+    editor_version = "v3"
 
     def _sidebar_editor(title, key, df, column_config):
         st.markdown(f"### {title}")
@@ -3681,14 +3691,15 @@ def run_app(page_override=None):
         for col in display_df.columns:
             if col not in config:
                 config[col] = st.column_config.TextColumn()
-        editor_key = f"editor.{key}.{editor_version}"
-        refresh_key = f"{editor_key}.refresh"
-        if editor_key not in st.session_state or st.session_state.pop(refresh_key, False):
-            st.session_state[editor_key] = display_df
+        state_key = f"state.{key}.{editor_version}"
+        widget_key = f"widget.{key}.{editor_version}"
+        refresh_key = f"{state_key}.refresh"
+        if state_key not in st.session_state or st.session_state.pop(refresh_key, False):
+            st.session_state[state_key] = display_df
         edited = st.data_editor(
-            st.session_state[editor_key],
+            st.session_state[state_key],
             hide_index=True,
-            key=editor_key,
+            key=widget_key,
             column_config=config,
             use_container_width=True,
         )
@@ -3701,6 +3712,7 @@ def run_app(page_override=None):
         changed = st.session_state.get(hash_key) != edited_hash
         if changed:
             st.session_state[hash_key] = edited_hash
+            st.session_state[state_key] = edited
         return edited, changed
 
     if page == "Cashflow & Liquidity":
