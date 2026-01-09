@@ -1,18 +1,12 @@
 import io
 import json
-import os
 import subprocess
-import sys
 from datetime import datetime
 import zipfile
 import pandas as pd
 import streamlit as st
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Font, PatternFill
-
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
 
 NAV_OPTIONS = [
     "Overview",
@@ -29,22 +23,22 @@ NAV_OPTIONS = [
 ]
 
 try:
-    from app.data_model import InputModel, create_demo_input_model
-    from app.calculations.pnl import calculate_pnl
-    from app.calculations.cashflow import calculate_cashflow
-    from app.calculations.debt import calculate_debt_schedule
-    from app.calculations.balance_sheet import calculate_balance_sheet
-    from app.calculations.investment import calculate_investment
-    from app.calculations.investment import _calculate_irr
-    from app.revenue_model import (
+    from .data_model import InputModel, create_demo_input_model
+    from .calculations.pnl import calculate_pnl
+    from .calculations.cashflow import calculate_cashflow
+    from .calculations.debt import calculate_debt_schedule
+    from .calculations.balance_sheet import calculate_balance_sheet
+    from .calculations.investment import calculate_investment
+    from .calculations.investment import _calculate_irr
+    from .revenue_model import (
         render_revenue_model_assumptions,
         build_revenue_model_outputs,
     )
-    from app.cost_model import (
+    from .cost_model import (
         render_cost_model_assumptions,
         build_cost_model_outputs,
     )
-except ModuleNotFoundError:
+except ImportError:
     from data_model import InputModel, create_demo_input_model
     from calculations.pnl import calculate_pnl
     from calculations.cashflow import calculate_cashflow
