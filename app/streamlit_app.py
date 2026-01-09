@@ -38,11 +38,18 @@ try:
     from .revenue_model import render_revenue_model_assumptions
     from .cost_model import render_cost_model_assumptions
 except (ImportError, KeyError):
-    from data_model import InputModel, create_demo_input_model
-    from calculations.investment import _calculate_irr
-    from run_model import run_model
-    from revenue_model import render_revenue_model_assumptions
-    from cost_model import render_cost_model_assumptions
+    try:
+        from app.data_model import InputModel, create_demo_input_model
+        from app.calculations.investment import _calculate_irr
+        from app.run_model import run_model
+        from app.revenue_model import render_revenue_model_assumptions
+        from app.cost_model import render_cost_model_assumptions
+    except (ImportError, KeyError):
+        from data_model import InputModel, create_demo_input_model
+        from calculations.investment import _calculate_irr
+        from run_model import run_model
+        from revenue_model import render_revenue_model_assumptions
+        from cost_model import render_cost_model_assumptions
 
 
 def _pnl_dict_to_list(pnl_dict):
