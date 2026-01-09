@@ -2894,6 +2894,61 @@ def run_app(page_override=None):
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
+        nav_css = """
+        <style>
+          div[data-testid="stRadio"] label:nth-child(1)::before,
+          div[data-testid="stRadio"] label:nth-child(4)::before,
+          div[data-testid="stRadio"] label:nth-child(7)::before,
+          div[data-testid="stRadio"] label:nth-child(9)::before,
+          div[data-testid="stRadio"] label:nth-child(10)::before {
+            display: block;
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin: 0.9rem 0 0.35rem;
+            width: 100%;
+          }
+          div[data-testid="stRadio"] label:nth-child(1)::before {
+            content: "OPERATING MODEL";
+            margin-top: 0;
+          }
+          div[data-testid="stRadio"] label:nth-child(4)::before {
+            content: "PLANNING";
+          }
+          div[data-testid="stRadio"] label:nth-child(7)::before {
+            content: "FINANCING";
+          }
+          div[data-testid="stRadio"] label:nth-child(9)::before {
+            content: "VALUATION";
+          }
+          div[data-testid="stRadio"] label:nth-child(10)::before {
+            content: "SETTINGS";
+          }
+        </style>
+        """
+        st.markdown(nav_css, unsafe_allow_html=True)
+
+        nav_options = [
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "Revenue Model",
+            "Cost Model",
+            "Other Assumptions",
+            "Financing & Debt",
+            "Equity Case",
+            "Valuation & Purchase Price",
+            "Model Settings",
+        ]
+
+        st.markdown("**MBO Financial Model**")
+        page = st.sidebar.radio(
+            "Navigation",
+            nav_options,
+            key="page",
+            label_visibility="collapsed",
+        )
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
@@ -5341,6 +5396,6 @@ def run_app(page_override=None):
 
 
 if __name__ == "__main__":
-    from main import main
+    from app.main import main
 
     main()
