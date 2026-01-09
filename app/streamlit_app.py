@@ -2766,6 +2766,19 @@ def run_app():
 
     _apply_assumptions_state()
 
+    def _render_scenario_buttons():
+        current = st.session_state.get("scenario", "Base")
+        cols = st.columns(3)
+        for col, label in zip(cols, ["Worst", "Base", "Best"]):
+            is_active = label == current
+            if col.button(
+                label,
+                key=f"scenario_{label.lower()}",
+                type="primary" if is_active else "secondary",
+                use_container_width=True,
+            ):
+                st.session_state["scenario"] = label
+
     # Global scenario selector (active scenario for all pages).
     st.session_state.setdefault("scenario", "Base")
     active_scenario = st.session_state["scenario"]
@@ -2879,49 +2892,33 @@ def run_app():
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        nav_css = """
-        <style>
-          div[data-testid="stSidebar"] button {
-            text-align: left;
-            width: 100%;
-            white-space: nowrap;
-          }
-        </style>
-        """
-        st.markdown(nav_css, unsafe_allow_html=True)
-
         st.markdown("**MBO Financial Model**")
         st.markdown("OPERATING MODEL")
-        if st.sidebar.button("Operating Model (P&L)", key="nav_operating_model"):
-            st.session_state["page"] = "Operating Model (P&L)"
-        if st.sidebar.button("Cashflow & Liquidity", key="nav_cashflow"):
-            st.session_state["page"] = "Cashflow & Liquidity"
-        if st.sidebar.button("Balance Sheet", key="nav_balance_sheet"):
-            st.session_state["page"] = "Balance Sheet"
-
         st.markdown("PLANNING")
-        if st.sidebar.button("Revenue Model", key="nav_revenue_model"):
-            st.session_state["page"] = "Revenue Model"
-        if st.sidebar.button("Cost Model", key="nav_cost_model"):
-            st.session_state["page"] = "Cost Model"
-        if st.sidebar.button("Other Assumptions", key="nav_other_assumptions"):
-            st.session_state["page"] = "Other Assumptions"
-
         st.markdown("FINANCING")
-        if st.sidebar.button("Financing & Debt", key="nav_financing_debt"):
-            st.session_state["page"] = "Financing & Debt"
-        if st.sidebar.button("Equity Case", key="nav_equity_case"):
-            st.session_state["page"] = "Equity Case"
-
         st.markdown("VALUATION")
-        if st.sidebar.button("Valuation & Purchase Price", key="nav_valuation"):
-            st.session_state["page"] = "Valuation & Purchase Price"
-
         st.markdown("SETTINGS")
-        if st.sidebar.button("Model Settings", key="nav_model_settings"):
-            st.session_state["page"] = "Model Settings"
 
-        page = st.session_state["page"]
+        nav_options = [
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "Revenue Model",
+            "Cost Model",
+            "Other Assumptions",
+            "Financing & Debt",
+            "Equity Case",
+            "Valuation & Purchase Price",
+            "Model Settings",
+        ]
+        current_page = st.session_state.get("page", "Operating Model (P&L)")
+        page = st.sidebar.selectbox(
+            "",
+            nav_options,
+            index=nav_options.index(current_page),
+            key="page_selector",
+        )
+        st.session_state["page"] = page
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
@@ -3017,18 +3014,21 @@ def run_app():
 
     if page == "Revenue Model":
         st.title("Revenue Model")
+        _render_scenario_buttons()
         render_revenue_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
 
     if page == "Cost Model":
         st.title("Cost Model")
+        _render_scenario_buttons()
         render_cost_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
 
     if page == "Other Assumptions":
         st.title("Other Assumptions")
+        _render_scenario_buttons()
         st.write("Master input sheet – all remaining assumptions.")
         defaults = st.session_state.setdefault(
             "assumptions_defaults", _seed_assumptions_state()
@@ -3822,6 +3822,7 @@ def run_app():
 
     if page == "Operating Model (P&L)":
         st.title("Operating Model (P&L)")
+        _render_scenario_buttons()
         selected_scenario = st.session_state.get(
             "scenario_selection.selected_scenario",
             input_model.scenario_selection["selected_scenario"].value,
@@ -4478,6 +4479,7 @@ def run_app():
 
     if page == "Cashflow & Liquidity":
         st.title("Cashflow & Liquidity")
+        _render_scenario_buttons()
         st.write("Consolidated cashflow statement (5-year plan)")
         cashflow_line_items = {}
 
@@ -4746,6 +4748,7 @@ def run_app():
 
     if page == "Balance Sheet":
         st.title("Balance Sheet")
+        _render_scenario_buttons()
         st.write("Simplified balance sheet (5-year plan)")
         balance_line_items = {}
 
@@ -5024,6 +5027,7 @@ def run_app():
 
     if page == "Financing & Debt":
         st.title("Financing & Debt")
+        _render_scenario_buttons()
         st.write("Debt structure, service and bankability (5-year plan)")
         financing_assumptions = input_model.financing_assumptions
         cashflow_by_year = {row["year"]: row for row in cashflow_result}
