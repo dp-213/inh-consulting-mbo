@@ -209,8 +209,8 @@ def _build_model_snapshot_payload(
         "logic": [
             "Revenue capacity uses Consultant FTEs from the Cost Model.",
             "Capacity is split between group and external revenue; external does not add capacity.",
-            "Guaranteed Group Revenue = max(modeled group revenue, reference × guarantee %).",
-            "Final revenue = guaranteed group revenue + modeled external revenue.",
+            "Group Revenue (after Floor Check) = max(modeled group revenue, reference × guarantee %).",
+            "Final revenue = group revenue (after floor check) + modeled external revenue.",
             "P&L consumes final revenue and total operating costs (Cost Model).",
             "Operating cashflow = EBITDA – cash taxes – working capital delta.",
             "Free cashflow = operating cashflow – capex.",
@@ -4435,22 +4435,26 @@ def run_app(page_override=None):
 
             st.markdown("### Revenue Logic")
             st.write(
-                "Revenue is sourced from the Revenue Model. Guaranteed floors are "
-                "compared to modeled in-group and external revenue to determine the "
-                "final revenue used in the P&L."
+                "Revenue is sourced from the Revenue Model. The Group Revenue Floor "
+                "is compared to modeled group revenue to determine group revenue "
+                "after the floor check and the final revenue used in the P&L."
             )
             revenue_metrics = {
-                "Guaranteed Floor": {},
-                "Modeled Revenue": {},
+                "Group Revenue Floor": {},
+                "Modeled Total Revenue": {},
+                "Group Revenue (after Floor Check)": {},
                 "Final Revenue": {},
             }
             for year_index, year_label in enumerate(year_labels):
                 components = revenue_components_by_year[year_index]
-                revenue_metrics["Guaranteed Floor"][year_label] = components[
+                revenue_metrics["Group Revenue Floor"][year_label] = components[
                     "guaranteed_floor"
                 ]
-                revenue_metrics["Modeled Revenue"][year_label] = components[
+                revenue_metrics["Modeled Total Revenue"][year_label] = components[
                     "modeled_total_revenue"
+                ]
+                revenue_metrics["Group Revenue (after Floor Check)"][year_label] = components[
+                    "guaranteed_group_revenue"
                 ]
                 revenue_metrics["Final Revenue"][year_label] = components[
                     "final_total"

@@ -172,8 +172,8 @@ def render_revenue_model_assumptions(input_model, show_header=True):
               <strong>D. Guarantee logic</strong>
               <ul>
                 <li>Guarantee applies only to Group revenue.</li>
-                <li>Guaranteed Group Revenue = max(Modeled Group Revenue, Reference × Guarantee %).</li>
-                <li>Final Revenue = Guaranteed Group Revenue + External Revenue.</li>
+                <li>Group Revenue (after Floor Check) = max(Modeled Group Revenue, Reference × Guarantee %).</li>
+                <li>Final Revenue = Group Revenue (after Floor Check) + External Revenue.</li>
               </ul>
               <strong>E. Not modeled</strong>
               <ul>
@@ -250,6 +250,9 @@ def render_revenue_model_assumptions(input_model, show_header=True):
             **{col: st.column_config.TextColumn() for col in year_columns},
         },
         use_container_width=True,
+    )
+    st.caption(
+        "Revenue Growth (% p.a.) applies to capacity-driven revenue, not a guaranteed top-line uplift."
     )
     for year_index in range(5):
         revenue_state["workdays_per_year"][scenario][year_index] = _non_negative(
@@ -359,7 +362,7 @@ def render_revenue_model_assumptions(input_model, show_header=True):
             _parse_number_display(pricing_edit.loc[1, year_columns[year_index]])
         )
 
-    st.markdown("### Group Revenue Guarantee (Floor)")
+    st.markdown("### Group Revenue Floor")
     reference_df = pd.DataFrame(
         {
             "Parameter": ["Reference Revenue"],
@@ -427,14 +430,21 @@ def render_revenue_model_assumptions(input_model, show_header=True):
         )
 
     st.markdown("### Revenue Bridge / Summary")
+    st.caption(
+        "Note: The floor applies only if modeled Group Revenue falls below the reference level. "
+        "Revenue above the floor is not guaranteed."
+    )
     bridge_rows = {
         "Capacity Revenue": [],
         "Modeled Group Revenue": [],
         "Modeled External Revenue": [],
-        "Guaranteed Group Revenue": [],
-        "Guaranteed Floor": [],
+        "Modeled Total Revenue": [],
+        "Group Revenue Floor": [],
+        "Floor Binding?": [],
+        "Floor Adjustment Amount": [],
+        "Group Revenue (after Floor Check)": [],
         "Final Revenue": [],
-        "Guaranteed %": [],
+        "Floor Coverage (% of Final Revenue)": [],
     }
     for year_index in range(5):
         reference_value = revenue_state["reference_revenue_eur"][scenario]
@@ -473,13 +483,22 @@ def render_revenue_model_assumptions(input_model, show_header=True):
         guaranteed_share = (
             guaranteed_group_revenue / final_revenue if final_revenue else 0.0
         )
+        floor_binding = modeled_group_revenue < guaranteed_floor
+        floor_adjustment = max(0.0, guaranteed_floor - modeled_group_revenue)
         bridge_rows["Capacity Revenue"].append(modeled_total)
-        bridge_rows["Guaranteed Floor"].append(guaranteed_floor)
         bridge_rows["Modeled Group Revenue"].append(modeled_group_revenue)
         bridge_rows["Modeled External Revenue"].append(modeled_external_revenue)
-        bridge_rows["Guaranteed Group Revenue"].append(guaranteed_group_revenue)
+        bridge_rows["Modeled Total Revenue"].append(modeled_total)
+        bridge_rows["Group Revenue Floor"].append(guaranteed_floor)
+        bridge_rows["Floor Binding?"].append("Yes" if floor_binding else "No")
+        bridge_rows["Floor Adjustment Amount"].append(floor_adjustment)
+        bridge_rows["Group Revenue (after Floor Check)"].append(
+            guaranteed_group_revenue
+        )
         bridge_rows["Final Revenue"].append(final_revenue)
-        bridge_rows["Guaranteed %"].append(_percent_to_display(guaranteed_share))
+        bridge_rows["Floor Coverage (% of Final Revenue)"].append(
+            _percent_to_display(guaranteed_share)
+        )
 
     bridge_table = {
         "Parameter": list(bridge_rows.keys()),
@@ -487,6 +506,9 @@ def render_revenue_model_assumptions(input_model, show_header=True):
             "EUR",
             "EUR",
             "EUR",
+            "EUR",
+            "EUR",
+            "",
             "EUR",
             "EUR",
             "EUR",
@@ -497,7 +519,7 @@ def render_revenue_model_assumptions(input_model, show_header=True):
         bridge_table[col] = [
             _format_number_display(
                 bridge_rows[row_key][year_index],
-                1 if row_key == "Guaranteed %" else 0,
+                1 if row_key == "Floor Coverage (% of Final Revenue)" else 0,
             )
             for row_key in bridge_rows
         ]
@@ -508,17 +530,19 @@ def render_revenue_model_assumptions(input_model, show_header=True):
         "ALLOCATION",
         "Modeled Group Revenue",
         "Modeled External Revenue",
-        "Modeled Total (Group + External)",
-        "PROTECTION",
-        "Guaranteed Floor",
-        "Guaranteed Group Revenue",
+        "Modeled Total Revenue",
+        "FLOOR CHECK",
+        "Group Revenue Floor",
+        "Floor Binding?",
+        "Floor Adjustment Amount",
         "RESULT",
-        "FINAL REVENUE",
-        "Guaranteed %",
+        "Group Revenue (after Floor Check)",
+        "Final Revenue",
+        "Floor Coverage (% of Final Revenue)",
     ]
     display_table = []
     for row_label in display_rows:
-        if row_label in {"CAPACITY", "ALLOCATION", "PROTECTION", "RESULT"}:
+        if row_label in {"CAPACITY", "ALLOCATION", "FLOOR CHECK", "RESULT"}:
             display_table.append(
                 {
                     "Parameter": row_label,
@@ -527,30 +551,23 @@ def render_revenue_model_assumptions(input_model, show_header=True):
                 }
             )
             continue
-        if row_label == "Modeled Total (Group + External)":
-            values = [
-                bridge_rows["Modeled Group Revenue"][idx]
-                + bridge_rows["Modeled External Revenue"][idx]
-                for idx in range(5)
-            ]
-            unit = "EUR"
-        elif row_label == "FINAL REVENUE":
+        if row_label == "Final Revenue":
             values = bridge_rows["Final Revenue"]
             unit = "EUR"
+        elif row_label == "Floor Binding?":
+            values = bridge_rows["Floor Binding?"]
+            unit = ""
         else:
-            key = (
-                "Final Revenue"
-                if row_label == "FINAL REVENUE"
-                else row_label
-            )
-            values = bridge_rows[key]
-            unit = "%" if row_label == "Guaranteed %" else "EUR"
+            values = bridge_rows[row_label]
+            unit = "%" if row_label == "Floor Coverage (% of Final Revenue)" else "EUR"
         display_table.append(
             {
                 "Parameter": row_label,
                 "Unit": unit,
                 **{
-                    col: _format_number_display(
+                    col: values[idx]
+                    if row_label == "Floor Binding?"
+                    else _format_number_display(
                         values[idx], 1 if unit == "%" else 0
                     )
                     for idx, col in enumerate(year_columns)
@@ -562,19 +579,19 @@ def render_revenue_model_assumptions(input_model, show_header=True):
     bold_rows = {
         "CAPACITY",
         "ALLOCATION",
-        "PROTECTION",
+        "FLOOR CHECK",
         "RESULT",
-        "Modeled Total (Group + External)",
-        "Guaranteed Group Revenue",
-        "FINAL REVENUE",
+        "Modeled Total Revenue",
+        "Group Revenue (after Floor Check)",
+        "Final Revenue",
     }
 
     def _bridge_style(row):
         if row["Parameter"] in bold_rows:
             base = "font-weight: 700;"
-            if row["Parameter"] in {"CAPACITY", "ALLOCATION", "PROTECTION", "RESULT"}:
+            if row["Parameter"] in {"CAPACITY", "ALLOCATION", "FLOOR CHECK", "RESULT"}:
                 return ["background-color: #f7f7f7; " + base] * len(row)
-            if row["Parameter"] == "FINAL REVENUE":
+            if row["Parameter"] == "Final Revenue":
                 return ["background-color: #f3f4f6; " + base] * len(row)
             return [base] * len(row)
         return [""] * len(row)
