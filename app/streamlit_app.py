@@ -2342,10 +2342,14 @@ def run_app():
             },
             "workdays_per_year": {
                 scenario: [
-                    base_model.operating_assumptions[
-                        "work_days_per_year"
-                    ].value
-                    for _ in range(5)
+                    value
+                    for value in (
+                        [205, 205, 205, 205, 205]
+                        if scenario == "Worst"
+                        else [215, 215, 215, 215, 215]
+                        if scenario == "Best"
+                        else [210, 210, 210, 210, 210]
+                    )
                 ]
                 for scenario in scenario_labels
             },
@@ -2358,19 +2362,27 @@ def run_app():
             },
             "group_day_rate_eur": {
                 scenario: [
-                    base_model.scenario_parameters["day_rate_eur"][
-                        scenario.lower()
-                    ].value
-                    for _ in range(5)
+                    value
+                    for value in (
+                        [2400, 2400, 2400, 2400, 2400]
+                        if scenario == "Worst"
+                        else [2600, 2600, 2600, 2600, 2600]
+                        if scenario == "Best"
+                        else [2500, 2500, 2500, 2500, 2500]
+                    )
                 ]
                 for scenario in scenario_labels
             },
             "external_day_rate_eur": {
                 scenario: [
-                    base_model.scenario_parameters["day_rate_eur"][
-                        scenario.lower()
-                    ].value
-                    for _ in range(5)
+                    value
+                    for value in (
+                        [2700, 2700, 2700, 2700, 2700]
+                        if scenario == "Worst"
+                        else [3300, 3300, 3300, 3300, 3300]
+                        if scenario == "Best"
+                        else [3000, 3000, 3000, 3000, 3000]
+                    )
                 ]
                 for scenario in scenario_labels
             },
@@ -2382,7 +2394,7 @@ def run_app():
                 for scenario in scenario_labels
             },
             "revenue_growth_pct": {
-                scenario: [0.00, 0.01, 0.02, 0.03, 0.03]
+                scenario: [0.0, 0.0, 0.0, 0.0, 0.0]
                 for scenario in scenario_labels
             },
             "group_capacity_share_pct": {
@@ -2398,16 +2410,20 @@ def run_app():
         cost_personnel_rows = []
         cost_fixed_rows = []
         cost_variable_rows = []
+        consultant_fte_base = [63, 61, 60, 60, 60]
+        backoffice_fte_base = [18, 18, 17, 17, 17]
+        office_rent_base = [1730000, 1400000, 1200000, 1200000, 1200000]
+        it_cost_base = [440000, 448800, 448800, 448800, 448800]
         for year_index in range(5):
             year_label = f"Year {year_index}"
             cost_personnel_rows.append(
                 {
                     "Year": year_label,
-                    "Consultant FTE": 63,
+                    "Consultant FTE": consultant_fte_base[year_index],
                     "Consultant Loaded Cost (EUR)": base_model.cost_model[
                         f"consultant_base_cost_eur_year_{year_index}"
                     ].value,
-                    "Backoffice FTE": 18,
+                    "Backoffice FTE": backoffice_fte_base[year_index],
                     "Backoffice Loaded Cost (EUR)": base_model.cost_model[
                         f"backoffice_base_cost_eur_year_{year_index}"
                     ].value,
@@ -2423,12 +2439,8 @@ def run_app():
                     "Legal": base_model.cost_model[
                         f"fixed_overhead_legal_year_{year_index}"
                     ].value,
-                    "IT & Software": base_model.cost_model[
-                        f"fixed_overhead_it_year_{year_index}"
-                    ].value,
-                    "Office Rent": base_model.cost_model[
-                        f"fixed_overhead_office_year_{year_index}"
-                    ].value,
+                    "IT & Software": it_cost_base[year_index],
+                    "Office Rent": office_rent_base[year_index],
                     "Services": base_model.cost_model[
                         f"fixed_overhead_services_year_{year_index}"
                     ].value,
@@ -2439,9 +2451,9 @@ def run_app():
                 {
                     "Year": year_label,
                     "Training Type": "EUR",
-                    "Training Value": 63 * 2500,
+                    "Training Value": consultant_fte_base[year_index] * 2500,
                     "Travel Type": "EUR",
-                    "Travel Value": 63 * 5500,
+                    "Travel Value": consultant_fte_base[year_index] * 5500,
                     "Communication Type": "EUR",
                     "Communication Value": 0.0,
                 }
