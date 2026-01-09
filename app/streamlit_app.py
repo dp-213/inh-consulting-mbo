@@ -3246,17 +3246,7 @@ def run_app(page_override=None):
         st.title("Other Assumptions")
         _render_input_scenario_selector()
         st.write("Master input sheet – all remaining assumptions.")
-        defaults = st.session_state.setdefault(
-            "assumptions_defaults", _seed_assumptions_state()
-        )
-        scenario_key = selected_scenario
-        for section in ["revenue_model"]:
-            section_defaults = defaults.get(section, {})
-            section_current = st.session_state["assumptions"].get(section, {})
-            for key, value in section_defaults.items():
-                if isinstance(value, dict) and scenario_key in value:
-                    section_current[key][scenario_key] = value[scenario_key]
-            st.session_state["assumptions"][section] = section_current
+        # Other Assumptions are intentionally scenario-agnostic.
         render_advanced_assumptions(input_model, show_header=False)
         return
 

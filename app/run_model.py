@@ -15,7 +15,7 @@ def run_model(assumptions_state=None, scenario="Base", input_model=None):
     if assumptions_state is None:
         raise ValueError("assumptions_state is required for revenue and cost models.")
 
-    # Revenue and cost models are calculated once in their dedicated modules.
+    # Scenario selection is applied only to revenue and cost inputs upstream.
     revenue_final_by_year, revenue_components_by_year = build_revenue_model_outputs(
         assumptions_state, scenario
     )
