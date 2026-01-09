@@ -2875,7 +2875,7 @@ def run_app():
     )
 
     # Navigation for question-driven layout.
-    st.session_state.setdefault("page", "Operating Model (P&L)")
+    st.session_state.setdefault("current_page", "Operating Model (P&L)")
     with st.sidebar:
         editor_css = """
         <style>
@@ -2892,97 +2892,34 @@ def run_app():
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        nav_css = """
-        <style>
-          .nav-section {
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin: 0.8rem 0 0.35rem;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            padding: 0.2rem 0 0.2rem 0.25rem;
-            border-radius: 4px;
-            margin: 0;
-            color: #111827;
-            white-space: nowrap;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div {
-            margin-left: 0 !important;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {
-            background: transparent;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] input,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] svg,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {
-            display: none;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] input:checked + div {
-            background: #eef2f7;
-            border-left: 3px solid #3b82f6;
-            padding-left: 0.35rem;
-            font-weight: 600;
-          }
-        </style>
-        """
-        st.markdown(nav_css, unsafe_allow_html=True)
-
-        nav_options = [
-            "Operating Model (P&L)",
-            "Cashflow & Liquidity",
-            "Balance Sheet",
-            "Revenue Model",
-            "Cost Model",
-            "Other Assumptions",
-            "Financing & Debt",
-            "Equity Case",
-            "Valuation & Purchase Price",
-            "Model Settings",
-        ]
-
         st.markdown("**MBO Financial Model**")
         st.markdown("OPERATING MODEL")
-        page = st.sidebar.radio(
-            "",
-            nav_options[:3],
-            key="nav_operating",
-            label_visibility="collapsed",
-        )
+        if st.sidebar.button("Operating Model (P&L)", key="nav_operating_model"):
+            st.session_state["current_page"] = "Operating Model (P&L)"
+        if st.sidebar.button("Cashflow & Liquidity", key="nav_cashflow"):
+            st.session_state["current_page"] = "Cashflow & Liquidity"
+        if st.sidebar.button("Balance Sheet", key="nav_balance_sheet"):
+            st.session_state["current_page"] = "Balance Sheet"
         st.markdown("PLANNING")
-        page = st.sidebar.radio(
-            "",
-            nav_options[3:6],
-            key="nav_planning",
-            label_visibility="collapsed",
-        )
+        if st.sidebar.button("Revenue Model", key="nav_revenue_model"):
+            st.session_state["current_page"] = "Revenue Model"
+        if st.sidebar.button("Cost Model", key="nav_cost_model"):
+            st.session_state["current_page"] = "Cost Model"
+        if st.sidebar.button("Other Assumptions", key="nav_other_assumptions"):
+            st.session_state["current_page"] = "Other Assumptions"
         st.markdown("FINANCING")
-        page = st.sidebar.radio(
-            "",
-            nav_options[6:8],
-            key="nav_financing",
-            label_visibility="collapsed",
-        )
+        if st.sidebar.button("Financing & Debt", key="nav_financing_debt"):
+            st.session_state["current_page"] = "Financing & Debt"
+        if st.sidebar.button("Equity Case", key="nav_equity_case"):
+            st.session_state["current_page"] = "Equity Case"
         st.markdown("VALUATION")
-        page = st.sidebar.radio(
-            "",
-            nav_options[8:9],
-            key="nav_valuation",
-            label_visibility="collapsed",
-        )
+        if st.sidebar.button("Valuation & Purchase Price", key="nav_valuation"):
+            st.session_state["current_page"] = "Valuation & Purchase Price"
         st.markdown("SETTINGS")
-        page = st.sidebar.radio(
-            "",
-            nav_options[9:],
-            key="nav_settings",
-            label_visibility="collapsed",
-        )
+        if st.sidebar.button("Model Settings", key="nav_model_settings"):
+            st.session_state["current_page"] = "Model Settings"
 
-        st.session_state["page"] = page
+        page = st.session_state["current_page"]
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
