@@ -2929,6 +2929,13 @@ def run_app():
             color: #111827;
             background: transparent;
           }
+          div[data-testid="stSidebar"] button:disabled {
+            color: #111827;
+            font-weight: 600;
+            border-left: 3px solid #3b82f6;
+            padding-left: 0.35rem;
+            background: #eef2f7;
+          }
         </style>
         """
         st.markdown(nav_css, unsafe_allow_html=True)
@@ -2948,14 +2955,9 @@ def run_app():
         current_page = st.session_state["page"]
 
         def _nav_item(label):
-            if label == current_page:
-                st.markdown(
-                    f'<div class="nav-item active">{label}</div>',
-                    unsafe_allow_html=True,
-                )
-                return
             key = f"nav_{''.join(ch for ch in label.lower() if ch.isalnum())}"
-            if st.sidebar.button(label, key=key):
+            is_active = label == current_page
+            if st.sidebar.button(label, key=key, disabled=is_active):
                 st.session_state["page"] = label
 
         st.markdown("**MBO Financial Model**")
