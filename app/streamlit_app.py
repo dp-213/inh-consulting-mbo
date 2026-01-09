@@ -22,38 +22,21 @@ NAV_OPTIONS = [
     "Model Settings",
 ]
 
-try:
-    from .data_model import InputModel, create_demo_input_model
-    from .calculations.pnl import calculate_pnl
-    from .calculations.cashflow import calculate_cashflow
-    from .calculations.debt import calculate_debt_schedule
-    from .calculations.balance_sheet import calculate_balance_sheet
-    from .calculations.investment import calculate_investment
-    from .calculations.investment import _calculate_irr
-    from .revenue_model import (
-        render_revenue_model_assumptions,
-        build_revenue_model_outputs,
-    )
-    from .cost_model import (
-        render_cost_model_assumptions,
-        build_cost_model_outputs,
-    )
-except ImportError:
-    from data_model import InputModel, create_demo_input_model
-    from calculations.pnl import calculate_pnl
-    from calculations.cashflow import calculate_cashflow
-    from calculations.debt import calculate_debt_schedule
-    from calculations.balance_sheet import calculate_balance_sheet
-    from calculations.investment import calculate_investment
-    from calculations.investment import _calculate_irr
-    from revenue_model import (
-        render_revenue_model_assumptions,
-        build_revenue_model_outputs,
-    )
-    from cost_model import (
-        render_cost_model_assumptions,
-        build_cost_model_outputs,
-    )
+from data_model import InputModel, create_demo_input_model
+from calculations.pnl import calculate_pnl
+from calculations.cashflow import calculate_cashflow
+from calculations.debt import calculate_debt_schedule
+from calculations.balance_sheet import calculate_balance_sheet
+from calculations.investment import calculate_investment
+from calculations.investment import _calculate_irr
+from revenue_model import (
+    render_revenue_model_assumptions,
+    build_revenue_model_outputs,
+)
+from cost_model import (
+    render_cost_model_assumptions,
+    build_cost_model_outputs,
+)
 
 
 def _pnl_dict_to_list(pnl_dict):
