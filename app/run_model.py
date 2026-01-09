@@ -1,11 +1,21 @@
-from data_model import InputModel
-from calculations.pnl import calculate_pnl
-from calculations.cashflow import calculate_cashflow
-from calculations.debt import calculate_debt_schedule
-from calculations.balance_sheet import calculate_balance_sheet
-from calculations.investment import calculate_investment
-from revenue_model import build_revenue_model_outputs
-from cost_model import build_cost_model_outputs
+try:
+    from .data_model import InputModel
+    from .calculations.pnl import calculate_pnl
+    from .calculations.cashflow import calculate_cashflow
+    from .calculations.debt import calculate_debt_schedule
+    from .calculations.balance_sheet import calculate_balance_sheet
+    from .calculations.investment import calculate_investment
+    from .revenue_model import build_revenue_model_outputs
+    from .cost_model import build_cost_model_outputs
+except ImportError:
+    from data_model import InputModel
+    from calculations.pnl import calculate_pnl
+    from calculations.cashflow import calculate_cashflow
+    from calculations.debt import calculate_debt_schedule
+    from calculations.balance_sheet import calculate_balance_sheet
+    from calculations.investment import calculate_investment
+    from revenue_model import build_revenue_model_outputs
+    from cost_model import build_cost_model_outputs
 
 
 def run_model(assumptions_state=None, scenario="Base", input_model=None):
