@@ -2881,84 +2881,47 @@ def run_app():
 
         nav_css = """
         <style>
-          div[data-testid="stRadio"] label:nth-child(1)::before,
-          div[data-testid="stRadio"] label:nth-child(4)::before,
-          div[data-testid="stRadio"] label:nth-child(7)::before,
-          div[data-testid="stRadio"] label:nth-child(9)::before,
-          div[data-testid="stRadio"] label:nth-child(10)::before {
-            display: block;
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin: 0.9rem 0 0.35rem;
+          div[data-testid="stSidebar"] button {
+            text-align: left;
             width: 100%;
-          }
-          div[data-testid="stRadio"] label:nth-child(1)::before {
-            content: "OPERATING MODEL";
-            margin-top: 0;
-          }
-          div[data-testid="stRadio"] label:nth-child(4)::before {
-            content: "PLANNING";
-          }
-          div[data-testid="stRadio"] label:nth-child(7)::before {
-            content: "FINANCING";
-          }
-          div[data-testid="stRadio"] label:nth-child(9)::before {
-            content: "VALUATION";
-          }
-          div[data-testid="stRadio"] label:nth-child(10)::before {
-            content: "SETTINGS";
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label {
-            padding: 0;
-            margin: 0 0 0.35rem;
-            background: transparent;
-            border: none;
-            font-weight: 400;
-            color: #111827;
             white-space: nowrap;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div {
-            margin-left: 0 !important;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {
-            background: transparent;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] input,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] svg,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {
-            display: none;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] input:checked + div {
-            background: transparent !important;
-            color: #111827 !important;
-            font-weight: 400 !important;
           }
         </style>
         """
         st.markdown(nav_css, unsafe_allow_html=True)
 
-        nav_options = [
-            "Operating Model (P&L)",
-            "Cashflow & Liquidity",
-            "Balance Sheet",
-            "Revenue Model",
-            "Cost Model",
-            "Other Assumptions",
-            "Financing & Debt",
-            "Equity Case",
-            "Valuation & Purchase Price",
-            "Model Settings",
-        ]
-
         st.markdown("**MBO Financial Model**")
-        page = st.sidebar.radio(
-            "",
-            nav_options,
-            key="page",
-            label_visibility="collapsed",
-        )
+        st.markdown("OPERATING MODEL")
+        if st.sidebar.button("Operating Model (P&L)", key="nav_operating_model"):
+            st.session_state["page"] = "Operating Model (P&L)"
+        if st.sidebar.button("Cashflow & Liquidity", key="nav_cashflow"):
+            st.session_state["page"] = "Cashflow & Liquidity"
+        if st.sidebar.button("Balance Sheet", key="nav_balance_sheet"):
+            st.session_state["page"] = "Balance Sheet"
+
+        st.markdown("PLANNING")
+        if st.sidebar.button("Revenue Model", key="nav_revenue_model"):
+            st.session_state["page"] = "Revenue Model"
+        if st.sidebar.button("Cost Model", key="nav_cost_model"):
+            st.session_state["page"] = "Cost Model"
+        if st.sidebar.button("Other Assumptions", key="nav_other_assumptions"):
+            st.session_state["page"] = "Other Assumptions"
+
+        st.markdown("FINANCING")
+        if st.sidebar.button("Financing & Debt", key="nav_financing_debt"):
+            st.session_state["page"] = "Financing & Debt"
+        if st.sidebar.button("Equity Case", key="nav_equity_case"):
+            st.session_state["page"] = "Equity Case"
+
+        st.markdown("VALUATION")
+        if st.sidebar.button("Valuation & Purchase Price", key="nav_valuation"):
+            st.session_state["page"] = "Valuation & Purchase Price"
+
+        st.markdown("SETTINGS")
+        if st.sidebar.button("Model Settings", key="nav_model_settings"):
+            st.session_state["page"] = "Model Settings"
+
+        page = st.session_state["page"]
         assumptions_state = st.session_state["assumptions"]
 
         def _sidebar_editor(title, key, df, column_config):
