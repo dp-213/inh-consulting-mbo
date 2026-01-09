@@ -3550,6 +3550,50 @@ def run_app():
         gap_label = "Buyer > Seller" if valuation_gap >= 0 else "Buyer < Seller"
         st.caption(f"Valuation gap indicator: {gap_label}.")
 
+        st.markdown("### Offer Range (Buyer View)")
+        no_regret_price = buyer_equity_value
+        target_offer = max_affordable_price
+        upper_bound = min(seller_equity_low, buyer_equity_value)
+        offer_table = pd.DataFrame(
+            [
+                {
+                    "Price Level": "Lower Bound — No-Regret Price",
+                    "Definition": "Conservative buyer value; robust liquidity and debt service.",
+                    "Offer (EUR)": format_currency(no_regret_price),
+                },
+                {
+                    "Price Level": "Target Offer — Defensible Offer",
+                    "Definition": "Recommended offer balancing risk and upside.",
+                    "Offer (EUR)": format_currency(target_offer),
+                },
+                {
+                    "Price Level": "Upper Bound — Walk-Away Threshold",
+                    "Definition": "Maximum price management should ever accept.",
+                    "Offer (EUR)": format_currency(upper_bound),
+                },
+            ]
+        )
+        st.dataframe(offer_table, use_container_width=True)
+
+        explain_offer = st.toggle("Explain offer range logic")
+        if explain_offer:
+            st.write(
+                "Seller and buyer prices differ because the seller anchors on market "
+                "multiples, while the buyer anchors on cash generation and financing risk."
+            )
+            st.write(
+                "The buyer view defines the offer range because management must protect "
+                "liquidity and downside outcomes."
+            )
+            st.write(
+                "Paying above the upper bound destroys value and creates unacceptable "
+                "risk, even if the seller expects a higher price."
+            )
+            st.write(
+                "Walking away is a valid outcome when the offer range does not overlap "
+                "with seller expectations."
+            )
+
         st.markdown("### Decision KPIs")
         purchase_price = input_model.transaction_and_financing[
             "purchase_price_eur"
