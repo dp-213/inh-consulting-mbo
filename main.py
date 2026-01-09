@@ -65,7 +65,10 @@ def main():
         st.markdown("MBO Financial Model")
         for section_title, key, options in sections:
             st.markdown(f"### {section_title}")
-            index = options.index(current_page) if current_page in options else None
+            is_active_group = current_page in options
+            if not is_active_group:
+                st.session_state[key] = None
+            index = options.index(current_page) if is_active_group else None
             selection = st.radio(
                 section_title,
                 options,
