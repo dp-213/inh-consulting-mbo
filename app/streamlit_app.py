@@ -2309,31 +2309,34 @@ def run_app():
             margin-top: 8px;
             margin-bottom: 12px;
           }
-          .scenario-toggle [data-testid="stRadio"] > div {
+          .scenario-bar {
             display: flex;
-            gap: 8px;
-          }
-          .scenario-toggle [data-testid="stRadio"] label {
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            padding: 0 16px;
+            width: 460px;
             height: 40px;
-            min-width: 96px;
-            margin: 0;
+            padding: 4px;
+            gap: 4px;
+            border-radius: 8px;
+            background-color: #f3f4f6;
+            margin-top: 8px;
+            margin-bottom: 12px;
+          }
+          .scenario-seg {
+            flex: 1;
+            height: 32px;
+            line-height: 32px;
+            text-align: center;
             font-size: 14px;
             font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            background-color: transparent;
+            color: #6b7280;
           }
-          .scenario-toggle [data-testid="stRadio"] input:checked + div {
-            background: #eef2f7;
-            border-color: #d1d5db;
-            font-weight: 500;
-          }
-          .scenario-toggle [data-testid="stRadio"] label div {
-            width: 100%;
-            text-align: center;
+          .scenario-seg.active {
+            background-color: #ffffff;
+            color: #111827;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
           }
         </style>
         """,
@@ -2797,35 +2800,24 @@ def run_app():
     _apply_assumptions_state()
 
     def _render_scenario_selector():
-        labels = ["Worst Case", "Base Case", "Best Case"]
-        current = st.session_state.get("active_scenario", "Base")
-        label_map = {"Worst": "Worst Case", "Base": "Base Case", "Best": "Best Case"}
-        reverse_map = {"Worst Case": "Worst", "Base Case": "Base", "Best Case": "Best"}
-        st.markdown('<div class="scenario-toggle">', unsafe_allow_html=True)
-        selected_label = st.radio(
-            "",
-            labels,
-            index=labels.index(label_map.get(current, "Base Case")),
-            horizontal=True,
-            key="active_scenario_choice",
-            label_visibility="collapsed",
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.session_state["active_scenario"] = reverse_map[selected_label]
+        current = st.session_state.get("scenario", "Base")
+        html = f"""
+        <div class="scenario-bar">
+          <a class="scenario-seg {'active' if current == 'Worst' else ''}" href="?scenario=Worst">Worst</a>
+          <a class="scenario-seg {'active' if current == 'Base' else ''}" href="?scenario=Base">Base</a>
+          <a class="scenario-seg {'active' if current == 'Best' else ''}" href="?scenario=Best">Best</a>
+        </div>
+        """
+        st.markdown(html, unsafe_allow_html=True)
 
     # Global scenario selector (active scenario for all pages).
-    st.session_state.setdefault("active_scenario", "Base")
-    if "active_scenario_choice" in st.session_state:
-        choice_map = {
-            "Worst Case": "Worst",
-            "Base Case": "Base",
-            "Best Case": "Best",
-        }
-        st.session_state["active_scenario"] = choice_map.get(
-            st.session_state["active_scenario_choice"],
-            st.session_state["active_scenario"],
-        )
-    active_scenario = st.session_state["active_scenario"]
+    st.session_state.setdefault("scenario", "Base")
+    query_params = st.experimental_get_query_params()
+    query_scenario = query_params.get("scenario", [None])[0]
+    if query_scenario in {"Worst", "Base", "Best"}:
+        st.session_state["scenario"] = query_scenario
+    active_scenario = st.session_state["scenario"]
+    st.session_state["active_scenario"] = active_scenario
     st.session_state["assumptions.scenario"] = active_scenario
     st.session_state["scenario_selection.selected_scenario"] = active_scenario
 
