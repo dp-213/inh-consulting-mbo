@@ -33,15 +33,39 @@ with st.sidebar:
     st.markdown(
         """
         <style>
+          [data-testid="stSidebar"],
+          [data-testid="stSidebarContent"] {
+            background: #f7f8fa;
+          }
+          [data-testid="stSidebar"] > div {
+            padding: 1rem 0.85rem;
+          }
+          [data-testid="stSidebar"] {
+            min-width: 280px;
+            max-width: 280px;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0.35rem 0.6rem 0.35rem 0.8rem;
+            border-radius: 4px;
+            margin-bottom: 0.15rem;
+            color: #374151;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+            background: #eef2f7;
+          }
+          [data-testid="stSidebar"] div[role="radiogroup"] > label > div,
+          [data-testid="stSidebar"] div[role="radiogroup"] input,
+          [data-testid="stSidebar"] div[role="radiogroup"] svg,
           [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
             display: none;
           }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label {
-            padding: 0.3rem 0.5rem;
-            border-radius: 6px;
-          }
-          [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
-            background-color: #e5e7eb;
+          [data-testid="stSidebar"] div[role="radiogroup"] input:checked + div {
+            background: #e9eef7;
+            border-left: 3px solid #3b82f6;
+            color: #111827;
             font-weight: 600;
           }
           [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(1)::before,
@@ -77,7 +101,7 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    st.title("MBO Financial Model")
+    st.markdown("**MBO Financial Model**")
     selection = st.radio(
         "Navigation",
         nav_options,
