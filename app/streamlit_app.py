@@ -2304,6 +2304,21 @@ def run_app():
             background-color: #f9fafb !important;
             color: #111827 !important;
           }
+          [data-testid="stAppViewContainer"] div[data-testid="stRadio"] > div {
+            display: inline-flex;
+            gap: 8px;
+          }
+          [data-testid="stAppViewContainer"] div[data-testid="stRadio"] label {
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 6px 12px;
+            margin: 0;
+          }
+          [data-testid="stAppViewContainer"] div[data-testid="stRadio"] input:checked + div {
+            background: #eef2f7;
+            border-color: #9ca3af;
+            font-weight: 600;
+          }
         </style>
         """,
         unsafe_allow_html=True,
@@ -2765,11 +2780,39 @@ def run_app():
 
     _apply_assumptions_state()
 
+    def _render_scenario_selector():
+        labels = ["Worst Case", "Base Case", "Best Case"]
+        current = st.session_state.get("active_scenario", "Base")
+        label_map = {"Worst": "Worst Case", "Base": "Base Case", "Best": "Best Case"}
+        reverse_map = {"Worst Case": "Worst", "Base Case": "Base", "Best Case": "Best"}
+        selected_label = st.radio(
+            "",
+            labels,
+            index=labels.index(label_map.get(current, "Base Case")),
+            horizontal=True,
+            key="active_scenario_choice",
+            label_visibility="collapsed",
+        )
+        st.session_state["active_scenario"] = reverse_map[selected_label]
+
+    # Global scenario selector (active scenario for all pages).
+    st.session_state.setdefault("active_scenario", "Base")
+    if "active_scenario_choice" in st.session_state:
+        choice_map = {
+            "Worst Case": "Worst",
+            "Base Case": "Base",
+            "Best Case": "Best",
+        }
+        st.session_state["active_scenario"] = choice_map.get(
+            st.session_state["active_scenario_choice"],
+            st.session_state["active_scenario"],
+        )
+    active_scenario = st.session_state["active_scenario"]
+    st.session_state["assumptions.scenario"] = active_scenario
+    st.session_state["scenario_selection.selected_scenario"] = active_scenario
+
     # Build input model and collect editable values from the assumptions page.
-    selected_scenario = st.session_state.get(
-        "scenario_selection.selected_scenario",
-        base_model.scenario_selection["selected_scenario"].value,
-    )
+    selected_scenario = active_scenario
     scenario_key = selected_scenario.lower()
     input_model = create_demo_input_model()
     for section_key, section_value in input_model.__dict__.items():
@@ -3059,42 +3102,28 @@ def run_app():
             _apply_assumptions_state()
 
     if page == "Revenue Model":
-        render_revenue_model_assumptions(input_model)
+        st.header("Revenue Model")
+        _render_scenario_selector()
+        st.write("Detailed revenue planning (5-year view).")
+        render_revenue_model_assumptions(input_model, show_header=False)
+        st.caption(f"Values shown for {selected_scenario} Case.")
         _apply_assumptions_state()
         return
 
     if page == "Cost Model":
-        render_cost_model_assumptions(input_model)
+        st.header("Cost Model")
+        _render_scenario_selector()
+        st.write("Detailed annual cost planning (5-year view).")
+        render_cost_model_assumptions(input_model, show_header=False)
+        st.caption(f"Values shown for {selected_scenario} Case.")
         _apply_assumptions_state()
         return
 
     if page == "Other Assumptions":
         st.header("Other Assumptions")
         st.write("Master input sheet – all remaining assumptions.")
-
-        scenario_options = ["Base", "Best", "Worst"]
-        scenario_default = st.session_state.get(
-            "assumptions.scenario",
-            input_model.scenario_selection["selected_scenario"].value,
-        )
-        scenario_index = (
-            scenario_options.index(scenario_default)
-            if scenario_default in scenario_options
-            else 0
-        )
-        scenario_cols = st.columns([1, 1])
-        selected_scenario = scenario_cols[0].selectbox(
-            "Scenario",
-            scenario_options,
-            index=scenario_index,
-            key="assumptions.scenario",
-        )
-        scenario_cols[1].toggle(
-            "Auto-apply scenario values",
-            value=st.session_state.get("assumptions.auto_sync", True),
-            key="assumptions.auto_sync",
-        )
-        st.session_state["scenario_selection.selected_scenario"] = selected_scenario
+        _render_scenario_selector()
+        st.caption(f"Values shown for {selected_scenario} Case.")
         render_advanced_assumptions(input_model)
         return
 
@@ -3300,6 +3329,7 @@ def run_app():
 
     if page == "Model Settings":
         st.header("Model Settings")
+        _render_scenario_selector()
         st.caption("Model transparency, export, and technical controls")
 
         st.markdown("### Model Snapshot / Export")
@@ -3684,10 +3714,57 @@ def run_app():
         gap_label = "Buyer > Seller" if valuation_gap >= 0 else "Buyer < Seller"
         st.caption(f"Valuation gap indicator: {gap_label}.")
 
+        def _buyer_value_for_scenario(scenario_label):
+            revenue_final, _ = build_revenue_model_outputs(
+                st.session_state["assumptions"], scenario_label
+            )
+            cost_totals = build_cost_model_outputs(
+                st.session_state["assumptions"], revenue_final
+            )
+            pnl_list_local = calculate_pnl(
+                input_model,
+                revenue_final_by_year=revenue_final,
+                cost_totals_by_year=cost_totals,
+            )
+            debt_schedule_local = calculate_debt_schedule(input_model)
+            cashflow_local = calculate_cashflow(
+                input_model, pnl_list_local, debt_schedule_local
+            )
+            free_cashflows = [
+                row.get("free_cashflow", 0.0) for row in cashflow_local
+            ]
+            cumulative_pv = 0.0
+            for year_index, fcf in enumerate(free_cashflows):
+                if year_index >= valuation_start_year:
+                    exponent = year_index - valuation_start_year + 1
+                    discount_factor = (
+                        1 / ((1 + buyer_discount_rate) ** exponent)
+                        if buyer_discount_rate
+                        else 1.0
+                    )
+                else:
+                    discount_factor = 0.0
+                cumulative_pv += fcf * discount_factor
+            terminal_value = 0.0
+            terminal_pv = 0.0
+            if include_terminal_value and buyer_discount_rate:
+                terminal_value = free_cashflows[-1] / buyer_discount_rate
+                last_exponent = max(1, len(free_cashflows) - valuation_start_year)
+                terminal_pv = terminal_value / (
+                    (1 + buyer_discount_rate) ** last_exponent
+                )
+            enterprise_value_dcf = cumulative_pv + terminal_pv
+            transaction_costs = enterprise_value_dcf * transaction_cost_pct
+            return enterprise_value_dcf - debt_at_close - transaction_costs
+
+        buyer_value_worst = _buyer_value_for_scenario("Worst")
+        buyer_value_base = _buyer_value_for_scenario("Base")
+        buyer_value_best = _buyer_value_for_scenario("Best")
+
         st.markdown("### Offer Range (Buyer View)")
-        no_regret_price = buyer_equity_value
-        target_offer = max_affordable_price
-        upper_bound = min(seller_equity_low, buyer_equity_value)
+        no_regret_price = max(buyer_value_worst, 0)
+        target_offer = max(buyer_value_base, 0)
+        upper_bound = max(min(seller_equity_low, buyer_value_best), 0)
         offer_table = pd.DataFrame(
             [
                 {
@@ -3726,6 +3803,10 @@ def run_app():
             st.write(
                 "Walking away is a valid outcome when the offer range does not overlap "
                 "with seller expectations."
+            )
+            st.write(
+                "Worst Case maps to the no-regret price, Base Case to the target offer, "
+                "and Best Case to the upper bound."
             )
 
         st.markdown("### Decision KPIs")
@@ -3825,6 +3906,8 @@ def run_app():
 
     if page == "Operating Model (P&L)":
         st.header("Operating Model (P&L)")
+        _render_scenario_selector()
+        st.caption(f"Operating Model (P&L) — {selected_scenario} Case")
         st.write("Consolidated income statement (5-year plan)")
         scenario_options = ["Base", "Best", "Worst"]
         selected_scenario = st.session_state.get(
@@ -4483,6 +4566,8 @@ def run_app():
 
     if page == "Cashflow & Liquidity":
         st.header("Cashflow & Liquidity")
+        _render_scenario_selector()
+        st.caption(f"Cashflow & Liquidity — {selected_scenario} Case")
         st.write("Consolidated cashflow statement (5-year plan)")
         cashflow_line_items = {}
 
@@ -4751,6 +4836,8 @@ def run_app():
 
     if page == "Balance Sheet":
         st.header("Balance Sheet")
+        _render_scenario_selector()
+        st.caption(f"Balance Sheet — {selected_scenario} Case")
         st.write("Simplified balance sheet (5-year plan)")
         balance_line_items = {}
 
@@ -5029,6 +5116,8 @@ def run_app():
 
     if page == "Financing & Debt":
         st.header("Financing & Debt")
+        _render_scenario_selector()
+        st.caption(f"Financing & Debt — {selected_scenario} Case")
         st.write("Debt structure, service and bankability (5-year plan)")
         financing_assumptions = input_model.financing_assumptions
         cashflow_by_year = {row["year"]: row for row in cashflow_result}
@@ -5188,6 +5277,8 @@ def run_app():
 
     if page == "Equity Case":
         st.header("Equity Case")
+        _render_scenario_selector()
+        st.caption(f"Equity Case — {selected_scenario} Case")
         st.write("Management Buy-Out with external minority investor.")
 
         equity_defaults = _default_equity_assumptions(input_model)

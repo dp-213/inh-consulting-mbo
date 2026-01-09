@@ -131,9 +131,10 @@ def build_revenue_model_outputs(assumptions_state, scenario):
     return revenue_final_by_year, components_by_year
 
 
-def render_revenue_model_assumptions(input_model):
-    st.header("Revenue Model")
-    st.write("Detailed revenue planning (5-year view).")
+def render_revenue_model_assumptions(input_model, show_header=True):
+    if show_header:
+        st.header("Revenue Model")
+        st.write("Detailed revenue planning (5-year view).")
 
     assumptions_state = st.session_state["assumptions"]
     revenue_state = assumptions_state["revenue_model"]

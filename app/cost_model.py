@@ -110,9 +110,10 @@ def build_cost_model_outputs(assumptions_state, revenue_final_by_year):
     return cost_totals_by_year
 
 
-def render_cost_model_assumptions(input_model):
-    st.header("Cost Model")
-    st.write("Detailed annual cost planning (5-year view).")
+def render_cost_model_assumptions(input_model, show_header=True):
+    if show_header:
+        st.header("Cost Model")
+        st.write("Detailed annual cost planning (5-year view).")
 
     assumptions_state = st.session_state["assumptions"]
     cost_state = assumptions_state["cost_model"]
