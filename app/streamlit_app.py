@@ -3014,6 +3014,11 @@ def run_app(page_override=None):
     _apply_assumptions_state()
 
     def _render_input_scenario_selector():
+        if st.session_state.get("page_key") not in {
+            "Revenue Model",
+            "Cost Model",
+        }:
+            return
         st.radio(
             label="",
             options=["Worst", "Base", "Best"],
