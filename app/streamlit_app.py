@@ -2895,74 +2895,6 @@ def run_app():
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        nav_css = """
-        <style>
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            padding: 0.2rem 0 0.2rem 0.35rem;
-            border-radius: 4px;
-            margin: 0;
-            color: #6b7280;
-            white-space: nowrap;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div {
-            margin-left: 0 !important;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label {
-            padding-left: 0.35rem;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {
-            color: #111827;
-            background: transparent;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] input,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] svg,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > span:first-child {
-            display: none;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] input:checked + div {
-            color: #111827;
-            font-weight: 600;
-            border-left: 3px solid #3b82f6;
-            padding-left: 0.5rem;
-            background: #eef2f7;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(1)::before,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(4)::before,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(7)::before,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(9)::before,
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(10)::before {
-            display: block;
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin: 0.85rem 0 0.35rem;
-            width: 100%;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(1)::before {
-            content: "OPERATING MODEL";
-            margin-top: 0;
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(4)::before {
-            content: "PLANNING";
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(7)::before {
-            content: "FINANCING";
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(9)::before {
-            content: "VALUATION";
-          }
-          div[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-child(10)::before {
-            content: "SETTINGS";
-          }
-        </style>
-        """
-        st.markdown(nav_css, unsafe_allow_html=True)
-
         nav_options = [
             "Operating Model (P&L)",
             "Cashflow & Liquidity",
@@ -2977,6 +2909,26 @@ def run_app():
         ]
 
         st.markdown("**MBO Financial Model**")
+        nav_css = """
+        <style>
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] input,
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] svg {
+            display: none;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] label > div {
+            margin-left: 0 !important;
+          }
+          div[data-testid="stSidebar"] div[data-testid="stRadio"] input:checked + div {
+            font-weight: 600;
+          }
+        </style>
+        """
+        st.markdown(nav_css, unsafe_allow_html=True)
+        st.markdown("OPERATING MODEL")
+        st.markdown("PLANNING")
+        st.markdown("FINANCING")
+        st.markdown("VALUATION")
+        st.markdown("SETTINGS")
         selected_page = st.sidebar.radio(
             "",
             nav_options,
