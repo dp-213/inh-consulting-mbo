@@ -24,10 +24,10 @@ def calculate_debt_schedule(input_model, cashflow_result=None):
     # Calculate yearly interest and amortization.
     for i in range(5):
         year = i
-        opening_debt = outstanding_principal
         debt_drawdown = initial_debt if i == 0 else 0.0
+        opening_debt = outstanding_principal + debt_drawdown
 
-        # Interest is based on opening principal.
+        # Interest is based on opening principal (includes Year 0 drawdown).
         interest_expense = opening_debt * interest_rate
         if amort_type == "Bullet":
             scheduled_repayment = (
@@ -57,11 +57,24 @@ def calculate_debt_schedule(input_model, cashflow_result=None):
         special_repayment = (
             special_amount if special_year == i else 0.0
         )
-        pre_repayment_balance = opening_debt + debt_drawdown
+        pre_repayment_balance = opening_debt
         total_repayment = min(
             pre_repayment_balance, scheduled_repayment + special_repayment
         )
         debt_service = interest_expense + total_repayment
+        if initial_debt > 0 and opening_debt > 0:
+            if interest_expense == 0:
+                raise ValueError(
+                    "Interest expense is zero with positive debt balance."
+                )
+            if scheduled_repayment == 0:
+                raise ValueError(
+                    "Scheduled repayment is zero with positive debt balance."
+                )
+            if debt_service == 0:
+                raise ValueError(
+                    "Debt service is zero with positive debt balance."
+                )
 
         # DSCR will be added when cashflow data is available.
         cfads = None
@@ -74,7 +87,7 @@ def calculate_debt_schedule(input_model, cashflow_result=None):
         )
 
         reconciliation_gap = (
-            opening_debt + debt_drawdown - total_repayment - outstanding_principal
+            opening_debt - total_repayment - outstanding_principal
         )
         if abs(reconciliation_gap) > 1e-6:
             raise ValueError(

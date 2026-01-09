@@ -5764,6 +5764,10 @@ def run_app(page_override=None):
         ]
         avg_dscr = sum(dscr_values) / len(dscr_values) if dscr_values else 0
         min_dscr_value = min(dscr_values) if dscr_values else 0
+        if any(value > 50 for value in dscr_values):
+            st.warning(
+                "DSCR exceeds 50x in at least one year. This may indicate broken debt logic."
+            )
         debt_at_close = debt_schedule[0]["debt_drawdown"]
         ebitda_year0 = pnl_result["Year 0"]["ebitda"]
         debt_to_ebitda = debt_at_close / ebitda_year0 if ebitda_year0 else 0
