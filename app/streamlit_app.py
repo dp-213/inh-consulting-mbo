@@ -23,20 +23,10 @@ NAV_OPTIONS = [
 ]
 
 from data_model import InputModel, create_demo_input_model
-from calculations.pnl import calculate_pnl
-from calculations.cashflow import calculate_cashflow
-from calculations.debt import calculate_debt_schedule
-from calculations.balance_sheet import calculate_balance_sheet
-from calculations.investment import calculate_investment
 from calculations.investment import _calculate_irr
-from revenue_model import (
-    render_revenue_model_assumptions,
-    build_revenue_model_outputs,
-)
-from cost_model import (
-    render_cost_model_assumptions,
-    build_cost_model_outputs,
-)
+from run_model import run_model
+from revenue_model import render_revenue_model_assumptions
+from cost_model import render_cost_model_assumptions
 
 
 def _pnl_dict_to_list(pnl_dict):
@@ -125,7 +115,7 @@ def _build_model_snapshot_payload(
     debt_schedule,
     investment_result,
 ):
-    scenario = st.session_state.get("assumptions.scenario", "Base")
+    scenario = st.session_state.get("active_output_scenario", "Base")
     try:
         commit = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -2769,31 +2759,29 @@ def run_app(page_override=None):
 
     _apply_assumptions_state()
 
-    def _render_scenario_selector():
+    def _render_input_scenario_selector():
         st.radio(
             label="",
             options=["Worst", "Base", "Best"],
             horizontal=True,
-            key="scenario",
+            key="assumptions.scenario",
         )
 
-    # Global scenario selector (active scenario for all pages).
-    st.session_state.setdefault("scenario", "Base")
-    active_scenario = st.session_state["scenario"]
-    st.session_state["active_scenario"] = active_scenario
-    st.session_state["assumptions.scenario"] = active_scenario
-    st.session_state["scenario_selection.selected_scenario"] = active_scenario
-
-    def _render_scenario_selector():
+    def _render_output_scenario_selector():
         st.radio(
             label="",
             options=["Worst", "Base", "Best"],
             horizontal=True,
-            key="scenario",
+            key="active_output_scenario",
         )
+
+    st.session_state.setdefault("assumptions.scenario", "Base")
+    st.session_state.setdefault("active_output_scenario", "Base")
+    input_scenario = st.session_state["assumptions.scenario"]
+    st.session_state["scenario_selection.selected_scenario"] = input_scenario
 
     # Build input model and collect editable values from the assumptions page.
-    selected_scenario = active_scenario
+    selected_scenario = input_scenario
     scenario_key = selected_scenario.lower()
     input_model = create_demo_input_model()
     for section_key, section_value in input_model.__dict__.items():
@@ -2844,47 +2832,37 @@ def run_app(page_override=None):
             f"equity.{key}", default_value
         )
 
-    revenue_final_by_year, revenue_components_by_year = build_revenue_model_outputs(
-        st.session_state["assumptions"], selected_scenario
-    )
-    cost_model_totals = build_cost_model_outputs(
-        st.session_state["assumptions"], revenue_final_by_year
-    )
-    input_model.revenue_final_by_year = revenue_final_by_year
-    input_model.revenue_components_by_year = revenue_components_by_year
-    input_model.cost_model_totals_by_year = cost_model_totals
-
-    debt_schedule = calculate_debt_schedule(input_model)
-    pnl_base = calculate_pnl(
-        input_model,
-        revenue_final_by_year=revenue_final_by_year,
-        cost_totals_by_year=cost_model_totals,
-        debt_schedule=debt_schedule,
-    )
-    cashflow_result = calculate_cashflow(input_model, pnl_base, debt_schedule)
-    depreciation_by_year = {
-        row["year"]: row.get("depreciation", 0.0)
-        for row in cashflow_result
-    }
-    pnl_list = calculate_pnl(
-        input_model,
-        depreciation_by_year,
-        revenue_final_by_year=revenue_final_by_year,
-        cost_totals_by_year=cost_model_totals,
-        debt_schedule=debt_schedule,
-    )
-    pnl_result = {f"Year {row['year']}": row for row in pnl_list}
-    debt_schedule = calculate_debt_schedule(input_model, cashflow_result)
-    balance_sheet = calculate_balance_sheet(
-        input_model, cashflow_result, debt_schedule, pnl_list
-    )
-    investment_result = calculate_investment(
-        input_model, cashflow_result, pnl_list, balance_sheet
-    )
-
     page = page_override or st.session_state.get(
         "page_key", "Operating Model (P&L)"
     )
+    output_pages = {
+        "Overview",
+        "Operating Model (P&L)",
+        "Cashflow & Liquidity",
+        "Balance Sheet",
+        "Financing & Debt",
+        "Equity Case",
+        "Valuation & Purchase Price",
+    }
+    if page in output_pages:
+        with st.sidebar:
+            st.markdown("### Output Scenario")
+            _render_output_scenario_selector()
+        output_scenario = st.session_state["active_output_scenario"]
+        model_results = run_model(
+            st.session_state["assumptions"],
+            scenario=output_scenario,
+            input_model=input_model,
+        )
+        pnl_list = model_results["pnl"]
+        pnl_result = {f"Year {row['year']}": row for row in pnl_list}
+        cashflow_result = model_results["cashflow"]
+        debt_schedule = model_results["debt_schedule"]
+        balance_sheet = model_results["balance_sheet"]
+        investment_result = model_results["investment"]
+        revenue_final_by_year = input_model.revenue_final_by_year
+        revenue_components_by_year = input_model.revenue_components_by_year
+        cost_model_totals = input_model.cost_model_totals_by_year
     editor_css = """
     <style>
       .rdg-cell[aria-readonly="true"] {
@@ -2998,21 +2976,21 @@ def run_app(page_override=None):
 
     if page == "Revenue Model":
         st.title("Revenue Model")
-        _render_scenario_selector()
+        _render_input_scenario_selector()
         render_revenue_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
 
     if page == "Cost Model":
         st.title("Cost Model")
-        _render_scenario_selector()
+        _render_input_scenario_selector()
         render_cost_model_assumptions(input_model, show_header=False)
         _apply_assumptions_state()
         return
 
     if page == "Other Assumptions":
         st.title("Other Assumptions")
-        _render_scenario_selector()
+        _render_input_scenario_selector()
         st.write("Master input sheet – all remaining assumptions.")
         defaults = st.session_state.setdefault(
             "assumptions_defaults", _seed_assumptions_state()
@@ -3616,25 +3594,9 @@ def run_app(page_override=None):
         gap_label = "Buyer > Seller" if valuation_gap >= 0 else "Buyer < Seller"
         st.caption(f"Valuation gap indicator: {gap_label}.")
 
-        def _buyer_value_for_scenario(scenario_label):
-            revenue_final, _ = build_revenue_model_outputs(
-                st.session_state["assumptions"], scenario_label
-            )
-            cost_totals = build_cost_model_outputs(
-                st.session_state["assumptions"], revenue_final
-            )
-            debt_schedule_local = calculate_debt_schedule(input_model)
-            pnl_list_local = calculate_pnl(
-                input_model,
-                revenue_final_by_year=revenue_final,
-                cost_totals_by_year=cost_totals,
-                debt_schedule=debt_schedule_local,
-            )
-            cashflow_local = calculate_cashflow(
-                input_model, pnl_list_local, debt_schedule_local
-            )
+        def _buyer_value_for_active_scenario():
             free_cashflows = [
-                row.get("free_cashflow", 0.0) for row in cashflow_local
+                row.get("free_cashflow", 0.0) for row in cashflow_result
             ]
             cumulative_pv = 0.0
             for year_index, fcf in enumerate(free_cashflows):
@@ -3660,9 +3622,10 @@ def run_app(page_override=None):
             transaction_costs = enterprise_value_dcf * transaction_cost_pct
             return enterprise_value_dcf - debt_at_close - transaction_costs
 
-        buyer_value_worst = _buyer_value_for_scenario("Worst")
-        buyer_value_base = _buyer_value_for_scenario("Base")
-        buyer_value_best = _buyer_value_for_scenario("Best")
+        buyer_value_active = _buyer_value_for_active_scenario()
+        buyer_value_worst = buyer_value_active
+        buyer_value_base = buyer_value_active
+        buyer_value_best = buyer_value_active
 
         st.markdown("### Offer Range (Buyer View)")
         no_regret_price = max(buyer_value_worst, 0)
@@ -3809,11 +3772,7 @@ def run_app(page_override=None):
 
     if page == "Operating Model (P&L)":
         st.title("Operating Model (P&L)")
-        _render_scenario_selector()
-        selected_scenario = st.session_state.get(
-            "scenario_selection.selected_scenario",
-            input_model.scenario_selection["selected_scenario"].value,
-        )
+        selected_scenario = st.session_state["active_output_scenario"]
         scenario_key = selected_scenario.lower()
         utilization_by_year = getattr(input_model, "utilization_by_year", None)
         if not isinstance(utilization_by_year, list) or len(utilization_by_year) < 5:
@@ -4466,7 +4425,6 @@ def run_app(page_override=None):
 
     if page == "Cashflow & Liquidity":
         st.title("Cashflow & Liquidity")
-        _render_scenario_selector()
         st.write("Consolidated cashflow statement (5-year plan)")
         cashflow_line_items = {}
 
@@ -4735,7 +4693,6 @@ def run_app(page_override=None):
 
     if page == "Balance Sheet":
         st.title("Balance Sheet")
-        _render_scenario_selector()
         st.write("Simplified balance sheet (5-year plan)")
         balance_line_items = {}
 
@@ -5014,7 +4971,6 @@ def run_app(page_override=None):
 
     if page == "Financing & Debt":
         st.title("Financing & Debt")
-        _render_scenario_selector()
         st.write("Debt structure, service and bankability (5-year plan)")
         financing_assumptions = input_model.financing_assumptions
         cashflow_by_year = {row["year"]: row for row in cashflow_result}
