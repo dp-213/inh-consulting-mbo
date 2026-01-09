@@ -2917,6 +2917,18 @@ def run_app():
             padding-left: 0.35rem;
             background: #eef2f7;
           }
+          div[data-testid="stSidebar"] button {
+            background: transparent;
+            border: none;
+            padding: 0.15rem 0 0.15rem 0.25rem;
+            text-align: left;
+            width: 100%;
+            color: #6b7280;
+          }
+          div[data-testid="stSidebar"] button:hover {
+            color: #111827;
+            background: transparent;
+          }
         </style>
         """
         st.markdown(nav_css, unsafe_allow_html=True)
@@ -2933,22 +2945,18 @@ def run_app():
             "SETTINGS": ["Model Settings"],
         }
 
-        clicked_page = st.query_params.get("page")
-        if isinstance(clicked_page, list):
-            clicked_page = clicked_page[0] if clicked_page else None
-        if clicked_page:
-            st.session_state["page"] = clicked_page
-
         current_page = st.session_state["page"]
 
         def _nav_item(label):
-            active_class = "active" if label == current_page else ""
-            st.markdown(
-                f'<div class="nav-item {active_class}" '
-                f'onclick="window.location.search=\'?page={label}\'">'
-                f'{label}</div>',
-                unsafe_allow_html=True,
-            )
+            if label == current_page:
+                st.markdown(
+                    f'<div class="nav-item active">{label}</div>',
+                    unsafe_allow_html=True,
+                )
+                return
+            key = f"nav_{''.join(ch for ch in label.lower() if ch.isalnum())}"
+            if st.sidebar.button(label, key=key):
+                st.session_state["page"] = label
 
         st.markdown("**MBO Financial Model**")
         for section, items in nav_items.items():
