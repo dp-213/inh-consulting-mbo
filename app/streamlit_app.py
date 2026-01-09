@@ -1,6 +1,5 @@
 import io
 import json
-import urllib.parse
 import subprocess
 from datetime import datetime
 import zipfile
@@ -2892,75 +2891,42 @@ def run_app():
             background: #eff6ff;
             border: 1px solid #93c5fd;
           }
-          .nav-section {
-            font-size: 0.7rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin: 0.8rem 0 0.35rem;
-          }
-          .nav-item {
-            display: block !important;
-            color: #6b7280 !important;
-            text-decoration: none !important;
-            padding: 0.2rem 0 0.2rem 0.35rem !important;
-            border-left: 3px solid transparent !important;
-            background: transparent !important;
-            cursor: pointer !important;
-          }
-          .nav-item:hover {
-            color: #111827 !important;
-            text-decoration: none !important;
-          }
-          .nav-item.active {
-            font-weight: 600 !important;
-            color: #111827 !important;
-            border-left: 3px solid #3b82f6 !important;
-            background: #eef2f7 !important;
-          }
         </style>
         """
         st.markdown(editor_css, unsafe_allow_html=True)
 
-        nav_items = {
-            "OPERATING MODEL": [
-                "Operating Model (P&L)",
-                "Cashflow & Liquidity",
-                "Balance Sheet",
-            ],
-            "PLANNING": ["Revenue Model", "Cost Model", "Other Assumptions"],
-            "FINANCING": ["Financing & Debt", "Equity Case"],
-            "VALUATION": ["Valuation & Purchase Price"],
-            "SETTINGS": ["Model Settings"],
-        }
-        nav_pages = [item for items in nav_items.values() for item in items]
+        st.markdown("MBO Financial Model")
 
-        clicked_page = st.query_params.get("page")
-        if isinstance(clicked_page, list):
-            clicked_page = clicked_page[0] if clicked_page else None
-        if clicked_page in nav_pages and clicked_page != st.session_state["page"]:
-            st.session_state["page"] = clicked_page
-            st.rerun()
-
+        nav_options = [
+            "— Operating Model —",
+            "Operating Model (P&L)",
+            "Cashflow & Liquidity",
+            "Balance Sheet",
+            "— Planning —",
+            "Revenue Model",
+            "Cost Model",
+            "Other Assumptions",
+            "— Financing —",
+            "Financing & Debt",
+            "Equity Case",
+            "— Valuation —",
+            "Valuation & Purchase Price",
+            "— Settings —",
+            "Model Settings",
+        ]
         current_page = st.session_state["page"]
-
-        def _nav_item(label):
-            active_class = "active" if label == current_page else ""
-            target = urllib.parse.quote(label, safe="")
-            st.markdown(
-                f'<a class="nav-item {active_class}" href="?page={target}">{label}</a>',
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("**MBO Financial Model**")
-        for section, items in nav_items.items():
-            st.markdown(
-                f'<div class="nav-section">{section}</div>',
-                unsafe_allow_html=True,
-            )
-            for item in items:
-                _nav_item(item)
-
+        if current_page not in nav_options:
+            current_page = "Operating Model (P&L)"
+            st.session_state["page"] = current_page
+        selected_page = st.sidebar.selectbox(
+            "",
+            nav_options,
+            index=nav_options.index(current_page),
+            key="page_select",
+        )
+        if selected_page.startswith("—"):
+            selected_page = current_page
+        st.session_state["page"] = selected_page
         page = st.session_state["page"]
         assumptions_state = st.session_state["assumptions"]
 
