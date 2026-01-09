@@ -571,8 +571,10 @@ def render_revenue_model_assumptions(input_model):
             return [base] * len(row)
         return [""] * len(row)
 
+    table_height = 35 * (len(bridge_df) + 1)
     st.dataframe(
         bridge_df.style.apply(_bridge_style, axis=1),
         hide_index=True,
         use_container_width=True,
+        height=table_height,
     )
