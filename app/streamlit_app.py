@@ -297,7 +297,9 @@ def render_advanced_assumptions(input_model, show_header=True):
     for _, row in financing_edit.iterrows():
         parameter = row["Parameter"]
         if parameter == "Senior Debt Amount":
-            st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = _local_non_negative(row["Value"])
+            senior_debt_amount = _local_non_negative(row["Value"])
+            st.session_state["financing.senior_debt_amount"] = senior_debt_amount
+            st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = senior_debt_amount
         elif parameter == "Interest Rate":
             st.session_state["transaction_and_financing.senior_interest_rate_pct"] = _local_clamp_pct(row["Value"])
         elif parameter == "Amortisation Years":
@@ -691,9 +693,11 @@ def _apply_assumptions_state():
     for row in state.get("financing", []):
         param = row["Parameter"]
         if param == "Senior Debt Amount":
+            senior_debt_amount = _non_negative(row["Value"])
+            st.session_state["financing.senior_debt_amount"] = senior_debt_amount
             st.session_state[
                 "transaction_and_financing.senior_term_loan_start_eur"
-            ] = _non_negative(row["Value"])
+            ] = senior_debt_amount
         elif param == "Interest Rate":
             st.session_state[
                 "transaction_and_financing.senior_interest_rate_pct"
@@ -825,7 +829,11 @@ def _default_balance_sheet_assumptions(input_model):
 
 def _default_financing_assumptions(input_model):
     cashflow_defaults = _default_cashflow_assumptions()
+    senior_debt_amount = input_model.transaction_and_financing[
+        "senior_term_loan_start_eur"
+    ].value
     return {
+        "senior_debt_amount": senior_debt_amount,
         "initial_debt_eur": input_model.transaction_and_financing[
             "senior_term_loan_start_eur"
         ].value,
@@ -1447,7 +1455,7 @@ def _render_custom_table_html(
     st.markdown(table_html, unsafe_allow_html=True)
 
 
-def _build_pnl_excel(input_model):
+def _build_pnl_excel(input_model, pnl_result, cashflow_result, debt_schedule):
     scenario = input_model.scenario_selection["selected_scenario"].value
     scenario_key = scenario.lower()
     cashflow_assumptions = getattr(
@@ -1468,6 +1476,7 @@ def _build_pnl_excel(input_model):
         "financing_assumptions",
         _default_financing_assumptions(input_model),
     )
+    pnl_list = _pnl_dict_to_list(pnl_result)
     equity_assumptions = getattr(
         input_model,
         "equity_assumptions",
@@ -1500,7 +1509,7 @@ def _build_pnl_excel(input_model):
         ("Depreciation (EUR)", input_model.capex_and_working_capital["depreciation_eur_per_year"].value),
         ("Purchase Price (EUR)", input_model.transaction_and_financing["purchase_price_eur"].value),
         ("Equity Contribution (EUR)", input_model.transaction_and_financing["equity_contribution_eur"].value),
-        ("Debt Amount (EUR)", input_model.transaction_and_financing["senior_term_loan_start_eur"].value),
+        ("Debt Amount (EUR)", financing_assumptions["senior_debt_amount"]),
         ("Interest Rate %", input_model.transaction_and_financing["senior_interest_rate_pct"].value),
         ("Tax Rate %", input_model.tax_and_distributions["tax_rate_pct"].value),
         ("Tax Cash Rate (%)", cashflow_assumptions["tax_cash_rate_pct"]),
@@ -1754,25 +1763,15 @@ def _build_pnl_excel(input_model):
                 f"-{col}{cashflow_row_map['Capex']}"
             )
 
-            if year_index == 0:
-                debt_drawdown = f"={debt_amount_cell}"
-            else:
-                debt_drawdown = "=0"
-            ws_cashflow[f"{col}{cashflow_row_map['Debt Drawdown']}"] = debt_drawdown
-
-            scheduled_repayment = (
-                f"=IF({year_index}<{amort_period_cell},"
-                f"{debt_amount_cell}/{amort_period_cell},0)"
-            )
-            outstanding = (
-                f"MAX({debt_amount_cell}-({debt_amount_cell}/{amort_period_cell})"
-                f"*{year_index},0)"
+            debt_row = debt_schedule[year_index]
+            ws_cashflow[f"{col}{cashflow_row_map['Debt Drawdown']}"] = (
+                debt_row.get("debt_drawdown", 0.0)
             )
             ws_cashflow[f"{col}{cashflow_row_map['Interest Paid']}"] = (
-                f"={outstanding}*{interest_rate_cell}"
+                debt_row.get("interest_expense", 0.0)
             )
             ws_cashflow[f"{col}{cashflow_row_map['Debt Repayment']}"] = (
-                f"=MIN({scheduled_repayment},{outstanding})"
+                debt_row.get("total_repayment", 0.0)
             )
             net_cashflow_formula = (
                 f"={col}{cashflow_row_map['Free Cashflow']}"
@@ -1912,7 +1911,7 @@ def _build_pnl_excel(input_model):
                 f"={col}{balance_row_map['Cash']}+{col}{balance_row_map['Fixed Assets (Net)']}"
             )
             ws_balance[f"{col}{balance_row_map['Financial Debt']}"] = (
-                f"=MAX({debt_amount_cell}-({debt_amount_cell}/{amort_period_cell})*{year_index + 1},0)"
+                debt_schedule[year_index].get("closing_debt", 0.0)
             )
             ws_balance[f"{col}{balance_row_map['Total Liabilities']}"] = (
                 f"={col}{balance_row_map['Financial Debt']}"
@@ -2188,27 +2187,27 @@ def _build_pnl_excel(input_model):
 
         for year_index in range(5):
             col = year_col(2 + year_index)
-            prev_col = year_col(1 + year_index) if year_index > 0 else None
-            ws_financing[f"{col}{debt_row_map['Opening Debt']}"] = (
-                f"={initial_debt_cell}" if year_index == 0 else f"={prev_col}{debt_row_map['Closing Debt']}"
+            debt_row = debt_schedule[year_index]
+            ws_financing[f"{col}{debt_row_map['Opening Debt']}"] = debt_row.get(
+                "opening_debt", 0.0
             )
-            ws_financing[f"{col}{debt_row_map['Debt Drawdown']}"] = (
-                f"=IF({year_index}=0,{initial_debt_cell},0)"
+            ws_financing[f"{col}{debt_row_map['Debt Drawdown']}"] = debt_row.get(
+                "debt_drawdown", 0.0
             )
-            ws_financing[f"{col}{debt_row_map['Scheduled Repayment']}"] = (
-                f"=IF({year_index}<{amort_period_cell},{initial_debt_cell}/{amort_period_cell},0)"
+            ws_financing[f"{col}{debt_row_map['Scheduled Repayment']}"] = debt_row.get(
+                "scheduled_repayment", 0.0
             )
-            ws_financing[f"{col}{debt_row_map['Special Repayment']}"] = (
-                "=0"
+            ws_financing[f"{col}{debt_row_map['Special Repayment']}"] = debt_row.get(
+                "special_repayment", 0.0
             )
-            ws_financing[f"{col}{debt_row_map['Total Repayment']}"] = (
-                f"=MIN({col}{debt_row_map['Opening Debt']},{col}{debt_row_map['Scheduled Repayment']})"
+            ws_financing[f"{col}{debt_row_map['Total Repayment']}"] = debt_row.get(
+                "total_repayment", 0.0
             )
-            ws_financing[f"{col}{debt_row_map['Closing Debt']}"] = (
-                f"={col}{debt_row_map['Opening Debt']}-{col}{debt_row_map['Total Repayment']}"
+            ws_financing[f"{col}{debt_row_map['Closing Debt']}"] = debt_row.get(
+                "closing_debt", 0.0
             )
-            ws_financing[f"{col}{debt_row_map['Interest Expense']}"] = (
-                f"={col}{debt_row_map['Opening Debt']}*{interest_rate_cell}"
+            ws_financing[f"{col}{debt_row_map['Interest Expense']}"] = debt_row.get(
+                "interest_expense", 0.0
             )
 
         bank_table_start = debt_table_start + len(debt_items) + 3
@@ -2251,38 +2250,43 @@ def _build_pnl_excel(input_model):
 
         for year_index in range(5):
             col = year_col(2 + year_index)
-            ws_financing[f"{col}{bank_row_map['EBITDA']}"] = f"='P&L'!{col}17"
-            ws_financing[f"{col}{bank_row_map['Cash Taxes']}"] = (
-                f"=Cashflow!{col}{cashflow_row_map['Taxes Paid']}"
+            debt_row = debt_schedule[year_index]
+            cashflow_row = cashflow_result[year_index]
+            pnl_row = pnl_list[year_index]
+            revenue = pnl_row.get("revenue", 0.0)
+            maintenance_capex = revenue * financing_assumptions["maintenance_capex_pct_revenue"]
+            cfads = (
+                pnl_row.get("ebitda", 0.0)
+                - cashflow_row.get("taxes_paid", 0.0)
+                - maintenance_capex
+            )
+            debt_service = debt_row.get("interest_expense", 0.0) + debt_row.get(
+                "scheduled_repayment", 0.0
+            )
+            dscr_value = cfads / debt_service if debt_service else 0.0
+            ws_financing[f"{col}{bank_row_map['EBITDA']}"] = pnl_row.get(
+                "ebitda", 0.0
+            )
+            ws_financing[f"{col}{bank_row_map['Cash Taxes']}"] = cashflow_row.get(
+                "taxes_paid", 0.0
             )
             ws_financing[f"{col}{bank_row_map['Capex (Maintenance)']}"] = (
-                f"='P&L'!{col}5*{maintenance_capex_cell}"
+                maintenance_capex
             )
-            ws_financing[f"{col}{bank_row_map['CFADS']}"] = (
-                f"={col}{bank_row_map['EBITDA']}"
-                f"-{col}{bank_row_map['Cash Taxes']}"
-                f"-{col}{bank_row_map['Capex (Maintenance)']}"
-                f"+('P&L'!{col}5*{wc_change_cell})"
+            ws_financing[f"{col}{bank_row_map['CFADS']}"] = cfads
+            ws_financing[f"{col}{bank_row_map['Interest Expense']}"] = debt_row.get(
+                "interest_expense", 0.0
             )
-            ws_financing[f"{col}{bank_row_map['Interest Expense']}"] = (
-                f"={col}{debt_row_map['Interest Expense']}"
+            ws_financing[f"{col}{bank_row_map['Scheduled Repayment']}"] = debt_row.get(
+                "scheduled_repayment", 0.0
             )
-            ws_financing[f"{col}{bank_row_map['Scheduled Repayment']}"] = (
-                f"={col}{debt_row_map['Scheduled Repayment']}"
-            )
-            ws_financing[f"{col}{bank_row_map['Debt Service']}"] = (
-                f"={col}{bank_row_map['Interest Expense']}"
-                f"+{col}{bank_row_map['Scheduled Repayment']}"
-            )
-            ws_financing[f"{col}{bank_row_map['DSCR']}"] = (
-                f"=IF({col}{bank_row_map['Debt Service']}=0,0,"
-                f"{col}{bank_row_map['CFADS']}/{col}{bank_row_map['Debt Service']})"
-            )
+            ws_financing[f"{col}{bank_row_map['Debt Service']}"] = debt_service
+            ws_financing[f"{col}{bank_row_map['DSCR']}"] = dscr_value
             ws_financing[f"{col}{bank_row_map['Minimum Required DSCR']}"] = (
-                f"={min_dscr_cell}"
+                financing_assumptions["minimum_dscr"]
             )
             ws_financing[f"{col}{bank_row_map['Covenant Breach']}"] = (
-                f"=IF({col}{bank_row_map['DSCR']}<{min_dscr_cell},\"YES\",\"NO\")"
+                "YES" if dscr_value < financing_assumptions["minimum_dscr"] else "NO"
             )
 
         financing_notes_row = bank_table_start + len(bank_items) + 2
@@ -3182,6 +3186,18 @@ def run_app(page_override=None):
         input_model.financing_assumptions[key] = st.session_state.get(
             f"financing.{key}", default_value
         )
+    senior_debt_amount = st.session_state.get(
+        "financing.senior_debt_amount",
+        input_model.financing_assumptions["initial_debt_eur"],
+    )
+    input_model.financing_assumptions["senior_debt_amount"] = senior_debt_amount
+    input_model.financing_assumptions["initial_debt_eur"] = senior_debt_amount
+    st.session_state["transaction_and_financing.senior_term_loan_start_eur"] = (
+        senior_debt_amount
+    )
+    input_model.transaction_and_financing[
+        "senior_term_loan_start_eur"
+    ].value = senior_debt_amount
     input_model.valuation_runtime = _default_valuation_assumptions(input_model)
     for key, default_value in input_model.valuation_runtime.items():
         input_model.valuation_runtime[key] = st.session_state.get(
@@ -3957,10 +3973,7 @@ def run_app(page_override=None):
         drawdown_y0 = debt_year0.get("debt_drawdown", 0.0)
         repayment_y0 = debt_year0.get("total_repayment", 0.0)
 
-        senior_debt_amount = input_model.financing_assumptions.get(
-            "initial_debt_eur",
-            input_model.transaction_and_financing["senior_term_loan_start_eur"].value,
-        )
+        senior_debt_amount = input_model.financing_assumptions["senior_debt_amount"]
         amort_years = input_model.financing_assumptions.get(
             "amortization_period_years", 5
         )
@@ -5055,7 +5068,9 @@ def run_app(page_override=None):
                 kpi_table.loc[metric] = kpi_table.loc[metric].apply(formatter)
             st.dataframe(kpi_table, use_container_width=True)
 
-        pnl_excel = _build_pnl_excel(input_model)
+        pnl_excel = _build_pnl_excel(
+            input_model, pnl_result, cashflow_result, debt_schedule
+        )
         st.download_button(
             "Download P&L as Excel",
             data=pnl_excel.getvalue(),
@@ -5613,6 +5628,19 @@ def run_app(page_override=None):
         st.title("Financing & Debt")
         st.write("Debt structure, service and bankability (5-year plan)")
         financing_assumptions = input_model.financing_assumptions
+        senior_debt_amount = financing_assumptions["senior_debt_amount"]
+        amort_years = financing_assumptions["amortization_period_years"]
+        amort_type = financing_assumptions.get("amortization_type", "Linear")
+        grace_years = financing_assumptions.get("grace_period_years", 0)
+        peak_debt = max(
+            row["opening_debt"] + row["debt_drawdown"] for row in debt_schedule
+        )
+        if abs(peak_debt - senior_debt_amount) > 1.0:
+            raise ValueError("Debt input not reflected in debt schedule.")
+        if amort_type == "Linear" and grace_years == 0:
+            scheduled_repayment = debt_schedule[0]["scheduled_repayment"]
+            if abs(scheduled_repayment * amort_years - senior_debt_amount) > 1.0:
+                raise ValueError("Amortisation inconsistency.")
         cashflow_by_year = {row["year"]: row for row in cashflow_result}
         maintenance_capex_pct = financing_assumptions[
             "maintenance_capex_pct_revenue"
@@ -5706,9 +5734,6 @@ def run_app(page_override=None):
         ]
         avg_dscr = sum(dscr_values) / len(dscr_values) if dscr_values else 0
         min_dscr_value = min(dscr_values) if dscr_values else 0
-        peak_debt = max(
-            row["opening_debt"] + row["debt_drawdown"] for row in debt_schedule
-        )
         debt_at_close = debt_schedule[0]["debt_drawdown"]
         ebitda_year0 = pnl_result["Year 0"]["ebitda"]
         debt_to_ebitda = debt_at_close / ebitda_year0 if ebitda_year0 else 0
