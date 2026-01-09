@@ -404,7 +404,8 @@ def render_advanced_assumptions(input_model, show_header=True):
         elif parameter == "Transaction Costs (%)":
             st.session_state["valuation.transaction_cost_pct"] = _local_clamp_pct(row["Value"])
 
-    _apply_assumptions_state()
+    if "_apply_assumptions_state" in globals():
+        _apply_assumptions_state()
 
 def format_currency(value):
     if value is None or pd.isna(value):
