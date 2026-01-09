@@ -3291,7 +3291,10 @@ def run_app():
 
     if page == "Valuation & Purchase Price":
         st.header("Valuation & Purchase Price")
-        st.write("Seller vs. buyer view (5-year plan)")
+        st.write(
+            "This page compares seller expectations with a conservative buyer view. "
+            "The buyer view focuses on cash generation, financing constraints and downside risk."
+        )
 
         valuation_assumptions = _default_valuation_assumptions(input_model)
         seller_multiple = st.session_state.get(
@@ -3359,6 +3362,51 @@ def run_app():
             )
 
         st.markdown("### Seller Valuation (Multiple-Based)")
+        st.write("Seller expectation range based on EBIT multiple.")
+        seller_multiple_low = seller_multiple
+        seller_multiple_mid = seller_multiple
+        seller_multiple_high = seller_multiple
+        seller_ev_low = ebit_ref * seller_multiple_low
+        seller_ev_mid = ebit_ref * seller_multiple_mid
+        seller_ev_high = ebit_ref * seller_multiple_high
+        seller_equity_low = seller_ev_low - net_debt_close
+        seller_equity_mid = seller_ev_mid - net_debt_close
+        seller_equity_high = seller_ev_high - net_debt_close
+        seller_range_table = pd.DataFrame(
+            [
+                {
+                    "Metric": "Reference EBIT (Year)",
+                    "Low": f"Year {reference_year}",
+                    "Mid": f"Year {reference_year}",
+                    "High": f"Year {reference_year}",
+                },
+                {
+                    "Metric": "Applied EBIT Multiple",
+                    "Low": f"{seller_multiple_low:.2f}x",
+                    "Mid": f"{seller_multiple_mid:.2f}x",
+                    "High": f"{seller_multiple_high:.2f}x",
+                },
+                {
+                    "Metric": "Enterprise Value (EV)",
+                    "Low": format_currency(seller_ev_low),
+                    "Mid": format_currency(seller_ev_mid),
+                    "High": format_currency(seller_ev_high),
+                },
+                {
+                    "Metric": "Net Debt at Close",
+                    "Low": format_currency(net_debt_close),
+                    "Mid": format_currency(net_debt_close),
+                    "High": format_currency(net_debt_close),
+                },
+                {
+                    "Metric": "Equity Value (Seller View)",
+                    "Low": format_currency(seller_equity_low),
+                    "Mid": format_currency(seller_equity_mid),
+                    "High": format_currency(seller_equity_high),
+                },
+            ]
+        )
+        st.dataframe(seller_range_table, use_container_width=True)
         seller_table = pd.DataFrame.from_dict(seller_rows, orient="index")
         seller_table = seller_table[
             [f"Year {i}" for i in range(5)]
@@ -3374,7 +3422,11 @@ def run_app():
             seller_table, set(), seller_total_rows, seller_formatters
         )
 
-        st.markdown("### Buyer Valuation (DCF)")
+        st.markdown("### Buyer Valuation (Cash-Based)")
+        st.write(
+            "Buyer view is based on discounted free cashflow and explicitly "
+            "allows for negative equity values if pricing is too high."
+        )
         cashflow_table = pd.DataFrame(cashflow_result)
         free_cashflows = cashflow_table["free_cashflow"].tolist()
 
@@ -3453,6 +3505,22 @@ def run_app():
             dcf_table, set(), dcf_total_rows, dcf_formatters
         )
 
+        st.markdown("### Purchase Price Logic")
+        max_affordable_price = buyer_equity_value
+        st.write(
+            "Max affordable purchase price (Buyer) is the equity value that does not "
+            "break liquidity or financing constraints."
+        )
+        max_price_table = pd.DataFrame(
+            [
+                {
+                    "Metric": "Max Affordable Purchase Price (Buyer)",
+                    "Value": format_currency(max_affordable_price),
+                }
+            ]
+        )
+        st.dataframe(max_price_table, use_container_width=True)
+
         st.markdown("### Purchase Price Bridge")
         valuation_gap = buyer_equity_value - seller_equity_value
         valuation_gap_pct = (
@@ -3482,7 +3550,7 @@ def run_app():
         gap_label = "Buyer > Seller" if valuation_gap >= 0 else "Buyer < Seller"
         st.caption(f"Valuation gap indicator: {gap_label}.")
 
-        st.markdown("### KPIs")
+        st.markdown("### Decision KPIs")
         purchase_price = input_model.transaction_and_financing[
             "purchase_price_eur"
         ].value
@@ -3496,35 +3564,43 @@ def run_app():
         kpi_table = pd.DataFrame(
             [
                 {
-                    "KPI": "Implied EV / EBIT (Seller)",
+                    "KPI": "Seller EV / EBIT",
                     "Value": f"{implied_ev_multiple:.2f}x",
                 },
                 {
-                    "KPI": "Implied Equity IRR (Buyer)",
+                    "KPI": "Buyer IRR at Seller Price",
                     "Value": format_pct(investment_result["irr"]),
                 },
                 {
-                    "KPI": "Max Affordable Purchase Price (Buyer)",
+                    "KPI": "Max Affordable Purchase Price",
                     "Value": format_currency(buyer_equity_value),
                 },
                 {
                     "KPI": "Headroom vs Seller Ask",
                     "Value": format_currency(valuation_gap),
                 },
-                {
-                    "KPI": "Purchase Price as % of Revenue",
-                    "Value": format_pct(purchase_price_pct_revenue),
-                },
             ]
         )
         st.dataframe(kpi_table, use_container_width=True)
 
-        explain_valuation = st.toggle("Explain Valuation Logic")
+        explain_valuation = st.toggle("Explain valuation logic")
         if explain_valuation:
-            st.markdown("### Seller Perspective")
             st.write(
-                "The seller view uses an EBIT multiple on the selected reference year "
-                "to anchor enterprise value."
+                "Seller and buyer values differ because the seller anchors on market "
+                "multiples while the buyer focuses on cash generation and financing "
+                "constraints."
+            )
+            st.write(
+                "The buyer valuation is conservative by design to avoid overstretching "
+                "liquidity or debt service capacity."
+            )
+            st.write(
+                "This gap supports disciplined purchase price negotiation and shows "
+                "where the buyer can rationally walk away."
+            )
+            st.write(
+                "Not modeled: growth premiums, market synergies, or optimistic exit "
+                "assumptions."
             )
             st.caption(
                 f"Reference Year EBIT (Year {reference_year}) = {format_currency(ebit_ref)}."
