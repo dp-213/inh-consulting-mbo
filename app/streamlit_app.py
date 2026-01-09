@@ -2305,30 +2305,48 @@ def run_app():
             background-color: #f9fafb !important;
             color: #111827 !important;
           }
-          section.main div[data-testid="stRadio"] > label {
-            display: none;
+          /* === REMOVE RADIO LABEL SPACE COMPLETELY === */
+          div[data-testid="stRadio"] > label {
+            display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
-          section.main div[data-testid="stRadio"] > div {
-            display: flex;
-            gap: 8px;
-            align-items: center;
+
+          /* === FORCE CLEAN HORIZONTAL ROW === */
+          div[data-testid="stRadio"] > div {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 8px !important;
+            align-items: center !important;
           }
-          section.main div[data-testid="stRadio"] label {
-            padding: 6px 16px;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 500;
-            background-color: transparent;
-            border: 1px solid #e5e7eb;
-            cursor: pointer;
+
+          /* === TURN EACH RADIO OPTION INTO A PILL === */
+          div[data-testid="stRadio"] label {
+            padding: 6px 16px !important;
+            border-radius: 6px !important;
+            font-size: 14px !important;
+            font-weight: 500 !important;
+            border: 1px solid #e5e7eb !important;
+            background-color: transparent !important;
+            cursor: pointer !important;
           }
-          section.main div[data-testid="stRadio"] input:checked + div {
-            background-color: #eef2ff;
-            border-color: #6366f1;
-            color: #111827;
+
+          /* === HIDE THE ACTUAL RADIO CIRCLE === */
+          div[data-testid="stRadio"] input {
+            display: none !important;
           }
-          section.main div[data-testid="stRadio"] input {
-            display: none;
+
+          /* === ACTIVE (SELECTED) STATE === */
+          div[data-testid="stRadio"] input:checked + div {
+            background-color: #e0e7ff !important;
+            border-color: #6366f1 !important;
+            color: #111827 !important;
+          }
+
+          /* === PREVENT LAYOUT JUMPING === */
+          div[data-testid="stRadio"] * {
+            box-sizing: border-box !important;
           }
         </style>
         """,
@@ -2794,14 +2812,13 @@ def run_app():
     def _render_scenario_selector():
         labels = ["Worst", "Base", "Best"]
         current = st.session_state.get("scenario", "Base")
-        selected = st.radio(
+        st.radio(
             label="",
             options=labels,
             index=labels.index(current),
             horizontal=True,
-            key="scenario_selector",
+            key="scenario",
         )
-        st.session_state["scenario"] = selected
 
     # Global scenario selector (active scenario for all pages).
     st.session_state.setdefault("scenario", "Base")
