@@ -1958,7 +1958,6 @@ def _build_pnl_excel(input_model):
             ("Reference Year (0-4)", valuation_runtime["reference_year"]),
             ("Discount Rate (WACC)", valuation_runtime["buyer_discount_rate"]),
             ("Valuation Start Year (0-4)", valuation_runtime["valuation_start_year"]),
-            ("Debt at Close (EUR)", valuation_runtime["debt_at_close_eur"]),
             ("Transaction Costs (% of EV)", valuation_runtime["transaction_cost_pct"]),
             ("Include Terminal Value (1=On)", 1 if valuation_runtime["include_terminal_value"] else 0),
         ]
@@ -3943,10 +3942,86 @@ def run_app(page_override=None):
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
         ebitda_ref = pnl_table.loc[f"Year {reference_year}", "ebitda"]
         seller_ev = ebitda_ref * seller_multiple
-        balance_table = pd.DataFrame(balance_sheet)
-        financial_debt_close = balance_table.loc[0, "financial_debt"]
-        cash_close = balance_table.loc[0, "cash"]
-        net_debt_close = financial_debt_close - cash_close
+        if not debt_schedule:
+            st.error("Debt schedule is missing. Cannot reconcile valuation.")
+            st.stop()
+        debt_year0 = debt_schedule[0]
+        net_debt_close = debt_year0.get("closing_debt", 0.0)
+        opening_debt_y0 = debt_year0.get("opening_debt", 0.0)
+        drawdown_y0 = debt_year0.get("debt_drawdown", 0.0)
+        repayment_y0 = debt_year0.get("total_repayment", 0.0)
+
+        senior_debt_amount = input_model.financing_assumptions.get(
+            "initial_debt_eur",
+            input_model.transaction_and_financing["senior_term_loan_start_eur"].value,
+        )
+        amort_years = input_model.financing_assumptions.get(
+            "amortization_period_years", 5
+        )
+        amort_type = input_model.financing_assumptions.get(
+            "amortization_type", "Linear"
+        )
+        grace_years = input_model.financing_assumptions.get(
+            "grace_period_years", 0
+        )
+        expected_repayment = (
+            senior_debt_amount / amort_years
+            if amort_type == "Linear" and 0 >= grace_years
+            else repayment_y0
+        )
+        debt_errors = []
+        if abs(opening_debt_y0) > 1e-6:
+            debt_errors.append("Opening Debt in Year 0 must be 0.")
+        if abs(drawdown_y0 - senior_debt_amount) > 1e-6:
+            debt_errors.append(
+                "Debt drawdown in Year 0 must equal the Senior Debt Amount."
+            )
+        if amort_type == "Linear" and abs(repayment_y0 - expected_repayment) > 1e-6:
+            debt_errors.append(
+                "Linear amortisation repayment does not match Senior Debt / Amortisation Years."
+            )
+        if debt_errors:
+            st.error(
+                "Debt schedule is not consistent with financing assumptions: "
+                + " ".join(debt_errors)
+            )
+            st.stop()
+        debt_service_values = [
+            row.get("interest_expense", 0.0) + row.get("total_repayment", 0.0)
+            for row in debt_schedule
+        ]
+        if senior_debt_amount > 0 and all(
+            abs(value) < 1e-6 for value in debt_service_values
+        ):
+            st.error(
+                "Debt service is zero across the schedule. Financing is not linked to Senior Debt."
+            )
+            st.stop()
+        dscr_values = []
+        for row in cashflow_result:
+            year = row.get("year")
+            debt_row = next(
+                (item for item in debt_schedule if item.get("year") == year), None
+            )
+            if not debt_row:
+                continue
+            debt_service = debt_row.get("interest_expense", 0.0) + debt_row.get(
+                "total_repayment", 0.0
+            )
+            if debt_service <= 0:
+                continue
+            cfads = (
+                row.get("ebitda", 0.0)
+                - row.get("taxes_paid", 0.0)
+                - row.get("capex", 0.0)
+                - row.get("working_capital_change", 0.0)
+            )
+            dscr_values.append(cfads / debt_service if debt_service else 0.0)
+        if senior_debt_amount > 0 and not dscr_values:
+            st.error(
+                "DSCR cannot be derived from current cashflow and debt schedule."
+            )
+            st.stop()
         seller_equity_value = seller_ev - net_debt_close
 
         cashflow_table = pd.DataFrame(cashflow_result)
@@ -3999,16 +4074,15 @@ def run_app(page_override=None):
             f"{format_currency(valuation_gap)} | {format_pct(valuation_gap_pct)}",
         )
         st.info(
-            "Net Debt at Close is taken from Balance Sheet (Year 0): "
-            "Financial Debt – Cash."
+            "Net Debt at Close is taken from the Debt Schedule (Year 0): "
+            "Closing Debt."
         )
         net_debt_table = pd.DataFrame(
             [
-                {
-                    "Metric": "Financial Debt (Year 0)",
-                    "Value": format_currency(financial_debt_close),
-                },
-                {"Metric": "Cash (Year 0)", "Value": format_currency(cash_close)},
+                {"Metric": "Opening Debt (Year 0)", "Value": format_currency(opening_debt_y0)},
+                {"Metric": "Drawdown (Year 0)", "Value": format_currency(drawdown_y0)},
+                {"Metric": "Repayment (Year 0)", "Value": format_currency(repayment_y0)},
+                {"Metric": "Closing Debt (Year 0)", "Value": format_currency(net_debt_close)},
                 {
                     "Metric": "Net Debt at Close",
                     "Value": format_currency(net_debt_close),
@@ -4016,31 +4090,6 @@ def run_app(page_override=None):
             ]
         )
         st.dataframe(net_debt_table, use_container_width=True)
-
-        seller_rows = {
-            "Reference Year EBITDA": {},
-            "Applied EBITDA Multiple": {},
-            "Enterprise Value (EV)": {},
-            "Net Debt at Close": {},
-            "Equity Value (Seller View)": {},
-        }
-        for year_index in range(5):
-            year_label = f"Year {year_index}"
-            seller_rows["Reference Year EBITDA"][year_label] = (
-                ebitda_ref if year_index == reference_year else ""
-            )
-            seller_rows["Applied EBITDA Multiple"][year_label] = (
-                seller_multiple if year_index == reference_year else ""
-            )
-            seller_rows["Enterprise Value (EV)"][year_label] = (
-                seller_ev if year_index == reference_year else ""
-            )
-            seller_rows["Net Debt at Close"][year_label] = (
-                net_debt_close if year_index == 0 else ""
-            )
-            seller_rows["Equity Value (Seller View)"][year_label] = (
-                seller_equity_value if year_index == reference_year else ""
-            )
 
         with st.expander("Seller Valuation (Multiple-Based)", expanded=False):
             st.write("Seller expectation based on EBITDA multiple.")
@@ -4093,25 +4142,8 @@ def run_app(page_override=None):
                     ]
                 )
                 st.dataframe(sensitivity_table, use_container_width=True)
-            seller_table = pd.DataFrame.from_dict(seller_rows, orient="index")
-            seller_table = seller_table[
-                [f"Year {i}" for i in range(5)]
-            ].reset_index()
-            seller_table.rename(columns={"index": "Line Item"}, inplace=True)
-            seller_total_rows = {
-                "Enterprise Value (EV)",
-                "Equity Value (Seller View)",
-            }
-            seller_formatters = {
-                "Applied EBITDA Multiple": lambda value: f"{value:.2f}x"
-                if value not in ("", None)
-                else "",
-            }
-            _render_custom_table_html(
-                seller_table, set(), seller_total_rows, seller_formatters
-            )
 
-        with st.expander("Buyer Valuation (Cash-Based)", expanded=False):
+        with st.expander("Buyer Valuation (Cash-Based)", expanded=True):
             st.write(
                 "Buyer view is based on discounted free cashflow and explicitly "
                 "allows for negative equity values if pricing is too high."
