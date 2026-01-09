@@ -2905,12 +2905,19 @@ def run_app():
             width: 100%;
             color: #6b7280;
             box-shadow: none;
+            font-weight: 400;
+            cursor: pointer;
           }
           div[data-testid="stSidebar"] button:hover {
             color: #111827;
             background: transparent;
           }
-          div[data-testid="stSidebar"] button:disabled {
+          div[data-testid="stSidebar"] .nav-item {
+            display: block;
+            color: #6b7280;
+            padding: 0.15rem 0 0.15rem 0.25rem;
+          }
+          div[data-testid="stSidebar"] .nav-item.active {
             color: #111827;
             font-weight: 600;
             border-left: 3px solid #3b82f6;
@@ -2925,33 +2932,53 @@ def run_app():
         current_page = st.session_state["page"]
 
         st.markdown("OPERATING MODEL")
-        if st.sidebar.button("Operating Model (P&L)", key="nav_operating", disabled=current_page=="Operating Model (P&L)"):
+        if current_page == "Operating Model (P&L)":
+            st.markdown('<div class="nav-item active">Operating Model (P&L)</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Operating Model (P&L)", key="nav_operating"):
             st.session_state["page"] = "Operating Model (P&L)"
-        if st.sidebar.button("Cashflow & Liquidity", key="nav_cashflow", disabled=current_page=="Cashflow & Liquidity"):
+        if current_page == "Cashflow & Liquidity":
+            st.markdown('<div class="nav-item active">Cashflow & Liquidity</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Cashflow & Liquidity", key="nav_cashflow"):
             st.session_state["page"] = "Cashflow & Liquidity"
-        if st.sidebar.button("Balance Sheet", key="nav_balance", disabled=current_page=="Balance Sheet"):
+        if current_page == "Balance Sheet":
+            st.markdown('<div class="nav-item active">Balance Sheet</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Balance Sheet", key="nav_balance"):
             st.session_state["page"] = "Balance Sheet"
 
         st.markdown("PLANNING")
-        if st.sidebar.button("Revenue Model", key="nav_revenue", disabled=current_page=="Revenue Model"):
+        if current_page == "Revenue Model":
+            st.markdown('<div class="nav-item active">Revenue Model</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Revenue Model", key="nav_revenue"):
             st.session_state["page"] = "Revenue Model"
-        if st.sidebar.button("Cost Model", key="nav_cost", disabled=current_page=="Cost Model"):
+        if current_page == "Cost Model":
+            st.markdown('<div class="nav-item active">Cost Model</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Cost Model", key="nav_cost"):
             st.session_state["page"] = "Cost Model"
-        if st.sidebar.button("Other Assumptions", key="nav_other", disabled=current_page=="Other Assumptions"):
+        if current_page == "Other Assumptions":
+            st.markdown('<div class="nav-item active">Other Assumptions</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Other Assumptions", key="nav_other"):
             st.session_state["page"] = "Other Assumptions"
 
         st.markdown("FINANCING")
-        if st.sidebar.button("Financing & Debt", key="nav_financing", disabled=current_page=="Financing & Debt"):
+        if current_page == "Financing & Debt":
+            st.markdown('<div class="nav-item active">Financing & Debt</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Financing & Debt", key="nav_financing"):
             st.session_state["page"] = "Financing & Debt"
-        if st.sidebar.button("Equity Case", key="nav_equity", disabled=current_page=="Equity Case"):
+        if current_page == "Equity Case":
+            st.markdown('<div class="nav-item active">Equity Case</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Equity Case", key="nav_equity"):
             st.session_state["page"] = "Equity Case"
 
         st.markdown("VALUATION")
-        if st.sidebar.button("Valuation & Purchase Price", key="nav_valuation", disabled=current_page=="Valuation & Purchase Price"):
+        if current_page == "Valuation & Purchase Price":
+            st.markdown('<div class="nav-item active">Valuation & Purchase Price</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Valuation & Purchase Price", key="nav_valuation"):
             st.session_state["page"] = "Valuation & Purchase Price"
 
         st.markdown("SETTINGS")
-        if st.sidebar.button("Model Settings", key="nav_settings", disabled=current_page=="Model Settings"):
+        if current_page == "Model Settings":
+            st.markdown('<div class="nav-item active">Model Settings</div>', unsafe_allow_html=True)
+        elif st.sidebar.button("Model Settings", key="nav_settings"):
             st.session_state["page"] = "Model Settings"
 
         page = st.session_state["page"]
