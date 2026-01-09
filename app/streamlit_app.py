@@ -4934,7 +4934,7 @@ def run_app():
 
     if page == "Equity Case":
         st.header("Equity Case")
-        st.write("Sponsor and investor economics with explicit entry and exit.")
+        st.write("Management Buy-Out with external minority investor.")
 
         equity_defaults = _default_equity_assumptions(input_model)
         sponsor_equity = st.session_state.get(
@@ -4966,6 +4966,44 @@ def run_app():
         enterprise_value_exit = ebitda_exit * exit_multiple
         equity_value_exit = enterprise_value_exit - net_debt_exit
 
+        st.markdown("### 1. Deal Structure")
+        st.write(
+            "Management Buy-Out with external minority investor. "
+            f"Holding period: Year {exit_year}. Exit mechanism: Management buy-out of investor."
+        )
+
+        st.markdown("### 2. Entry Equity & Ownership")
+        entry_table = pd.DataFrame(
+            [
+                {
+                    "Line Item": "Management (Sponsor) Equity",
+                    "Equity (EUR)": format_currency(sponsor_equity),
+                    "Ownership (%)": format_pct(sponsor_pct),
+                },
+                {
+                    "Line Item": "External Investor Equity",
+                    "Equity (EUR)": format_currency(investor_equity),
+                    "Ownership (%)": format_pct(investor_pct),
+                },
+                {
+                    "Line Item": "Total Equity",
+                    "Equity (EUR)": format_currency(total_equity),
+                    "Ownership (%)": format_pct(1.0),
+                },
+            ]
+        )
+        _render_custom_table_html(
+            entry_table,
+            set(),
+            {"Total Equity"},
+            {},
+            year_labels=["Equity (EUR)", "Ownership (%)"],
+        )
+        st.write(
+            "Management owns 100% after investor exit. "
+            "Ownership at entry is split based on equity contributed."
+        )
+
         sponsor_cashflows = []
         investor_cashflows = []
         sponsor_residual_value = equity_value_exit
@@ -4988,27 +5026,58 @@ def run_app():
         st.session_state["equity.sponsor_irr"] = sponsor_irr
         st.session_state["equity.investor_irr"] = investor_irr
 
-        st.markdown("### Headline Metrics")
+        st.markdown("### 3. Headline Returns (Separated)")
         investor_cols = st.columns(4)
-        sponsor_cols = st.columns(4)
+        sponsor_cols = st.columns(3)
         investor_cols[0].metric(
-            "Investor Equity (EUR)", format_currency(investor_equity)
+            "External Investor – Invested Equity", format_currency(investor_equity)
         )
-        investor_cols[1].metric("Exit Year", f"Year {exit_year}")
+        investor_cols[1].metric(
+            "External Investor – Exit Proceeds", format_currency(investor_exit_proceeds)
+        )
         investor_cols[2].metric(
-            "Exit Equity Value (EUR)", format_currency(equity_value_exit)
+            "External Investor – MOIC",
+            f"{(investor_exit_proceeds / investor_equity) if investor_equity else 0:.2f}x",
         )
-        investor_cols[3].metric("Investor IRR", format_pct(investor_irr))
+        investor_cols[3].metric(
+            "External Investor – IRR", format_pct(investor_irr)
+        )
         sponsor_cols[0].metric(
-            "Sponsor Equity (EUR)", format_currency(sponsor_equity)
+            "Management – Invested Equity", format_currency(sponsor_equity)
         )
         sponsor_cols[1].metric(
-            "Ownership at Entry", format_pct(sponsor_pct)
+            "Management – Residual Equity Value", format_currency(sponsor_residual_value)
         )
-        sponsor_cols[2].metric("Ownership Post Exit", "100%")
-        sponsor_cols[3].metric("Sponsor IRR", format_pct(sponsor_irr))
+        sponsor_cols[2].metric("Management – IRR", format_pct(sponsor_irr))
 
-        st.markdown("### Sources & Uses")
+        st.markdown("### 4. Exit Equity Bridge")
+        exit_bridge = pd.DataFrame(
+            [
+                {
+                    "Line Item": "Enterprise Value at Exit (EBIT × Multiple)",
+                    "Year 0": enterprise_value_exit,
+                },
+                {"Line Item": "Net Debt at Exit", "Year 0": net_debt_exit},
+                {"Line Item": "Excess Cash at Exit", "Year 0": 0},
+                {"Line Item": "Total Equity Value at Exit", "Year 0": equity_value_exit},
+                {
+                    "Line Item": "Investor Exit Proceeds",
+                    "Year 0": investor_exit_proceeds,
+                },
+                {
+                    "Line Item": "Management Residual Equity Value",
+                    "Year 0": sponsor_residual_value,
+                },
+            ]
+        )
+        _render_custom_table_html(
+            exit_bridge,
+            set(),
+            {"Total Equity Value at Exit", "Management Residual Equity Value"},
+            {},
+        )
+
+        st.markdown("### 5. Sources & Uses")
         purchase_price = input_model.transaction_and_financing[
             "purchase_price_eur"
         ].value
@@ -5113,67 +5182,46 @@ def run_app():
             {},
         )
 
-        st.markdown("### Equity Ownership")
-        ownership_table = pd.DataFrame(
-            [
-                {
-                    "Line Item": "Sponsor Equity",
-                    "Equity (EUR)": sponsor_equity,
-                    "Ownership (%)": format_pct(sponsor_pct),
-                },
-                {
-                    "Line Item": "Investor Equity",
-                    "Equity (EUR)": investor_equity,
-                    "Ownership (%)": format_pct(investor_pct),
-                },
-                {
-                    "Line Item": "Total Equity",
-                    "Equity (EUR)": total_equity,
-                    "Ownership (%)": format_pct(1.0),
-                },
-            ]
-        )
-        _render_custom_table_html(
-            ownership_table,
-            set(),
-            {"Total Equity"},
-            {
-                "Sponsor Equity": lambda value: format_currency(value)
-                if isinstance(value, (int, float))
-                else value,
-                "Investor Equity": lambda value: format_currency(value)
-                if isinstance(value, (int, float))
-                else value,
-                "Total Equity": lambda value: format_currency(value)
-                if isinstance(value, (int, float))
-                else value,
-            },
-            year_labels=["Equity (EUR)", "Ownership (%)"],
-        )
-
-        st.markdown("### Equity Cashflows")
-        cashflow_rows = [
-            {
-                "Line Item": "Sponsor Cashflow",
-                **{f"Year {i}": sponsor_cashflows[i] for i in range(8)},
-            },
+        st.markdown("### 6. Equity Cashflows – External Investor")
+        investor_cashflow_rows = [
             {
                 "Line Item": "Investor Cashflow",
                 **{f"Year {i}": investor_cashflows[i] for i in range(8)},
             },
+        ]
+        investor_cashflow_table = pd.DataFrame(investor_cashflow_rows)
+        year_labels = [f"Year {i}" for i in range(8)]
+        investor_cashflow_table = investor_cashflow_table[
+            ["Line Item"] + year_labels
+        ]
+        _render_custom_table_html(
+            investor_cashflow_table,
+            set(),
+            set(),
+            {},
+            year_labels=year_labels,
+        )
+
+        st.markdown("### 7. Equity Cashflows – Management (Sponsor)")
+        sponsor_cashflow_rows = [
             {
-                "Line Item": "Sponsor Residual Equity Value",
+                "Line Item": "Management Cashflow",
+                **{f"Year {i}": sponsor_cashflows[i] for i in range(8)},
+            },
+            {
+                "Line Item": "Residual Equity Value at Exit",
                 **{
                     f"Year {i}": sponsor_residual_value if i == exit_year else 0
                     for i in range(8)
                 },
             },
         ]
-        cashflow_table = pd.DataFrame(cashflow_rows)
-        year_labels = [f"Year {i}" for i in range(8)]
-        cashflow_table = cashflow_table[["Line Item"] + year_labels]
+        sponsor_cashflow_table = pd.DataFrame(sponsor_cashflow_rows)
+        sponsor_cashflow_table = sponsor_cashflow_table[
+            ["Line Item"] + year_labels
+        ]
         _render_custom_table_html(
-            cashflow_table,
+            sponsor_cashflow_table,
             set(),
             set(),
             {},
@@ -5187,18 +5235,18 @@ def run_app():
             else 0
         )
 
-        st.markdown("### Equity KPIs")
+        st.markdown("### 8. Equity KPIs")
         kpi_table = pd.DataFrame(
             [
                 {
-                    "Investor": "Sponsor",
+                    "Investor": "Management (Sponsor)",
                     "Invested Equity": format_currency(sponsor_equity),
                     "Exit Proceeds": format_currency(sponsor_residual),
                     "MOIC": "—",
                     "IRR": format_pct(sponsor_irr),
                 },
                 {
-                    "Investor": "Investor",
+                    "Investor": "External Investor",
                     "Invested Equity": format_currency(investor_equity),
                     "Exit Proceeds": format_currency(investor_exit_proceeds),
                     "MOIC": f"{investor_moic:.2f}x",
@@ -5208,35 +5256,29 @@ def run_app():
         )
         st.dataframe(kpi_table, use_container_width=True)
 
-        explain_equity = st.toggle("Explain Equity Logic")
+        explain_equity = st.toggle("Explain equity logic")
         if explain_equity:
             st.markdown("### Explanation")
             st.write(
-                f"Management contributes {format_currency(sponsor_equity)} of equity, "
-                "which is insufficient to fund the transaction alone. "
-                f"An external investor contributes {format_currency(investor_equity)}, "
-                f"resulting in an initial ownership split of "
-                f"{format_pct(sponsor_pct)} sponsor and {format_pct(investor_pct)} investor."
+                "Entry: Management and the external investor both invest equity at closing. "
+                "Ownership is split according to invested equity."
             )
             st.write(
-                f"The purchase price of {format_currency(purchase_price)} is "
-                f"funded by {format_currency(debt_at_close)} of senior debt and "
-                f"{format_currency(total_equity)} of equity."
+                "Holding period: No dividends are assumed. Cash is retained in the business. "
+                "Value creation comes from operating performance and deleveraging."
             )
             st.write(
-                f"The investor exits in year {exit_year} using an EBITDA multiple "
-                f"of {exit_multiple:.2f}x. This implies an equity value of "
-                f"{format_currency(equity_value_exit)}, and the investor receives "
-                f"{format_currency(investor_exit_proceeds)} on exit."
+                "Exit: Equity value is determined via the EBIT multiple. Net debt is deducted "
+                "and excess cash added to arrive at total equity value. The external investor "
+                "exits fully in the exit year."
             )
             st.write(
-                "During the holding period, no interim distributions are modeled. "
-                "The investor exits fully in the exit year, while management "
-                "retains 100% ownership thereafter."
+                "Management outcome: Management buys out the investor and ends up with 100% "
+                "ownership. The residual equity value represents long-term ownership value."
             )
             st.write(
-                "Sponsor returns are driven by the residual equity value after the "
-                "investor exits, as well as leverage and exit valuation."
+                "Not modeled: No dividends, preferred equity, waterfalls, leverage recap, or "
+                "upside structuring."
             )
 
 
