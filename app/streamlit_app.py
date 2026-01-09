@@ -414,7 +414,7 @@ def render_advanced_assumptions(input_model, show_header=True):
     assumptions_state["valuation"] = valuation_edit.to_dict("records")
     for _, row in valuation_edit.iterrows():
         parameter = row["Parameter"]
-        if parameter == "Seller EBIT Multiple":
+        if parameter == "Seller EBITDA Multiple":
             st.session_state["valuation.seller_ebit_multiple"] = float(row["Value"])
         elif parameter == "Reference Year":
             st.session_state["valuation.reference_year"] = int(max(0, min(4, row["Value"])))
@@ -422,8 +422,6 @@ def render_advanced_assumptions(input_model, show_header=True):
             st.session_state["valuation.buyer_discount_rate"] = _local_clamp_pct(row["Value"])
         elif parameter == "Valuation Start Year":
             st.session_state["valuation.valuation_start_year"] = int(max(0, min(4, row["Value"])))
-        elif parameter == "Debt at Close":
-            st.session_state["valuation.debt_at_close_eur"] = _local_non_negative(row["Value"])
         elif parameter == "Transaction Costs (%)":
             st.session_state["valuation.transaction_cost_pct"] = _local_clamp_pct(row["Value"])
 
@@ -772,7 +770,7 @@ def _apply_assumptions_state():
 
     for row in state.get("valuation", []):
         param = row["Parameter"]
-        if param == "Seller EBIT Multiple":
+        if param == "Seller EBITDA Multiple":
             st.session_state["valuation.seller_ebit_multiple"] = _non_negative(
                 row["Value"]
             )
@@ -787,10 +785,6 @@ def _apply_assumptions_state():
         elif param == "Valuation Start Year":
             st.session_state["valuation.valuation_start_year"] = int(
                 max(0, row["Value"])
-            )
-        elif param == "Debt at Close":
-            st.session_state["valuation.debt_at_close_eur"] = _non_negative(
-                row["Value"]
             )
         elif param == "Transaction Costs (%)":
             st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(
@@ -1960,7 +1954,7 @@ def _build_pnl_excel(input_model):
 
         ws_valuation["A1"] = "Valuation Assumptions"
         valuation_assumption_rows = [
-            ("Seller EBIT Multiple (x)", valuation_runtime["seller_ebit_multiple"]),
+            ("Seller EBITDA Multiple (x)", valuation_runtime["seller_ebit_multiple"]),
             ("Reference Year (0-4)", valuation_runtime["reference_year"]),
             ("Discount Rate (WACC)", valuation_runtime["buyer_discount_rate"]),
             ("Valuation Start Year (0-4)", valuation_runtime["valuation_start_year"]),
@@ -1979,8 +1973,8 @@ def _build_pnl_excel(input_model):
             ws_valuation.cell(row=seller_table_start + 1, column=idx, value=header)
 
         seller_items = [
-            "Reference Year EBIT",
-            "Applied EBIT Multiple",
+            "Reference Year EBITDA",
+            "Applied EBITDA Multiple",
             "Enterprise Value (EV)",
             "Net Debt at Close",
             "Equity Value (Seller View)",
@@ -1989,8 +1983,8 @@ def _build_pnl_excel(input_model):
             ws_valuation.cell(row=row_idx, column=1, value=item)
 
         seller_row_map = {
-            "Reference Year EBIT": seller_table_start + 2,
-            "Applied EBIT Multiple": seller_table_start + 3,
+            "Reference Year EBITDA": seller_table_start + 2,
+            "Applied EBITDA Multiple": seller_table_start + 3,
             "Enterprise Value (EV)": seller_table_start + 4,
             "Net Debt at Close": seller_table_start + 5,
             "Equity Value (Seller View)": seller_table_start + 6,
@@ -2001,15 +1995,15 @@ def _build_pnl_excel(input_model):
         for year_index in range(5):
             col = year_col(2 + year_index)
             is_ref_year = f"={reference_year_cell}={year_index}"
-            ebit_cell = f"=INDEX('P&L'!B19:F19,1,{reference_year_cell}+1)"
-            ws_valuation[f"{col}{seller_row_map['Reference Year EBIT']}"] = (
-                f"=IF({is_ref_year},{ebit_cell},\"\")"
+            ebitda_cell = f"=INDEX('P&L'!B17:F17,1,{reference_year_cell}+1)"
+            ws_valuation[f"{col}{seller_row_map['Reference Year EBITDA']}"] = (
+                f"=IF({is_ref_year},{ebitda_cell},\"\")"
             )
-            ws_valuation[f"{col}{seller_row_map['Applied EBIT Multiple']}"] = (
+            ws_valuation[f"{col}{seller_row_map['Applied EBITDA Multiple']}"] = (
                 f"=IF({is_ref_year},{seller_multiple_cell},\"\")"
             )
             ws_valuation[f"{col}{seller_row_map['Enterprise Value (EV)']}"] = (
-                f"=IF({is_ref_year},{ebit_cell}*{seller_multiple_cell},\"\")"
+                f"=IF({is_ref_year},{ebitda_cell}*{seller_multiple_cell},\"\")"
             )
             ws_valuation[f"{col}{seller_row_map['Net Debt at Close']}"] = (
                 f"=IF({year_index}=0,'Balance Sheet'!{col}14-'Balance Sheet'!{col}10,\"\")"
@@ -2125,7 +2119,7 @@ def _build_pnl_excel(input_model):
         ws_valuation.cell(
             row=valuation_notes_row + 1,
             column=1,
-            value="Seller EV = EBIT (reference year) × multiple.",
+            value="Seller EV = EBITDA (reference year) × multiple.",
         )
         ws_valuation.cell(
             row=valuation_notes_row + 2,
@@ -2854,11 +2848,10 @@ def run_app(page_override=None):
                 {"Parameter": "Minimum Cash Balance", "Value": _default_balance_sheet_assumptions(base_model)["minimum_cash_balance_eur"], "Unit": "EUR", "Notes": "Minimum cash balance."},
             ],
             "valuation": [
-                {"Parameter": "Seller EBIT Multiple", "Value": _default_valuation_assumptions(base_model)["seller_ebit_multiple"], "Unit": "x", "Notes": "EBIT multiple for seller view."},
+                {"Parameter": "Seller EBITDA Multiple", "Value": _default_valuation_assumptions(base_model)["seller_ebit_multiple"], "Unit": "x", "Notes": "EBITDA multiple for seller view."},
                 {"Parameter": "Reference Year", "Value": _default_valuation_assumptions(base_model)["reference_year"], "Unit": "Year", "Notes": "Reference year for multiple."},
                 {"Parameter": "Discount Rate (WACC)", "Value": _default_valuation_assumptions(base_model)["buyer_discount_rate"], "Unit": "%", "Notes": "DCF discount rate."},
                 {"Parameter": "Valuation Start Year", "Value": _default_valuation_assumptions(base_model)["valuation_start_year"], "Unit": "Year", "Notes": "DCF start year."},
-                {"Parameter": "Debt at Close", "Value": _default_valuation_assumptions(base_model)["debt_at_close_eur"], "Unit": "EUR", "Notes": "Net debt at close."},
                 {"Parameter": "Transaction Costs (%)", "Value": _default_valuation_assumptions(base_model)["transaction_cost_pct"], "Unit": "%", "Notes": "Fees as % of EV."},
             ],
         }
@@ -2876,6 +2869,16 @@ def run_app(page_override=None):
                 for sub_key, sub_val in value.items():
                     if sub_key not in assumptions[key]:
                         assumptions[key][sub_key] = sub_val
+        valuation_rows = assumptions.get("valuation", [])
+        normalized_rows = []
+        for row in valuation_rows:
+            if row.get("Parameter") == "Debt at Close":
+                continue
+            if row.get("Parameter") == "Seller EBIT Multiple":
+                row = dict(row)
+                row["Parameter"] = "Seller EBITDA Multiple"
+            normalized_rows.append(row)
+        assumptions["valuation"] = normalized_rows
         st.session_state["assumptions"] = assumptions
 
     st.session_state.setdefault("assumptions", _seed_assumptions_state())
@@ -3094,7 +3097,7 @@ def run_app(page_override=None):
 
         for row in state["valuation"]:
             param = row["Parameter"]
-            if param == "Seller EBIT Multiple":
+            if param == "Seller EBITDA Multiple":
                 st.session_state["valuation.seller_ebit_multiple"] = _non_negative(row["Value"])
             elif param == "Reference Year":
                 st.session_state["valuation.reference_year"] = int(max(0, row["Value"]))
@@ -3102,8 +3105,6 @@ def run_app(page_override=None):
                 st.session_state["valuation.buyer_discount_rate"] = _clamp_pct(row["Value"])
             elif param == "Valuation Start Year":
                 st.session_state["valuation.valuation_start_year"] = int(max(0, row["Value"]))
-            elif param == "Debt at Close":
-                st.session_state["valuation.debt_at_close_eur"] = _non_negative(row["Value"])
             elif param == "Transaction Costs (%)":
                 st.session_state["valuation.transaction_cost_pct"] = _clamp_pct(row["Value"])
 
@@ -3940,13 +3941,12 @@ def run_app(page_override=None):
         )
 
         pnl_table = pd.DataFrame.from_dict(pnl_result, orient="index")
-        ebit_ref = pnl_table.loc[f"Year {reference_year}", "ebit"]
-        seller_ev = ebit_ref * seller_multiple
+        ebitda_ref = pnl_table.loc[f"Year {reference_year}", "ebitda"]
+        seller_ev = ebitda_ref * seller_multiple
         balance_table = pd.DataFrame(balance_sheet)
-        net_debt_close = (
-            balance_table.loc[0, "financial_debt"]
-            - balance_table.loc[0, "cash"]
-        )
+        financial_debt_close = balance_table.loc[0, "financial_debt"]
+        cash_close = balance_table.loc[0, "cash"]
+        net_debt_close = financial_debt_close - cash_close
         seller_equity_value = seller_ev - net_debt_close
 
         cashflow_table = pd.DataFrame(cashflow_result)
@@ -3998,20 +3998,38 @@ def run_app(page_override=None):
             "Gap (EUR / %)",
             f"{format_currency(valuation_gap)} | {format_pct(valuation_gap_pct)}",
         )
+        st.info(
+            "Net Debt at Close is taken from Balance Sheet (Year 0): "
+            "Financial Debt – Cash."
+        )
+        net_debt_table = pd.DataFrame(
+            [
+                {
+                    "Metric": "Financial Debt (Year 0)",
+                    "Value": format_currency(financial_debt_close),
+                },
+                {"Metric": "Cash (Year 0)", "Value": format_currency(cash_close)},
+                {
+                    "Metric": "Net Debt at Close",
+                    "Value": format_currency(net_debt_close),
+                },
+            ]
+        )
+        st.dataframe(net_debt_table, use_container_width=True)
 
         seller_rows = {
-            "Reference Year EBIT": {},
-            "Applied EBIT Multiple": {},
+            "Reference Year EBITDA": {},
+            "Applied EBITDA Multiple": {},
             "Enterprise Value (EV)": {},
             "Net Debt at Close": {},
             "Equity Value (Seller View)": {},
         }
         for year_index in range(5):
             year_label = f"Year {year_index}"
-            seller_rows["Reference Year EBIT"][year_label] = (
-                ebit_ref if year_index == reference_year else ""
+            seller_rows["Reference Year EBITDA"][year_label] = (
+                ebitda_ref if year_index == reference_year else ""
             )
-            seller_rows["Applied EBIT Multiple"][year_label] = (
+            seller_rows["Applied EBITDA Multiple"][year_label] = (
                 seller_multiple if year_index == reference_year else ""
             )
             seller_rows["Enterprise Value (EV)"][year_label] = (
@@ -4025,51 +4043,56 @@ def run_app(page_override=None):
             )
 
         with st.expander("Seller Valuation (Multiple-Based)", expanded=False):
-            st.write("Seller expectation range based on EBIT multiple.")
-            seller_multiple_low = seller_multiple
-            seller_multiple_mid = seller_multiple
-            seller_multiple_high = seller_multiple
-            seller_ev_low = ebit_ref * seller_multiple_low
-            seller_ev_mid = ebit_ref * seller_multiple_mid
-            seller_ev_high = ebit_ref * seller_multiple_high
-            seller_equity_low = seller_ev_low - net_debt_close
-            seller_equity_mid = seller_ev_mid - net_debt_close
-            seller_equity_high = seller_ev_high - net_debt_close
-            seller_range_table = pd.DataFrame(
+            st.write("Seller expectation based on EBITDA multiple.")
+            seller_summary_table = pd.DataFrame(
                 [
                     {
-                        "Metric": "Reference EBIT (Year)",
-                        "Low": f"Year {reference_year}",
-                        "Mid": f"Year {reference_year}",
-                        "High": f"Year {reference_year}",
+                        "Metric": "Reference EBITDA (Year)",
+                        "Value": f"Year {reference_year}",
                     },
                     {
-                        "Metric": "Applied EBIT Multiple",
-                        "Low": f"{seller_multiple_low:.2f}x",
-                        "Mid": f"{seller_multiple_mid:.2f}x",
-                        "High": f"{seller_multiple_high:.2f}x",
+                        "Metric": "Applied EBITDA Multiple",
+                        "Value": f"{seller_multiple:.2f}x",
                     },
                     {
                         "Metric": "Enterprise Value (EV)",
-                        "Low": format_currency(seller_ev_low),
-                        "Mid": format_currency(seller_ev_mid),
-                        "High": format_currency(seller_ev_high),
+                        "Value": format_currency(seller_ev),
                     },
                     {
                         "Metric": "Net Debt at Close",
-                        "Low": format_currency(net_debt_close),
-                        "Mid": format_currency(net_debt_close),
-                        "High": format_currency(net_debt_close),
+                        "Value": format_currency(net_debt_close),
                     },
                     {
                         "Metric": "Equity Value (Seller View)",
-                        "Low": format_currency(seller_equity_low),
-                        "Mid": format_currency(seller_equity_mid),
-                        "High": format_currency(seller_equity_high),
+                        "Value": format_currency(seller_equity_value),
                     },
                 ]
             )
-            st.dataframe(seller_range_table, use_container_width=True)
+            st.dataframe(seller_summary_table, use_container_width=True)
+            with st.expander("Sensitivity (optional): +/- 1.0x multiple", expanded=False):
+                seller_multiple_low = max(seller_multiple - 1.0, 0)
+                seller_multiple_high = seller_multiple + 1.0
+                seller_ev_low = ebitda_ref * seller_multiple_low
+                seller_ev_high = ebitda_ref * seller_multiple_high
+                seller_equity_low = seller_ev_low - net_debt_close
+                seller_equity_high = seller_ev_high - net_debt_close
+                sensitivity_table = pd.DataFrame(
+                    [
+                        {
+                            "Multiple": f"{seller_multiple_low:.2f}x",
+                            "Equity Value": format_currency(seller_equity_low),
+                        },
+                        {
+                            "Multiple": f"{seller_multiple:.2f}x",
+                            "Equity Value": format_currency(seller_equity_value),
+                        },
+                        {
+                            "Multiple": f"{seller_multiple_high:.2f}x",
+                            "Equity Value": format_currency(seller_equity_high),
+                        },
+                    ]
+                )
+                st.dataframe(sensitivity_table, use_container_width=True)
             seller_table = pd.DataFrame.from_dict(seller_rows, orient="index")
             seller_table = seller_table[
                 [f"Year {i}" for i in range(5)]
@@ -4080,7 +4103,7 @@ def run_app(page_override=None):
                 "Equity Value (Seller View)",
             }
             seller_formatters = {
-                "Applied EBIT Multiple": lambda value: f"{value:.2f}x"
+                "Applied EBITDA Multiple": lambda value: f"{value:.2f}x"
                 if value not in ("", None)
                 else "",
             }
@@ -4200,86 +4223,55 @@ def run_app(page_override=None):
         gap_label = "Buyer > Seller" if valuation_gap >= 0 else "Buyer < Seller"
         st.caption(f"Valuation gap indicator: {gap_label}.")
 
-        def _buyer_value_for_active_scenario():
-            free_cashflows = [
-                row.get("free_cashflow", 0.0) for row in cashflow_result
-            ]
-            cumulative_pv = 0.0
-            for year_index, fcf in enumerate(free_cashflows):
-                if year_index >= valuation_start_year:
-                    exponent = year_index - valuation_start_year + 1
-                    discount_factor = (
-                        1 / ((1 + buyer_discount_rate) ** exponent)
-                        if buyer_discount_rate
-                        else 1.0
-                    )
-                else:
-                    discount_factor = 0.0
-                cumulative_pv += fcf * discount_factor
-            terminal_value = 0.0
-            terminal_pv = 0.0
-            if include_terminal_value and buyer_discount_rate:
-                terminal_value = free_cashflows[-1] / buyer_discount_rate
-                last_exponent = max(1, len(free_cashflows) - valuation_start_year)
-                terminal_pv = terminal_value / (
-                    (1 + buyer_discount_rate) ** last_exponent
-                )
-            enterprise_value_dcf = cumulative_pv + terminal_pv
-            transaction_costs = enterprise_value_dcf * transaction_cost_pct
-            return enterprise_value_dcf - net_debt_close - transaction_costs
-
-        buyer_value_active = _buyer_value_for_active_scenario()
-        buyer_value_worst = buyer_value_active
-        buyer_value_base = buyer_value_active
-        buyer_value_best = buyer_value_active
-
-        st.markdown("### Offer Range (Buyer View)")
-        no_regret_price = max(buyer_value_worst, 0)
-        target_offer = max(buyer_value_base, 0)
-        upper_bound = max(min(seller_equity_low, buyer_value_best), 0)
-        offer_table = pd.DataFrame(
+        st.markdown("### Buyer View (Active Scenario)")
+        buyer_view_table = pd.DataFrame(
             [
                 {
-                    "Price Level": "Lower Bound — No-Regret Price",
-                    "Definition": "Conservative buyer value; robust liquidity and debt service.",
-                    "Offer (EUR)": format_currency(no_regret_price),
-                },
-                {
-                    "Price Level": "Target Offer — Defensible Offer",
-                    "Definition": "Recommended offer balancing risk and upside.",
-                    "Offer (EUR)": format_currency(target_offer),
-                },
-                {
-                    "Price Level": "Upper Bound — Walk-Away Threshold",
-                    "Definition": "Maximum price management should ever accept.",
-                    "Offer (EUR)": format_currency(upper_bound),
-                },
+                    "Metric": "Buyer Equity Value (DCF)",
+                    "Value": format_currency(buyer_equity_value),
+                }
             ]
         )
-        st.dataframe(offer_table, use_container_width=True)
-
-        explain_offer = st.toggle("Explain offer range logic")
-        if explain_offer:
-            st.write(
-                "Seller and buyer prices differ because the seller anchors on market "
-                "multiples, while the buyer anchors on cash generation and financing risk."
-            )
-            st.write(
-                "The buyer view defines the offer range because management must protect "
-                "liquidity and downside outcomes."
-            )
-            st.write(
-                "Paying above the upper bound destroys value and creates unacceptable "
-                "risk, even if the seller expects a higher price."
-            )
-            st.write(
-                "Walking away is a valid outcome when the offer range does not overlap "
-                "with seller expectations."
-            )
-            st.write(
-                "Worst Case maps to the no-regret price, Base Case to the target offer, "
-                "and Best Case to the upper bound."
-            )
+        st.dataframe(buyer_view_table, use_container_width=True)
+        with st.expander(
+            "Sensitivity (optional): discount rate +/- 1.0%", expanded=False
+        ):
+            buyer_discount_low = max(buyer_discount_rate - 0.01, 0)
+            buyer_discount_high = buyer_discount_rate + 0.01
+            sensitivity_rows = []
+            for rate in [buyer_discount_low, buyer_discount_rate, buyer_discount_high]:
+                cumulative_pv = 0.0
+                for year_index, fcf in enumerate(free_cashflows):
+                    if year_index >= valuation_start_year:
+                        exponent = year_index - valuation_start_year + 1
+                        discount_factor = (
+                            1 / ((1 + rate) ** exponent)
+                            if rate
+                            else 1.0
+                        )
+                    else:
+                        discount_factor = 0.0
+                    cumulative_pv += fcf * discount_factor
+                terminal_value = 0.0
+                terminal_pv = 0.0
+                if include_terminal_value and rate:
+                    terminal_value = free_cashflows[-1] / rate
+                    last_exponent = max(
+                        1, len(free_cashflows) - valuation_start_year
+                    )
+                    terminal_pv = terminal_value / ((1 + rate) ** last_exponent)
+                enterprise_value = cumulative_pv + terminal_pv
+                transaction_costs_sens = enterprise_value * transaction_cost_pct
+                equity_value = (
+                    enterprise_value - net_debt_close - transaction_costs_sens
+                )
+                sensitivity_rows.append(
+                    {
+                        "Discount Rate": format_pct(rate),
+                        "Equity Value": format_currency(equity_value),
+                    }
+                )
+            st.dataframe(pd.DataFrame(sensitivity_rows), use_container_width=True)
 
         st.markdown("### Decision KPIs")
         purchase_price = input_model.transaction_and_financing[
@@ -4287,7 +4279,7 @@ def run_app(page_override=None):
         ].value
         year0_revenue = pnl_table.loc["Year 0", "revenue"]
         implied_ev_multiple = (
-            seller_ev / ebit_ref if ebit_ref else 0
+            seller_ev / ebitda_ref if ebitda_ref else 0
         )
         purchase_price_pct_revenue = (
             purchase_price / year0_revenue if year0_revenue else 0
@@ -4295,7 +4287,7 @@ def run_app(page_override=None):
         kpi_table = pd.DataFrame(
             [
                 {
-                    "KPI": "Seller EV / EBIT",
+                    "KPI": "Seller EV / EBITDA",
                     "Value": f"{implied_ev_multiple:.2f}x",
                 },
                 {
@@ -4334,10 +4326,10 @@ def run_app(page_override=None):
                 "assumptions."
             )
             st.caption(
-                f"Reference Year EBIT (Year {reference_year}) = {format_currency(ebit_ref)}."
+                f"Reference Year EBITDA (Year {reference_year}) = {format_currency(ebitda_ref)}."
             )
             st.caption(
-                f"Enterprise Value = EBIT × Multiple = {format_currency(ebit_ref)} "
+                f"Enterprise Value = EBITDA × Multiple = {format_currency(ebitda_ref)} "
                 f"× {seller_multiple:.2f}x = {format_currency(seller_ev)}."
             )
             st.caption(
@@ -4365,7 +4357,7 @@ def run_app(page_override=None):
                     f"{format_pct(buyer_discount_rate)}."
                 )
             st.caption(
-                f"Equity Value (Buyer) = EV - Debt at Close - Transaction Costs "
+                f"Equity Value (Buyer) = EV - Net Debt at Close - Transaction Costs "
                 f"= {format_currency(enterprise_value_dcf)} - "
                 f"{format_currency(net_debt_close)} - "
                 f"{format_currency(transaction_costs)}."
