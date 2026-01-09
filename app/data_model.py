@@ -292,19 +292,19 @@ class InputModel:
                 editable=True,
             ),
             "equity_contribution_eur": InputField(
-                value=2000000,
+                value=8500000,
                 description="Equity contribution (EUR)",
                 excel_ref="00_Inputs_Assumptions!B50",
                 editable=True,
             ),
             "senior_term_loan_start_eur": InputField(
-                value=11000000,
+                value=11500000,
                 description="Senior term loan opening balance (EUR)",
                 excel_ref="00_Inputs_Assumptions!B51",
                 editable=True,
             ),
             "senior_interest_rate_pct": InputField(
-                value=0.06,
+                value=0.0625,
                 description="Senior term loan interest rate",
                 excel_ref="00_Inputs_Assumptions!B52",
                 editable=True,

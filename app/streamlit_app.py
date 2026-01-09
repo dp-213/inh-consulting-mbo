@@ -851,21 +851,12 @@ def _default_valuation_assumptions(input_model):
 
 
 def _default_equity_assumptions(input_model):
-    total_equity = input_model.transaction_and_financing[
-        "equity_contribution_eur"
-    ].value
-    default_multiple = (
-        input_model.valuation_assumptions["multiple_valuation"][
-            "seller_multiple"
-        ].value
-        or 0.0
-    )
     return {
-        "sponsor_equity_eur": total_equity * 0.5,
-        "investor_equity_eur": total_equity * 0.5,
+        "sponsor_equity_eur": 2750000,
+        "investor_equity_eur": 5750000,
         "exit_year": 4,
         "exit_method": "Exit Multiple",
-        "exit_multiple": default_multiple,
+        "exit_multiple": 7.0,
     }
 
 
