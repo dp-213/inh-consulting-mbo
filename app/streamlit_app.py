@@ -1502,7 +1502,6 @@ def _build_pnl_excel(input_model):
         ("Equity Contribution (EUR)", input_model.transaction_and_financing["equity_contribution_eur"].value),
         ("Debt Amount (EUR)", input_model.transaction_and_financing["senior_term_loan_start_eur"].value),
         ("Interest Rate %", input_model.transaction_and_financing["senior_interest_rate_pct"].value),
-        ("Annual Debt Repayment (EUR)", input_model.transaction_and_financing["senior_repayment_per_year_eur"].value),
         ("Tax Rate %", input_model.tax_and_distributions["tax_rate_pct"].value),
         ("Tax Cash Rate (%)", cashflow_assumptions["tax_cash_rate_pct"]),
         ("Tax Payment Lag (Years)", cashflow_assumptions["tax_payment_lag_years"]),
@@ -1707,7 +1706,7 @@ def _build_pnl_excel(input_model):
         opening_cash_cell = assumption_cells["Opening Cash Balance (EUR)"]
         debt_amount_cell = assumption_cells["Debt Amount (EUR)"]
         interest_rate_cell = assumption_cells["Interest Rate %"]
-        repayment_cell = assumption_cells["Annual Debt Repayment (EUR)"]
+        amort_period_cell = assumption_cells["Amortisation Period (Years)"]
 
         cashflow_row_map = {
             "EBITDA": cashflow_table_start + 2,
@@ -1761,12 +1760,19 @@ def _build_pnl_excel(input_model):
                 debt_drawdown = "=0"
             ws_cashflow[f"{col}{cashflow_row_map['Debt Drawdown']}"] = debt_drawdown
 
-            outstanding = f"MAX({debt_amount_cell}-{repayment_cell}*{year_index},0)"
+            scheduled_repayment = (
+                f"=IF({year_index}<{amort_period_cell},"
+                f"{debt_amount_cell}/{amort_period_cell},0)"
+            )
+            outstanding = (
+                f"MAX({debt_amount_cell}-({debt_amount_cell}/{amort_period_cell})"
+                f"*{year_index},0)"
+            )
             ws_cashflow[f"{col}{cashflow_row_map['Interest Paid']}"] = (
                 f"={outstanding}*{interest_rate_cell}"
             )
             ws_cashflow[f"{col}{cashflow_row_map['Debt Repayment']}"] = (
-                f"=MIN({repayment_cell},{outstanding})"
+                f"=MIN({scheduled_repayment},{outstanding})"
             )
             net_cashflow_formula = (
                 f"={col}{cashflow_row_map['Free Cashflow']}"
@@ -1872,7 +1878,7 @@ def _build_pnl_excel(input_model):
         depreciation_rate_cell = "B3"
         opening_fixed_assets_cell = "B5"
         debt_amount_cell = assumption_cells["Debt Amount (EUR)"]
-        repayment_cell = assumption_cells["Annual Debt Repayment (EUR)"]
+        amort_period_cell = assumption_cells["Amortisation Period (Years)"]
 
         for year_index in range(5):
             col = year_col(2 + year_index)
@@ -1906,7 +1912,7 @@ def _build_pnl_excel(input_model):
                 f"={col}{balance_row_map['Cash']}+{col}{balance_row_map['Fixed Assets (Net)']}"
             )
             ws_balance[f"{col}{balance_row_map['Financial Debt']}"] = (
-                f"=MAX({debt_amount_cell}-{repayment_cell}*{year_index + 1},0)"
+                f"=MAX({debt_amount_cell}-({debt_amount_cell}/{amort_period_cell})*{year_index + 1},0)"
             )
             ws_balance[f"{col}{balance_row_map['Total Liabilities']}"] = (
                 f"={col}{balance_row_map['Financial Debt']}"

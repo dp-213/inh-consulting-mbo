@@ -309,12 +309,6 @@ class InputModel:
                 excel_ref="00_Inputs_Assumptions!B52",
                 editable=True,
             ),
-            "senior_repayment_per_year_eur": InputField(
-                value=1000000,
-                description="Annual senior debt repayment (EUR)",
-                excel_ref="00_Inputs_Assumptions!B53",
-                editable=True,
-            ),
             "revolver_limit_eur": InputField(
                 value=1500000,
                 description="Revolver credit limit (EUR)",
