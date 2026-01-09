@@ -2221,10 +2221,8 @@ def run_app():
             },
             "utilization_rate": {
                 scenario: [
-                    base_model.scenario_parameters["utilization_rate"][
-                        scenario.lower()
-                    ].value
-                    for _ in range(5)
+                    value
+                    for value in [0.68, 0.69, 0.70, 0.71, 0.71]
                 ]
                 for scenario in scenario_labels
             },
@@ -2248,23 +2246,21 @@ def run_app():
             },
             "day_rate_growth_pct": {
                 scenario: [
-                    base_model.operating_assumptions[
-                        "day_rate_growth_pct"
-                    ].value
-                    for _ in range(5)
+                    value
+                    for value in [0.00, 0.01, 0.015, 0.02, 0.02]
                 ]
                 for scenario in scenario_labels
             },
             "revenue_growth_pct": {
-                scenario: [0.0 for _ in range(5)]
+                scenario: [0.00, 0.01, 0.02, 0.03, 0.03]
                 for scenario in scenario_labels
             },
             "group_capacity_share_pct": {
-                scenario: [0.8 for _ in range(5)]
+                scenario: [0.80, 0.75, 0.70, 0.65, 0.60]
                 for scenario in scenario_labels
             },
             "external_capacity_share_pct": {
-                scenario: [0.2 for _ in range(5)]
+                scenario: [0.20, 0.25, 0.30, 0.35, 0.40]
                 for scenario in scenario_labels
             },
         }
@@ -2277,15 +2273,11 @@ def run_app():
             cost_personnel_rows.append(
                 {
                     "Year": year_label,
-                    "Consultant FTE": base_model.cost_model[
-                        f"consultant_fte_year_{year_index}"
-                    ].value,
+                    "Consultant FTE": 63,
                     "Consultant Loaded Cost (EUR)": base_model.cost_model[
                         f"consultant_base_cost_eur_year_{year_index}"
                     ].value,
-                    "Backoffice FTE": base_model.cost_model[
-                        f"backoffice_fte_year_{year_index}"
-                    ].value,
+                    "Backoffice FTE": 18,
                     "Backoffice Loaded Cost (EUR)": base_model.cost_model[
                         f"backoffice_base_cost_eur_year_{year_index}"
                     ].value,
@@ -2317,9 +2309,9 @@ def run_app():
                 {
                     "Year": year_label,
                     "Training Type": "EUR",
-                    "Training Value": 0.0,
+                    "Training Value": 63 * 2500,
                     "Travel Type": "EUR",
-                    "Travel Value": 0.0,
+                    "Travel Value": 63 * 5500,
                     "Communication Type": "EUR",
                     "Communication Value": 0.0,
                 }
