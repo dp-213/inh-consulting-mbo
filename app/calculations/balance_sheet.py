@@ -16,13 +16,15 @@ def calculate_balance_sheet(
         "purchase_price_eur"
     ].value
 
-    # Build a net income lookup from P&L results.
+    # Build a net income and tax lookup from P&L results.
     net_income_by_year = {}
+    taxes_by_year = {}
     if pnl_result is not None:
         for year_data in pnl_result:
             net_income_by_year[year_data.get("year")] = year_data.get(
                 "net_income", 0
             )
+            taxes_by_year[year_data.get("year")] = year_data.get("taxes", 0.0)
 
     debt_by_year = {
         debt_data["year"]: debt_data["closing_debt"]
@@ -33,6 +35,7 @@ def calculate_balance_sheet(
     fixed_assets = 0.0
     acquisition_intangible = purchase_price
     working_capital_balance = 0.0
+    tax_payable_balance = 0.0
 
     for year_data in cashflow_result:
         year = year_data["year"]
@@ -60,13 +63,17 @@ def calculate_balance_sheet(
             - equity_buyback
         )
 
+        taxes_due = taxes_by_year.get(year, 0.0)
+        taxes_paid = year_data.get("taxes_paid", 0.0)
+        tax_payable_balance += taxes_due - taxes_paid
+
         total_assets = (
             cash_balance
             + fixed_assets
             + working_capital_balance
             + acquisition_intangible
         )
-        total_liabilities = financial_debt
+        total_liabilities = financial_debt + tax_payable_balance
         total_liabilities_equity = total_liabilities + equity_end
         balance_check = total_assets - total_liabilities_equity
         if abs(balance_check) > 1.0:
@@ -83,6 +90,7 @@ def calculate_balance_sheet(
                 "working_capital": working_capital_balance,
                 "total_assets": total_assets,
                 "financial_debt": financial_debt,
+                "tax_payable": tax_payable_balance,
                 "total_liabilities": total_liabilities,
                 "equity_start": equity_start,
                 "net_income": net_income,
