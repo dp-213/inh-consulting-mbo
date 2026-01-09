@@ -5380,6 +5380,6 @@ def run_app(page_override=None):
             )
 
 
-from app.main import main
+from main import main
 
 main(st.session_state["page_key"])
