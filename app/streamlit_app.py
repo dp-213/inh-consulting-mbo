@@ -40,8 +40,14 @@ try:
     from .calculations.debt import calculate_debt_schedule
     from .calculations.balance_sheet import calculate_balance_sheet
     from .run_model import run_model
-    from .revenue_model import render_revenue_model_assumptions
-    from .cost_model import render_cost_model_assumptions
+    from .revenue_model import (
+        render_revenue_model_assumptions,
+        build_revenue_model_outputs,
+    )
+    from .cost_model import (
+        render_cost_model_assumptions,
+        build_cost_model_outputs,
+    )
 except (ImportError, KeyError):
     try:
         from app.data_model import InputModel, create_demo_input_model
@@ -51,8 +57,14 @@ except (ImportError, KeyError):
         from app.calculations.debt import calculate_debt_schedule
         from app.calculations.balance_sheet import calculate_balance_sheet
         from app.run_model import run_model
-        from app.revenue_model import render_revenue_model_assumptions
-        from app.cost_model import render_cost_model_assumptions
+        from app.revenue_model import (
+            render_revenue_model_assumptions,
+            build_revenue_model_outputs,
+        )
+        from app.cost_model import (
+            render_cost_model_assumptions,
+            build_cost_model_outputs,
+        )
     except (ImportError, KeyError):
         from data_model import InputModel, create_demo_input_model
         from calculations.investment import _calculate_irr, calculate_investment
@@ -61,8 +73,14 @@ except (ImportError, KeyError):
         from calculations.debt import calculate_debt_schedule
         from calculations.balance_sheet import calculate_balance_sheet
         from run_model import run_model
-        from revenue_model import render_revenue_model_assumptions
-        from cost_model import render_cost_model_assumptions
+        from revenue_model import (
+            render_revenue_model_assumptions,
+            build_revenue_model_outputs,
+        )
+        from cost_model import (
+            render_cost_model_assumptions,
+            build_cost_model_outputs,
+        )
 
 
 def _pnl_dict_to_list(pnl_dict):
